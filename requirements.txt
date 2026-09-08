@@ -1,0 +1,15 @@
+# Track A -- engine/execution/ dependencies (Phase 1)
+psutil>=5.9
+
+# Test tooling
+pytest>=7.4
+pytest-cov>=4.1
+
+# NOTE: this covers Track A's engine/execution/ code only. Track B
+# (engine/intelligence/ -- sklearn, numpy, etc.) and Track C (gateway/,
+# cli/ -- FastAPI, Stripe, Typer, etc.) should add their own dependency
+# blocks here as their code lands, or split into
+# requirements-{execution,intelligence,gateway}.txt if the list grows
+# large enough that each track pulling in the others' deps becomes
+# annoying. Not decided unilaterally by Track A -- worth a quick note in
+# shared/CHANGELOG.md whichever way the team picks.

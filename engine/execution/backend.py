@@ -1,0 +1,203 @@
+
+"""
+engine/execution/backend.py
+
+Track A, Phase 2 (Weeks 3-5) -- Task 11.
+
+Real LocalExecutionBackend replacing the Phase 1 stub. Wires together:
+    - HardwareProfiler  (Phase 1, Task 3) -- loads the cached HardwareProfile
+    - ModelLadder       (Phase 2, Task 5) -- selects the best QuantRung
+    - AccelerationEngine (Phase 2, Tasks 7-10) -- wraps the runner with
+                          the appropriate speculative layer
+
+The public API (generate / generate_stream) is IDENTICAL to the Phase 1
+stub -- Track B's existing tests pass with zero changes. This is the
+definition of the J-2 seam holding (Section 13.1 Phase 2 join point).
+
+                    ??????????????????????????????????????
+                    ?? J-2 CONNECT HERE ??
+                    When Track B's real Pipeline lands in
+                    engine/intelligence/pipeline.py, it
+                    passes LocalExecutionBackend() to
+                    Pipeline.__init__() and calls
+                    .generate() / .generate_stream() via
+                    the shared ExecutionBackend protocol.
+                    Verification: run
+                      pytest engine/execution/j2_integration_test.py
+                    against Track B's real Pipeline.
+                    No changes needed in this file.
+                    ??????????????????????????????????????
+
+                    Until Track B's Pipeline exists, use
+                    engine/execution/pipeline_bridge.py
+                    (FakePipeline) for end-to-end testing.
+                    See that file for removal instructions.
+"""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Iterator, Optional
+
+from engine.execution.acceleration_engine import (
+    AccelerationEngine,
+    AccelerationLayer,
+    DraftPair,
+)
+from engine.execution.hardware_profiler import HardwareProfiler
+from engine.execution.model_ladder import ModelLadder, QuantRung
+from engine.execution.model_runner import OllamaReferenceModelRunner, ReferenceModelRunner
+from shared.types import BackendResult, ExecutionBackend, HardwareProfile, Message
+
+# ?? Sentinel for missing Track-B Pipeline ????????????????????????????????
+# Raised by run_via_pipeline() in pipeline_bridge.py; NOT raised by
+# generate() / generate_stream() (those work without Track B).
+TRACK_B_NOT_PRESENT_MSG = (
+    "Track B's real Pipeline (engine/intelligence/pipeline.py) is not yet "
+    "available. Use engine/execution/pipeline_bridge.FakePipeline for "
+    "end-to-end testing until Track B lands."
+)
+
+
+class LocalExecutionBackendError(RuntimeError):
+    """Raised when every QuantRung has been exhausted (OOM on all levels)."""
+
+
+def _messages_to_prompt(messages: list[Message]) -> str:
+    """Flatten a message list into a simple role: content prompt string."""
+    return "\n".join(
+        f"{msg['role'].upper()}: {msg['content']}" for msg in messages
+    )
+
+
+class LocalExecutionBackend:
+    """
+    Real local execution backend. Conforms to shared.types.ExecutionBackend.
+
+    Dependency-injection constructor (for tests and Track B):
+        runner    -- the model runner; defaults to OllamaReferenceModelRunner.
+        profiler  -- defaults to HardwareProfiler(runner); injectable for
+                     tests that need a controlled HardwareProfile.
+        ladder    -- defaults to ModelLadder(); injectable for tests.
+        preferred_layer -- the highest AccelerationLayer to attempt;
+                     defaults to LOOKAHEAD (always available, FR-03.1).
+        model_id  -- the model tag to load; defaults to the Phase 1
+                     reference model used for benchmarking.
+        model_has_draft_heads -- True if the loaded model carries Medusa /
+                     EAGLE draft heads (Layer 2); False by default.
+        validated_pairs -- override for Layer 3 pair list; defaults to
+                     loading from DEFAULT_PAIRS_PATH.
+        simulated_latency_ms -- non-zero only in tests that want realistic
+                     timing without a real model.
+    """
+
+    def __init__(
+        self,
+        runner: Optional[ReferenceModelRunner] = None,
+        profiler: Optional[HardwareProfiler] = None,
+        ladder: Optional[ModelLadder] = None,
+        preferred_layer: AccelerationLayer = AccelerationLayer.LOOKAHEAD,
+        model_id: str = "cascade-reference-3b",
+        model_has_draft_heads: bool = False,
+        validated_pairs: Optional[list[DraftPair]] = None,
+        simulated_latency_ms: float = 0.0,
+    ) -> None:
+        # Use OllamaReferenceModelRunner only as a real production default;
+        # tests always inject a FakeReferenceModelRunner (NFR-09).
+        self._runner: ReferenceModelRunner = runner or OllamaReferenceModelRunner()
+        self._profiler = profiler or HardwareProfiler(runner=self._runner)
+        self._ladder = ladder or ModelLadder()
+        self._model_id = model_id
+        self._engine = AccelerationEngine(
+            runner=self._runner,
+            preferred_layer=preferred_layer,
+            model_has_draft_heads=model_has_draft_heads,
+            validated_pairs=validated_pairs or [],
+        )
+        self._simulated_latency_ms = simulated_latency_ms
+
+    # ---- ExecutionBackend protocol implementation ----------------------
+
+    def generate(self, messages: list[Message]) -> BackendResult:
+        """
+        Run a full (non-streaming) generation.
+
+        Loads the best available rung, applies AccelerationEngine, and
+        automatically steps down on OOM until either a rung succeeds or
+        all rungs are exhausted (raises LocalExecutionBackendError).
+        """
+        start = time.monotonic()
+        if self._simulated_latency_ms > 0:
+            time.sleep(self._simulated_latency_ms / 1000)
+
+        profile = self._get_profile()
+        rung    = self._ladder.select_rung(profile)
+        prompt  = _messages_to_prompt(messages)
+
+        sample, used_rung = self._generate_with_stepdown(prompt, rung)
+        wall_ms = (time.monotonic() - start) * 1000
+
+        return {
+            "text":               sample.base.tokens_generated * "x",  # placeholder
+            "confidence":         sample.acceptance_rate,
+            "speculative_active": sample.speculative_active,
+            "tok_s":              round(sample.tok_s, 3),
+            "latency_ms":         round(wall_ms, 2),   # real wall-clock time
+            "est_cost_usd":       0.0,                 # local is always free
+        }
+
+    def generate_stream(self, messages: list[Message]) -> Iterator[str]:
+        """
+        Streaming variant. Yields tokens one by one (word-level here;
+        real llama.cpp / Ollama streaming is byte-level -- that detail
+        lives in OllamaReferenceModelRunner, not here).
+        """
+        result = self.generate(messages)
+        # Yield word by word to simulate streaming from the caller's view.
+        for word in result["text"].split():
+            if self._simulated_latency_ms > 0:
+                time.sleep(self._simulated_latency_ms / 1000 / 10)
+            yield word + " "
+
+    # ---- Internal helpers -----------------------------------------------
+
+    def _get_profile(self) -> HardwareProfile:
+        """
+        Return the cached HardwareProfile if present and schema-compatible,
+        otherwise run a fresh profile (cascade profile flow, FR-01.4).
+        """
+        cached = self._profiler.load_cached_profile()
+        if cached is not None:
+            return cached
+        return self._profiler.profile()
+
+    def _generate_with_stepdown(
+        self,
+        prompt: str,
+        rung: Optional[QuantRung],
+    ) -> tuple:
+        """
+        Attempt generation at rung; on OOM step down and retry (FR-02.3).
+        Raises LocalExecutionBackendError if all rungs are exhausted.
+        """
+        while rung is not None:
+            try:
+                self._engine.load(self._model_id, rung.label)
+                sample = self._engine.generate_accelerated(prompt, max_tokens=256)
+                self._engine.unload()
+                return sample, rung
+            except Exception:
+                # OOM or any load failure: try the next lower rung (FR-02.3)
+                self._engine.unload()
+                rung = self._ladder.step_down(rung)
+
+        raise LocalExecutionBackendError(
+            "All QuantRungs exhausted (OOM on every level). "
+            "Pipeline should route this request to CascadeCloud (FR-07)."
+        )
+
+
+# Fails immediately at import time if the class ever drifts from the
+# ExecutionBackend protocol -- same guard as the Phase 1 stub.
+assert isinstance(LocalExecutionBackend(), ExecutionBackend)
