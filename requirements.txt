@@ -13,3 +13,8 @@ pytest-cov>=4.1
 # large enough that each track pulling in the others' deps becomes
 # annoying. Not decided unilaterally by Track A -- worth a quick note in
 # shared/CHANGELOG.md whichever way the team picks.
+
+# Track B -- engine/intelligence/ dependencies (Phase 2)
+numpy>=1.26          # cosine similarity for SemanticCache/ContextCompressor
+fastembed>=0.3        # ONNX embeddings (bge-small), CPU-only, no torch (Tech Stack 5.1)
+scikit-learn>=1.4     # SemanticRouter classifier (logistic regression / GBT)

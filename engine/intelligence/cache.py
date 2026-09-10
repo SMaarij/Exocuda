@@ -1,0 +1,247 @@
+"""
+engine/intelligence/cache.py
+
+Track B, Tasks 10-13 (FR-06.1-06.4).
+
+Two layers (Master Doc Component 6), checked in order:
+    1. Exact-prefix (Task 13, FR-06.4) -- a hash of the full message
+       list. Cheap, always correct, checked first.
+    2. Fuzzy semantic (Tasks 10-12, FR-06.1-06.3) -- embedding cosine
+       similarity against the last query, vectorized for the <50ms
+       lookup target at 10,000 entries.
+
+FLAGGED SCOPE NOTE on the exact-prefix layer: true *partial* KV-cache-
+block reuse (splicing a shared system-prompt prefix into a fresh
+generation) needs cooperation from the model runtime itself -- today's
+ExecutionBackend protocol has no hook for that (see shared/CHANGELOG.md).
+This layer implements the exact-full-match case instead: if an entire
+message list is byte-identical to a prior one, the cached response
+returns with zero backend call at all, which is the degenerate but
+always-correct instance of prefix caching (a real partial-prefix hit
+saves time-to-first-token; a full-match hit saves the whole call).
+Extending to true partial-prefix reuse is a future ExecutionBackend
+protocol change requiring all three tracks' sign-off.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import sqlite3
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+
+from engine.intelligence.embeddings import Embedder
+from shared.types import Message
+
+DEFAULT_DB_PATH = Path.home() / ".cascade" / "cache.sqlite3"
+
+# FR-06.2: rule-based by design, unlike SemanticRouter. Cacheability is
+# a safety filter -- never serve a stale answer to "what's today's
+# date" -- and that is exactly the kind of decision you want
+# deterministic, auditable rules for, not a learned model that could
+# silently drift.
+_TIME_SENSITIVE_PATTERNS = (
+    r"\btoday'?s? date\b",
+    r"\bcurrent (time|date|weather|price)\b",
+    r"\bright now\b",
+    r"\blatest\b",
+    r"\bcurrently\b",
+    r"\bthis week\b",
+    r"\bwhat time is it\b",
+    r"\bnow\b",
+)
+_PERSONALIZED_PATTERNS = (
+    r"\bmy (account|balance|order|password|email|name)\b",
+    r"\byour account\b",
+)
+
+
+def is_cacheable(query: str) -> bool:
+    """FR-06.2."""
+    text = query.lower()
+    for pattern in _TIME_SENSITIVE_PATTERNS + _PERSONALIZED_PATTERNS:
+        if re.search(pattern, text):
+            return False
+    return True
+
+
+@dataclass(frozen=True)
+class CacheConfig:
+    similarity_threshold: float = 0.92
+    default_ttl_seconds: Optional[int] = 7 * 24 * 3600  # None = never expires
+
+
+def _prefix_key(messages: list[Message]) -> str:
+    blob = json.dumps(messages, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+class SemanticCache:
+    """
+    Task 12/FR-06.3 architecture note: the naive design -- re-querying
+    every row from SQLite on every lookup() call -- was measured and
+    profiled at ~70-90ms at 10,000 entries on this sandbox's (1-core)
+    hardware, almost entirely SQLite row-materialization cost, not the
+    similarity math itself (which measured ~3-7ms). SQLite here is the
+    durable store, not the per-lookup source of truth: embeddings are
+    mirrored into an in-memory index (self._embedding_blobs and
+    friends), loaded once at construction and updated incrementally on
+    write(). lookup()'s semantic layer reads only that in-memory index.
+    """
+
+    def __init__(
+        self,
+        embedder: Embedder,
+        db_path: Path = DEFAULT_DB_PATH,
+        config: Optional[CacheConfig] = None,
+    ) -> None:
+        self._embedder = embedder
+        self._config = config or CacheConfig()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(db_path)
+        self._init_schema()
+
+        # In-process exact-prefix layer (Task 13).
+        self._prefix_cache: dict[str, tuple[str, Optional[float]]] = {}
+
+        # In-memory mirror of the semantic layer (Task 12 perf fix, see
+        # class docstring). `_matrix` is rebuilt lazily from
+        # `_embedding_blobs` only when dirty (after a write), so a run
+        # of many lookups with no interleaved writes pays the rebuild
+        # cost once, not per lookup.
+        self._ids: list[int] = []
+        self._embedding_blobs: list[bytes] = []
+        self._responses: dict[int, str] = {}
+        self._expires_at: dict[int, Optional[float]] = {}
+        self._hit_counts: dict[int, int] = {}
+        self._matrix: Optional[np.ndarray] = None
+        self._reindex_from_db()
+
+    def _init_schema(self) -> None:
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS cache_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query_text TEXT NOT NULL,
+                query_embedding BLOB NOT NULL,
+                response_text TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL,
+                hit_count INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        self._conn.commit()
+
+    def _reindex_from_db(self) -> None:
+        """Rebuilds the in-memory index from SQLite -- called once at
+        construction (so an existing on-disk cache is usable
+        immediately) and available for tests that seed rows directly."""
+        rows = self._conn.execute(
+            "SELECT id, query_embedding, response_text, expires_at, hit_count FROM cache_entries"
+        ).fetchall()
+        self._ids = [r[0] for r in rows]
+        self._embedding_blobs = [r[1] for r in rows]
+        self._responses = {r[0]: r[2] for r in rows}
+        self._expires_at = {r[0]: r[3] for r in rows}
+        self._hit_counts = {r[0]: r[4] for r in rows}
+        self._matrix = None  # rebuilt lazily on first lookup
+
+    # ---- Public API ------------------------------------------------------
+
+    def lookup(self, messages: list[Message]) -> Optional[str]:
+        prefix_hit = self._lookup_prefix(messages)
+        if prefix_hit is not None:
+            return prefix_hit
+        return self._lookup_semantic(messages)
+
+    def write(self, messages: list[Message], response_text: str, ttl_seconds: Optional[int] = ...) -> None:
+        query = messages[-1]["content"] if messages else ""
+        if not query or not is_cacheable(query):
+            return
+
+        ttl = self._config.default_ttl_seconds if ttl_seconds is ... else ttl_seconds
+        expires_at = (time.time() + ttl) if ttl else None
+
+        key = _prefix_key(messages)
+        self._prefix_cache[key] = (response_text, expires_at)
+
+        vec = np.array(self._embedder.embed(query), dtype=np.float64)
+        blob = vec.tobytes()
+        cursor = self._conn.execute(
+            "INSERT INTO cache_entries (query_text, query_embedding, response_text, created_at, expires_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (query, blob, response_text, time.time(), expires_at),
+        )
+        self._conn.commit()
+
+        # Incremental in-memory update -- O(1) append, no full reindex.
+        row_id = cursor.lastrowid
+        self._ids.append(row_id)
+        self._embedding_blobs.append(blob)
+        self._responses[row_id] = response_text
+        self._expires_at[row_id] = expires_at
+        self._hit_counts[row_id] = 0
+        self._matrix = None  # dirty -- rebuilt lazily on next lookup
+
+    def close(self) -> None:
+        self._conn.close()
+
+    # ---- Layer 1: exact-prefix (FR-06.4) ---------------------------------
+
+    def _lookup_prefix(self, messages: list[Message]) -> Optional[str]:
+        key = _prefix_key(messages)
+        hit = self._prefix_cache.get(key)
+        if hit is None:
+            return None
+        response, expires_at = hit
+        if expires_at is not None and expires_at <= time.time():
+            del self._prefix_cache[key]
+            return None
+        return response
+
+    # ---- Layer 2: fuzzy semantic (FR-06.1-06.3) --------------------------
+
+    def _lookup_semantic(self, messages: list[Message]) -> Optional[str]:
+        query = messages[-1]["content"] if messages else ""
+        if not query or not self._ids:
+            return None
+
+        if self._matrix is None:
+            dim = len(self._embedding_blobs[0]) // 8  # float64 = 8 bytes each
+            blob = b"".join(self._embedding_blobs)
+            self._matrix = np.frombuffer(blob, dtype=np.float64).reshape(len(self._ids), dim)
+
+        query_vec = np.array(self._embedder.embed(query), dtype=np.float64)
+        query_norm = np.linalg.norm(query_vec)
+        if query_norm == 0.0:
+            return None
+
+        now = time.time()
+        norms = np.linalg.norm(self._matrix, axis=1)
+        norms[norms == 0.0] = 1e-12
+        sims = (self._matrix @ query_vec) / (norms * query_norm)
+
+        expired = np.array(
+            [self._expires_at[i] is not None and self._expires_at[i] <= now for i in self._ids]
+        )
+        sims = np.where(expired, -1.0, sims)
+
+        best_idx = int(np.argmax(sims))
+        best_score = float(sims[best_idx])
+        if best_score < self._config.similarity_threshold:
+            return None
+
+        row_id = self._ids[best_idx]
+        self._hit_counts[row_id] += 1
+        self._conn.execute(
+            "UPDATE cache_entries SET hit_count = ? WHERE id = ?", (self._hit_counts[row_id], row_id)
+        )
+        self._conn.commit()
+        return self._responses[row_id]
