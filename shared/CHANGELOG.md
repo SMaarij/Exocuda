@@ -238,3 +238,28 @@ Section 10.3.
   constant swap -- flagged here rather than forced through with an
   incorrect quick patch that would silently fail on `ollama pull` in
   production.
+
+## [Unreleased] -- Reference-model fix verified live + a real memory-tracking bug found
+
+Once `llama3.2:3b` finished pulling on this machine, `HardwareProfiler.profile()`
+was run for real against it for the first time in this project's
+history: `local_capable: True`, `3.571 tok/s` measured on
+`llama3.2:3b-instruct-q4_K_M`. Full numbers in
+`docs/BENCHMARK_REPORT.md`'s Addendum 2.
+
+That run surfaced one more real bug in `engine/execution/model_runner.py`
+(Track A's file): `peak_memory_gb` always measured ~0.0. Root cause --
+it used `psutil.Process(proc.pid).memory_info()` on the `ollama run`
+CLI subprocess, but `ollama run` is a thin client; the model's real
+memory footprint lives in the separate `ollama serve` server process
+(confirmed via `ollama ps`). Fixed by polling Ollama's own `/api/ps`
+HTTP endpoint on a background thread while generation runs, instead of
+inspecting the wrong process's memory. Re-verified live:
+`peak_memory_gb` now reports `0.534` for this model, a real, plausible
+number. `psutil` is no longer imported in this file (still a
+dependency of `hardware_profiler.py`, unaffected).
+
+7 new tests cover `_query_loaded_model_bytes()`'s parsing logic
+(mocked HTTP responses -- no live Ollama needed, consistent with
+NFR-09's carve-out for this file being about the *runner itself*, not
+logic that can be tested without one). 257 tests passing total.

@@ -21,13 +21,15 @@ codes against the Protocol, never the concrete runner.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
+import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
-
-import psutil
 
 
 @dataclass(frozen=True)
@@ -89,8 +91,9 @@ class OllamaReferenceModelRunner:
     real Ollama install.
     """
 
-    def __init__(self, ollama_binary: str = "ollama") -> None:
+    def __init__(self, ollama_binary: str = "ollama", api_base_url: str = "http://localhost:11434") -> None:
         self._ollama_binary = ollama_binary
+        self._api_base_url = api_base_url
         self._loaded_model: str | None = None
 
     def _check_available(self) -> None:
@@ -124,6 +127,27 @@ class OllamaReferenceModelRunner:
             )
         self._loaded_model = tag
 
+    def _query_loaded_model_bytes(self) -> int:
+        """
+        Real memory footprint (bytes) for whatever model is currently
+        loaded, from Ollama's own /api/ps -- NOT psutil on the `ollama
+        run` CLI subprocess's PID. `ollama run` is a thin client; the
+        model weights live in the ollama SERVER process (or one it
+        manages), which is a different PID entirely. Confirmed by
+        running this for real (docs/BENCHMARK_REPORT.md's addendum):
+        the psutil-on-proc.pid approach always measured ~0, because it
+        was measuring the wrong process's memory the whole time.
+        """
+        try:
+            with urllib.request.urlopen(f"{self._api_base_url}/api/ps", timeout=2) as resp:
+                data = json.loads(resp.read())
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            return 0
+        models = data.get("models") or []
+        if not models:
+            return 0
+        return max(m.get("size_vram") or m.get("size") or 0 for m in models)
+
     def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
         if self._loaded_model is None:
             raise RuntimeError("No model loaded -- call load() first.")
@@ -136,21 +160,28 @@ class OllamaReferenceModelRunner:
             stderr=subprocess.PIPE,
             text=True,
         )
-        peak_rss_bytes = 0
+
+        # Poll Ollama's own /api/ps on a background thread WHILE
+        # generation runs (the model is only reliably reported as
+        # "loaded" during that window) and keep the max seen.
+        peak_bytes = 0
+        stop_polling = threading.Event()
+
+        def _poll() -> None:
+            nonlocal peak_bytes
+            while not stop_polling.is_set():
+                peak_bytes = max(peak_bytes, self._query_loaded_model_bytes())
+                stop_polling.wait(0.25)
+
+        poll_thread = threading.Thread(target=_poll, daemon=True)
         start = time.monotonic()
+        poll_thread.start()
         try:
-            ps_proc = psutil.Process(proc.pid)
-        except psutil.NoSuchProcess:
-            ps_proc = None
-
-        stdout, _stderr = proc.communicate(timeout=55)
+            stdout, _stderr = proc.communicate(timeout=55)
+        finally:
+            stop_polling.set()
+            poll_thread.join(timeout=1)
         elapsed = time.monotonic() - start
-
-        if ps_proc is not None:
-            try:
-                peak_rss_bytes = ps_proc.memory_info().rss
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                peak_rss_bytes = 0
 
         # Ollama doesn't report a token count on stdout by default; a
         # whitespace-token approximation is a reasonable stand-in for
@@ -160,7 +191,7 @@ class OllamaReferenceModelRunner:
         return GenerationSample(
             tokens_generated=min(tokens_generated, max_tokens) or tokens_generated,
             elapsed_s=elapsed,
-            peak_memory_gb=peak_rss_bytes / (1024**3),
+            peak_memory_gb=peak_bytes / (1024**3),
             output_text=stdout.strip(),
         )
 

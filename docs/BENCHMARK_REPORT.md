@@ -97,3 +97,29 @@ don't work. Measuring this for real needs: (1) a joint decision on a
 draft/target model pair, (2) `scripts/validate_draft_pairs.py` run
 against it, and (3) a machine with enough free RAM to reliably load
 the target model within the timeout.
+
+## Addendum 2 — the reference-model placeholder fix, verified live
+
+Separately, `HardwareProfiler`'s reference-model placeholder
+(`"cascade-reference-3b"`, which doesn't exist) was resolved to
+`"llama3.2"` with real, verified quant tags. Once `llama3.2:3b`
+actually finished pulling on this machine (slow — bandwidth, not a
+code issue), `HardwareProfiler.profile()` was run for real,
+end-to-end, for the first time in this project's history:
+
+```
+local_capable: True
+measured_tok_s: {'3b-instruct-q4_K_M': 3.571}
+peak_memory_gb: {'3b-instruct-q4_K_M': 0.534}
+wall time: 75.1s (1 of 3 quant levels measured within the 60s time budget)
+```
+
+That run surfaced one more real bug: `peak_memory_gb` was always
+measuring ~0, because it used `psutil` on the `ollama run` CLI
+subprocess's PID — but `ollama run` is a thin client; the model's real
+memory footprint lives in the separate `ollama serve` server process.
+Fixed by polling Ollama's own `/api/ps` endpoint (which reports the
+real figure) on a background thread while generation runs, instead of
+inspecting the wrong process. Re-run after the fix: `peak_memory_gb`
+now reports a real, plausible `0.534` GB for this quantized 3B model,
+not zero.
