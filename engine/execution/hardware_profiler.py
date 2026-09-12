@@ -48,8 +48,22 @@ from shared.types import HARDWARE_PROFILE_SCHEMA_VERSION, HardwareProfile
 # exists.
 # --------------------------------------------------------------------------
 
-DEFAULT_REFERENCE_MODEL_ID = "cascade-reference-3b"
-DEFAULT_QUANT_LEVELS: tuple[str, ...] = ("q4_K_M", "q5_K_M", "q8_0")
+# Resolved from the placeholder Track A flagged in
+# docs/TRACK_A_HANDOFF_FOR_B_AND_C.md's fakes/placeholders table --
+# "Joint team decision. Once agreed (e.g. llama3.2:3b), update...".
+# llama3.2 is real, small (fast to pull/probe), and its published
+# Ollama tags for 3b + these three quant levels are verified real:
+# llama3.2:3b-instruct-q4_K_M / -q5_K_M / -q8_0 (confirmed against
+# ollama.com/library/llama3.2/tags). Tag is built as
+# f"{DEFAULT_REFERENCE_MODEL_ID}:{quant_level}" in model_runner.py's
+# OllamaReferenceModelRunner.load() -- hence the "3b-instruct-" prefix
+# living inside each quant_level string here, not in the model ID.
+DEFAULT_REFERENCE_MODEL_ID = "llama3.2"
+DEFAULT_QUANT_LEVELS: tuple[str, ...] = (
+    "3b-instruct-q4_K_M",
+    "3b-instruct-q5_K_M",
+    "3b-instruct-q8_0",
+)
 DEFAULT_TIME_BUDGET_S = 60.0
 DEFAULT_MIN_TOK_S_FLOOR = 3.0  # conservative "can this machine run *anything*
 # locally at all" floor -- see local_capable note above.

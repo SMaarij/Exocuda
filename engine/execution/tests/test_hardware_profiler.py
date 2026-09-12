@@ -180,7 +180,14 @@ def test_run_benchmark_measures_at_least_two_quant_levels(tmp_path: Path) -> Non
     runner = FakeReferenceModelRunner(
         {"q4_K_M": 40.0, "q5_K_M": 30.0, "q8_0": 15.0}
     )
-    profiler = HardwareProfiler(runner=runner, profile_path=tmp_path / "profile.json")
+    # Explicit quant_levels rather than relying on the module default --
+    # this test is about the *behavior* (>=2 levels measured), not
+    # whichever real reference model the default happens to point at.
+    profiler = HardwareProfiler(
+        runner=runner,
+        quant_levels=("q4_K_M", "q5_K_M", "q8_0"),
+        profile_path=tmp_path / "profile.json",
+    )
 
     tok_s, mem = profiler.run_benchmark()
 
@@ -210,7 +217,11 @@ def test_run_benchmark_skips_a_level_that_ooms_but_keeps_the_rest(
         {"q4_K_M": 40.0, "q5_K_M": 30.0, "q8_0": 15.0},
         fail_levels=frozenset({"q8_0"}),
     )
-    profiler = HardwareProfiler(runner=runner, profile_path=tmp_path / "profile.json")
+    profiler = HardwareProfiler(
+        runner=runner,
+        quant_levels=("q4_K_M", "q5_K_M", "q8_0"),
+        profile_path=tmp_path / "profile.json",
+    )
 
     tok_s, _mem = profiler.run_benchmark()
 

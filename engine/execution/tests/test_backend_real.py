@@ -307,3 +307,43 @@ def test_nfr02_est_cost_usd_always_zero_for_local(tmp_path) -> None:
         heads = layer == AccelerationLayer.DRAFT_HEADS
         result = _backend(tmp_path, preferred_layer=layer, model_has_draft_heads=heads).generate(SAMPLE_MESSAGES)
         assert result["est_cost_usd"] == 0.0
+
+
+# --------------------------------------------------------------------------
+# Real-output-text fix (found via the Section 12 benchmark run,
+# docs/BENCHMARK_REPORT.md's addendum) -- confirms output_text now
+# actually flows from the runner through to BackendResult["text"],
+# and that fake runners which never set it keep working via the
+# fallback (backend.py's `or` -- see its own comment).
+# --------------------------------------------------------------------------
+
+
+class _FakeRunnerWithRealText(FakeRunner):
+    """Same double as above, but simulates a runner that DOES report real output text (i.e. the real OllamaReferenceModelRunner's behavior)."""
+
+    def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
+        assert self._loaded is not None
+        return GenerationSample(
+            tokens_generated=max_tokens,
+            elapsed_s=max_tokens / self._tok_s,
+            peak_memory_gb=2.0,
+            output_text="this is the real generated answer",
+        )
+
+
+def test_generate_uses_real_output_text_when_runner_provides_it(tmp_path: Path) -> None:
+    runner = _FakeRunnerWithRealText(tok_s=20.0)
+    profile_path = _write_profile(tmp_path, tok_s=20.0)
+    profiler = HardwareProfiler(runner=runner, profile_path=profile_path)
+    backend = LocalExecutionBackend(runner=runner, profiler=profiler)
+
+    result = backend.generate(SAMPLE_MESSAGES)
+
+    assert result["text"] == "this is the real generated answer"
+
+
+def test_generate_falls_back_to_placeholder_when_runner_has_no_output_text(tmp_path: Path) -> None:
+    """FakeRunner (the default double used everywhere else in this file) never sets output_text -- confirms the fallback keeps the field a non-empty string, not silently empty."""
+    result = _backend(tmp_path).generate(SAMPLE_MESSAGES)
+    assert isinstance(result["text"], str)
+    assert len(result["text"]) > 0

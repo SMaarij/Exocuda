@@ -196,3 +196,45 @@ touches a Track A file:
   model within the existing timeout. See `docs/BENCHMARK_REPORT.md`'s
   addendum for what was actually attempted and why it's inconclusive
   rather than a real pass/fail.
+
+## [Unreleased] -- Two placeholders resolved, one deeper issue found
+
+Both touch Track A's files (`engine/execution/`), flagged here per
+Section 10.3.
+
+### Resolved: the reference model placeholder (HardwareProfiler only)
+
+- `DEFAULT_REFERENCE_MODEL_ID` changed from the non-existent
+  `"cascade-reference-3b"` to `"llama3.2"`, and `DEFAULT_QUANT_LEVELS`
+  from bare `("q4_K_M", "q5_K_M", "q8_0")` to
+  `("3b-instruct-q4_K_M", "3b-instruct-q5_K_M", "3b-instruct-q8_0")` --
+  verified real against `ollama.com/library/llama3.2/tags` (not
+  guessed). `cascade profile` / `cascade init` can now actually pull
+  and benchmark a real model.
+- Two `test_hardware_profiler.py` tests were silently relying on the
+  module default instead of passing their own `quant_levels` --
+  fixed to be explicit, which is what they should have done regardless
+  of what the default happens to be.
+
+### Found, NOT resolved: production model loading needs a real design decision
+
+- This fix **only** covers `HardwareProfiler`'s benchmarking probe.
+  `ModelLadder.select_rung()` only ever reads `max(measured_tok_s.values())`
+  -- it never matches by label -- so `HardwareProfiler`'s quant-level
+  strings and `ModelLadder.DEFAULT_LADDER`'s rung labels
+  (`"q4_K_M"`/`"q5_K_M"`/`"q8_0"`) are **not actually coupled today**,
+  which is why this fix was safe to make alone.
+- But `backend.py`'s `LocalExecutionBackend` still defaults
+  `model_id="cascade-reference-3b"` and builds real Ollama tags as
+  `f"{model_id}:{rung.label}"` -- e.g. `"cascade-reference-3b:q4_K_M"`.
+  Real Ollama tags for a given model+quant combo are usually one dash-
+  joined string after a single colon (e.g. `llama3.2:3b-instruct-q4_K_M`),
+  not `model:bare_quant_label`. Simply pointing `model_id` at `"llama3.2"`
+  here would build an invalid tag (`"llama3.2:q4_K_M"` is not a real tag).
+- Fixing this for real needs one of: (a) a model whose real tags
+  genuinely are `model:q4_K_M`-shaped (uncommon), or (b) a rung-label
+  -> real-tag resolution layer between `ModelLadder` and whatever
+  builds the final Ollama tag. Either is a real design decision, not a
+  constant swap -- flagged here rather than forced through with an
+  incorrect quick patch that would silently fail on `ollama pull` in
+  production.

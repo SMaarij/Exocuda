@@ -138,8 +138,18 @@ class LocalExecutionBackend:
         sample, used_rung = self._generate_with_stepdown(prompt, rung)
         wall_ms = (time.monotonic() - start) * 1000
 
+        # Real Ollama output now flows through (model_runner.py's
+        # OllamaReferenceModelRunner sets output_text from real stdout).
+        # The `or` fallback exists only for FakeReferenceModelRunner /
+        # _FakeRunner test doubles across the suite, none of which set
+        # output_text -- an empty string there would make
+        # generate_stream()'s word-by-word split yield zero tokens,
+        # breaking every "yields at least one token" test. Production
+        # always uses the real runner, so this branch is test-only.
+        text = sample.base.output_text or (sample.base.tokens_generated * "x")
+
         return {
-            "text":               sample.base.tokens_generated * "x",  # placeholder
+            "text":               text,
             "confidence":         sample.acceptance_rate,
             "speculative_active": sample.speculative_active,
             "tok_s":              round(sample.tok_s, 3),

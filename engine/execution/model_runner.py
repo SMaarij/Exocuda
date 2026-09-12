@@ -37,6 +37,12 @@ class GenerationSample:
     tokens_generated: int
     elapsed_s: float
     peak_memory_gb: float
+    # Defaults to "" so every existing FakeReferenceModelRunner /
+    # _FakeRunner construction across the test suite (none of which set
+    # this) keeps working unchanged -- an empty string is an honest
+    # value for a fake that was never asked to produce real text,
+    # rather than a placeholder that looks like real output.
+    output_text: str = ""
 
     @property
     def tok_s(self) -> float:
@@ -155,6 +161,7 @@ class OllamaReferenceModelRunner:
             tokens_generated=min(tokens_generated, max_tokens) or tokens_generated,
             elapsed_s=elapsed,
             peak_memory_gb=peak_rss_bytes / (1024**3),
+            output_text=stdout.strip(),
         )
 
     def unload(self) -> None:

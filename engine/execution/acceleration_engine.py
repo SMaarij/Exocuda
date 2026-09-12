@@ -280,6 +280,7 @@ class AccelerationEngine:
             tokens_generated=base.tokens_generated,
             elapsed_s=base.elapsed_s / multiplier,
             peak_memory_gb=base.peak_memory_gb,
+            output_text=base.output_text,
         )
         result = AcceleratedGenerationSample(
             base=faster,
