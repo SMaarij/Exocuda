@@ -107,3 +107,64 @@ relevant to the other two tracks specifically:
   escalation -- all verified against fakes conforming to `ExecutionBackend`.
   No changes needed in `engine/intelligence/` once your real backend
   lands; that's what the protocol is for.
+
+## [Unreleased] -- Track C complete (gateway/, cli/)
+
+Full detail in `docs/TRACK_C_PHASE_SUMMARY.md`.
+
+### J-1 sign-off (Track C)
+
+- **Track C reviews and signs off on `shared/types.py`.**
+  `ExecutionBackend`, `BackendResult`, `HardwareProfile`, and
+  `PipelineResult` are all workable as-is for `gateway/backend.py` and
+  `cli/main.py`. No changes requested.
+- **`shared/types.py` is now fully frozen** -- all three tracks have
+  signed off (Track A implicitly by building against it since Phase 1,
+  Track B and Track C explicitly in this file).
+
+### J-4 verified (Task 17, previously blocked)
+
+- **The real three-way run is done.** `tests/integration/test_j4_three_way_run.py`
+  wires Track A's real `LocalExecutionBackend`, Track B's real
+  `Pipeline`, and Track C's real `CascadeCloudBackend` together -- this
+  was blocked in `docs/TRACK_B_PHASE2_3_SUMMARY.md` pending
+  `CascadeCloudBackend`'s existence. 4 tests, all green.
+
+### Added (Track C) -- not a change to shared/types.py itself
+
+- `gateway/backend.py`: `CascadeCloudBackend`, conforms to
+  `ExecutionBackend` exactly like `LocalExecutionBackend` does.
+- `gateway/api/app.py`: the FastAPI gateway -- where spend-cap
+  enforcement actually has to live for real (server-side; a client-side
+  check alone is bypassable).
+- `cli/main.py`: `init`/`ask`/`chat`/`stats`/`profile`, wiring the full
+  `Pipeline` per `docs/TRACK_B_HANDOFF_FOR_C.md` Section 4.
+
+### Flagged for review -- not acted on unilaterally
+
+- **A real bug, found and fixed:** `UsageMeter`'s first design split
+  "check the spend cap" and "record the spend" across two separate lock
+  acquisitions -- individually thread-safe, but not atomic together,
+  which reopens the exact race a spend cap exists to prevent. Fixed:
+  `check_and_reserve()` now checks-and-reserves atomically in one lock
+  acquisition; `adjust()` reconciles the estimate with the real cost
+  afterward. Verified with a 20-thread concurrent test.
+- **Gap found and closed, touching a Track B file:** `cascade stats`
+  (FR-08.3) needed a per-request decision log that `Pipeline` never
+  wrote (only the sampled shadow-labeling log existed). Added
+  `engine/intelligence/decision_log.py` and one new optional
+  `decision_log_path` constructor parameter on `Pipeline` -- off by
+  default (NFR-05). Flagged here since it's Track B's file changed by
+  Track C's work, not done silently.
+- **A doc bug found, not fixed unilaterally:** `docs/TRACK_A_HANDOFF_FOR_B_AND_C.md`
+  Section 7's Track C example imports `OllamaReferenceModelRunner` from
+  `engine.execution.hardware_profiler`, but it actually lives in
+  `engine.execution.model_runner` -- the example as written would raise
+  `ImportError`. `cli/main.py` uses the corrected two-line import.
+  Worth Track A updating their own doc to match.
+- **Open, unresolved:** streaming CascadeCloud requests don't reconcile
+  their spend reservation to a real token count (the streaming loop
+  doesn't get an exact usage payload back). The reservation stands as
+  the final charge for now -- a candidate fix once a wholesale
+  provider's streaming usage reporting (e.g. OpenAI-compatible
+  `stream_options: {"include_usage": true}`) is wired in.

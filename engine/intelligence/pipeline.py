@@ -46,9 +46,12 @@ from __future__ import annotations
 import time
 from typing import Iterator, Optional
 
+from pathlib import Path
+
 from engine.execution.backend import LocalExecutionBackendError
 from engine.intelligence.cache import SemanticCache
 from engine.intelligence.context_compressor import ContextCompressor
+from engine.intelligence.decision_log import log_decision
 from engine.intelligence.router.classifier import SemanticRouterClassifier
 from engine.intelligence.router.confidence import estimate_local_confidence
 from engine.intelligence.router.shadow_labeling import ShadowLabeler
@@ -68,6 +71,7 @@ class Pipeline:
         router: Optional[SemanticRouterClassifier] = None,
         shadow_labeler: Optional[ShadowLabeler] = None,
         confidence_floor: Optional[float] = 0.5,
+        decision_log_path: Optional[Path] = None,
     ) -> None:
         self._backend = backend
         self._cascade_backend = cascade_backend
@@ -77,6 +81,10 @@ class Pipeline:
         self._router = router
         self._shadow_labeler = shadow_labeler
         self._confidence_floor = confidence_floor
+        # Off by default (NFR-05's privacy stance) -- only written to if
+        # a path is explicitly configured. See decision_log.py's module
+        # docstring for why this exists.
+        self._decision_log_path = decision_log_path
 
     # ---- Pipeline seam (Section 9) --------------------------------------
 
@@ -87,7 +95,7 @@ class Pipeline:
         if self._cache is not None:
             cached = self._cache.lookup(compressed)
             if cached is not None:
-                return self._cache_hit_result(cached, start)
+                return self._finalize(self._cache_hit_result(cached, start))
 
         tier = self._decide_initial_tier(compressed)
         result, tier, escalated = self._execute(compressed, tier)
@@ -106,7 +114,7 @@ class Pipeline:
             self._shadow_labeler.maybe_label(compressed, tier, result["text"])
 
         latency_ms = (time.monotonic() - start) * 1000
-        return {
+        return self._finalize({
             "text": result["text"],
             "tier": tier,
             "cache_hit": False,
@@ -116,7 +124,13 @@ class Pipeline:
             "tok_s": result["tok_s"],
             "latency_ms": round(latency_ms, 2),
             "est_cost_usd": result["est_cost_usd"],
-        }
+        })
+
+    def _finalize(self, result: PipelineResult) -> PipelineResult:
+        """Every path through run() ends here -- the one place decision logging (FR-08.3) happens, off by default."""
+        if self._decision_log_path is not None:
+            log_decision(result, self._decision_log_path)
+        return result
 
     def run_stream(self, messages: list[Message]) -> Iterator[str]:
         """See module docstring's STREAMING LIMITATION note."""

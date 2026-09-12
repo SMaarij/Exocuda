@@ -18,3 +18,13 @@ pytest-cov>=4.1
 numpy>=1.26          # cosine similarity for SemanticCache/ContextCompressor
 fastembed>=0.3        # ONNX embeddings (bge-small), CPU-only, no torch (Tech Stack 5.1)
 scikit-learn>=1.4     # SemanticRouter classifier (logistic regression / GBT)
+
+# Track C -- gateway/, cli/ dependencies (Phase 2+)
+fastapi>=0.110         # CascadeCloud gateway API
+uvicorn>=0.29           # ASGI server for the gateway
+httpx>=0.27              # HTTP client -- CascadeCloudBackend's provider calls an
+                          # OpenAI-compatible endpoint (vLLM/SGLang serve this API,
+                          # so any wholesale GPU provider exposing it works, FR-07.4)
+stripe>=9.0               # metered usage billing + subscriptions (FR-07.5)
+typer>=0.12                # CLI (FR-08)
+pydantic>=2.6                # FastAPI request/response models

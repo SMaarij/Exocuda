@@ -5,21 +5,20 @@ description = "Adaptive LLM Optimization & Routing Platform"
 requires-python = ">=3.10"
 
 [tool.pytest.ini_options]
-# Repo-wide so CI (Section 10.2) picks up Track B's
-# engine/intelligence/tests/ and Track C's gateway/tests/, cli/tests/
-# automatically as they land -- no change needed here when those
-# folders show up. pytest simply finds nothing in an empty/missing
-# folder, so this is safe today with only engine/execution/ present.
-testpaths = ["engine", "gateway", "cli", "shared"]
+# Repo-wide so CI (Section 10.2) picks up every track's tests/
+# automatically as they land. pytest simply finds nothing in an
+# empty/missing folder, so this stays safe as new folders show up.
+# "tests" (repo root) holds cross-track integration tests that don't
+# belong to any single track's own folder -- e.g. tests/integration/
+# test_j4_three_way_run.py, the first three-way run once all three
+# tracks' code exists (Section 13.1's Phase 4 join point).
+testpaths = ["engine", "gateway", "cli", "shared", "tests"]
 pythonpath = ["."]
 
 [tool.coverage.run]
-# Only folders that exist today -- coverage.py warns (not fails) on a
-# configured source it never imports. Add "gateway" and "cli" here once
-# Track C's code lands; Track B's engine/intelligence/ is already
-# covered since it's a subfolder of "engine". Track A's own Phase 1
-# coverage claim (90% hardware_profiler.py, 95% backend.py) was
-# measured with `--cov=engine/execution` directly -- see
-# docs/TRACK_A_PHASE1_SUMMARY.md.
-source = ["engine", "shared"]
+# Track C landed (gateway/, cli/) -- added below per this file's own
+# prior instruction. Track A's own Phase 1 coverage claim (90%
+# hardware_profiler.py, 95% backend.py) was measured with
+# `--cov=engine/execution` directly -- see docs/TRACK_A_PHASE1_SUMMARY.md.
+source = ["engine", "shared", "gateway", "cli"]
 omit = ["*/tests/*"]
