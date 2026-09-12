@@ -168,3 +168,31 @@ Full detail in `docs/TRACK_C_PHASE_SUMMARY.md`.
   the final charge for now -- a candidate fix once a wholesale
   provider's streaming usage reporting (e.g. OpenAI-compatible
   `stream_options: {"include_usage": true}`) is wired in.
+
+## [Unreleased] -- Section 12 benchmark suite, first real run
+
+Full detail in `docs/BENCHMARK_REPORT.md`. One item here since it
+touches a Track A file:
+
+- **Real bug found and fixed in `engine/execution/model_runner.py`**
+  (Track A's file): `OllamaReferenceModelRunner` crashed with
+  `UnicodeDecodeError` on Windows -- `subprocess`'s `text=True` defaults
+  to the system codepage (cp1252 here), and both `ollama pull`'s
+  progress output and real model-generated text routinely contain
+  bytes outside it. Fixed by passing `encoding="utf-8", errors="replace"`
+  explicitly on every subprocess call in that file. Found by actually
+  running `scripts/benchmark_acceleration.py` against a real Ollama
+  install for the first time -- exactly the kind of thing NFR-09's
+  "integration/manual-testing scope, not this suite's job" carve-out
+  for this file exists to catch eventually. No unit-test change needed
+  (`FakeReferenceModelRunner` never touches a real subprocess), but
+  worth Track A knowing their file changed.
+- **NFR-01 (speculative decoding speedup) remains unmeasured, not
+  failed.** A real Layer 1 vs. 2 vs. 3 comparison needs a model with
+  trained draft heads or a validated draft/target pair
+  (`scripts/validate_draft_pairs.py`) -- neither exists yet, so every
+  layer currently falls back to Layer 1 regardless of hardware. Also
+  needs a machine with enough free RAM to reliably load the target
+  model within the existing timeout. See `docs/BENCHMARK_REPORT.md`'s
+  addendum for what was actually attempted and why it's inconclusive
+  rather than a real pass/fail.

@@ -99,10 +99,17 @@ class OllamaReferenceModelRunner:
         self._check_available()
         tag = f"{model_id}:{quant_level}"
         # `ollama pull` is a no-op if the tag is already present locally.
+        # encoding/errors explicit: `ollama pull`'s progress output uses
+        # Unicode block-drawing characters that aren't valid in the
+        # cp1252 codec subprocess.run's `text=True` falls back to by
+        # default on Windows -- found via a real live-model benchmark
+        # run (docs/BENCHMARK_REPORT.md), not a hypothetical.
         result = subprocess.run(
             [self._ollama_binary, "pull", tag],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=55,
         )
         if result.returncode != 0:
@@ -117,6 +124,8 @@ class OllamaReferenceModelRunner:
 
         proc = subprocess.Popen(
             [self._ollama_binary, "run", self._loaded_model, prompt],
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -154,6 +163,8 @@ class OllamaReferenceModelRunner:
                 [self._ollama_binary, "stop", self._loaded_model],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=15,
             )
         self._loaded_model = None

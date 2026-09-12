@@ -1,0 +1,37 @@
+{"query": "hey, what's up", "expected_tier": "local", "category": "trivial"}
+{"query": "good evening", "expected_tier": "local", "category": "trivial"}
+{"query": "how do you spell definitely", "expected_tier": "local", "category": "trivial"}
+{"query": "what's 15 times 4", "expected_tier": "local", "category": "trivial"}
+{"query": "what's the capital of japan", "expected_tier": "local", "category": "trivial"}
+{"query": "thank you very much", "expected_tier": "local", "category": "trivial"}
+{"query": "can you rephrase that shorter", "expected_tier": "local", "category": "trivial"}
+{"query": "what's a word that means tired", "expected_tier": "local", "category": "trivial"}
+{"query": "convert 5 kilograms to pounds", "expected_tier": "local", "category": "trivial"}
+{"query": "who wrote romeo and juliet", "expected_tier": "local", "category": "trivial"}
+{"query": "explain what an api is in simple terms", "expected_tier": "local", "category": "trivial"}
+{"query": "give me three synonyms for fast", "expected_tier": "local", "category": "trivial"}
+{"query": "what year did the berlin wall fall", "expected_tier": "local", "category": "trivial"}
+{"query": "summarize this in two sentences", "expected_tier": "local", "category": "trivial"}
+{"query": "what's the boiling point of water in fahrenheit", "expected_tier": "local", "category": "trivial"}
+{"query": "implement a binary search tree with insert and delete in python", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "explain the tradeoffs between microservices and a monolith in depth", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "derive the quadratic formula step by step", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "write a proof by induction that the sum of the first n integers is n(n+1)/2", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "design a caching layer for a high-traffic api and explain your reasoning", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "find and fix the bug in this multithreaded producer consumer implementation", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "explain how gradient descent converges for a convex loss function", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "compare merge sort and quicksort's worst case complexity with proof", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "write a regular expression engine from scratch and explain each part", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "walk through normalizing a database schema to third normal form", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "refactor this legacy code to remove the god object anti-pattern", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "explain byzantine fault tolerance with a worked example", "expected_tier": "cloud_byok", "category": "hard"}
+{"query": "what's the current weather in paris right now", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "search for the latest reviews of this laptop model", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "what's today's exchange rate from usd to eur", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "check my current order status", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "what time is it currently in sydney", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "find me the latest headlines about the stock market", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "what's the current price of bitcoin", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "book a table for two tonight nearby", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "look up my current account balance please", "expected_tier": "cascade_cloud", "category": "tool_required"}
+{"query": "what are today's top trending topics", "expected_tier": "cascade_cloud", "category": "tool_required"}
