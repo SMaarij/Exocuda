@@ -10,8 +10,8 @@ model already pulled.
 
 Usage:
     python scripts/benchmark_acceleration.py \
-        [--model cascade-reference-3b] \
-        [--quant q4_K_M] \
+        [--model llama3.2] \
+        [--quant 3b-instruct-q4_K_M] \
         [--prompts 5] \
         [--pairs-file ~/.cascade/validated_pairs.json]
 
@@ -32,8 +32,8 @@ import sys
 import time
 from pathlib import Path
 
-DEFAULT_MODEL = "cascade-reference-3b"
-DEFAULT_QUANT = "q4_K_M"
+DEFAULT_MODEL = "llama3.2"
+DEFAULT_QUANT = "3b-instruct-q4_K_M"
 DEFAULT_PROMPTS = [
     "What is the capital of Germany?",
     "Explain recursion in one sentence.",

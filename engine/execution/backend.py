@@ -71,6 +71,36 @@ def _messages_to_prompt(messages: list[Message]) -> str:
     )
 
 
+# ModelLadder's QuantRung.label is deliberately abstract ("q4_K_M", "q5_K_M",
+# "q8_0" -- see model_ladder.py's DEFAULT_LADDER) because select_rung() only
+# ever compares measured_tok_s/vram against those labels, never matches a
+# real model's tag by string. But a real Ollama tag is `repository:tag`
+# where `tag` is a single dash-joined string (e.g.
+# "llama3.2:3b-instruct-q4_K_M"), not "llama3.2:q4_K_M" -- that tag doesn't
+# exist. This maps (model_id, abstract rung label) -> the real tag suffix
+# for models Cascade ships a mapping for, keeping ModelLadder itself generic
+# and untouched.
+_RUNG_LABEL_TO_REAL_TAG: dict[str, dict[str, str]] = {
+    "llama3.2": {
+        "q4_K_M": "3b-instruct-q4_K_M",
+        "q5_K_M": "3b-instruct-q5_K_M",
+        "q8_0": "3b-instruct-q8_0",
+    },
+}
+
+
+def _resolve_real_tag(model_id: str, rung_label: str) -> str:
+    """
+    Translate an abstract ModelLadder rung label into the real Ollama tag
+    suffix for `model_id`. Falls back to the bare label unresolved if
+    `model_id` has no registered mapping (e.g. a test double's synthetic
+    labels like "floor") -- this fails loudly and honestly at the `ollama
+    pull` step for an unmapped production model, rather than silently
+    guessing a tag that might not exist.
+    """
+    return _RUNG_LABEL_TO_REAL_TAG.get(model_id, {}).get(rung_label, rung_label)
+
+
 class LocalExecutionBackend:
     """
     Real local execution backend. Conforms to shared.types.ExecutionBackend.
@@ -82,8 +112,12 @@ class LocalExecutionBackend:
         ladder    -- defaults to ModelLadder(); injectable for tests.
         preferred_layer -- the highest AccelerationLayer to attempt;
                      defaults to LOOKAHEAD (always available, FR-03.1).
-        model_id  -- the model tag to load; defaults to the Phase 1
-                     reference model used for benchmarking.
+        model_id  -- the model tag to load; defaults to "llama3.2", the
+                     real reference model used for benchmarking (Section
+                     5.1). Abstract ModelLadder rung labels are resolved
+                     to real per-model Ollama tag suffixes via
+                     _resolve_real_tag() before being passed to the
+                     runner -- see that function's docstring.
         model_has_draft_heads -- True if the loaded model carries Medusa /
                      EAGLE draft heads (Layer 2); False by default.
         validated_pairs -- override for Layer 3 pair list; defaults to
@@ -98,7 +132,7 @@ class LocalExecutionBackend:
         profiler: Optional[HardwareProfiler] = None,
         ladder: Optional[ModelLadder] = None,
         preferred_layer: AccelerationLayer = AccelerationLayer.LOOKAHEAD,
-        model_id: str = "cascade-reference-3b",
+        model_id: str = "llama3.2",
         model_has_draft_heads: bool = False,
         validated_pairs: Optional[list[DraftPair]] = None,
         simulated_latency_ms: float = 0.0,
@@ -193,7 +227,8 @@ class LocalExecutionBackend:
         """
         while rung is not None:
             try:
-                self._engine.load(self._model_id, rung.label)
+                real_tag = _resolve_real_tag(self._model_id, rung.label)
+                self._engine.load(self._model_id, real_tag)
                 sample = self._engine.generate_accelerated(prompt, max_tokens=256)
                 self._engine.unload()
                 return sample, rung

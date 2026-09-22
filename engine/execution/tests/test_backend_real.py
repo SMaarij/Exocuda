@@ -169,9 +169,11 @@ def test_backend_selects_highest_viable_rung(tmp_path) -> None:
     ))
     backend  = LocalExecutionBackend(runner=runner, profiler=profiler, ladder=ladder)
     backend.generate(SAMPLE_MESSAGES)
-    # The last load call should be for the highest rung that cleared
+    # The last load call should be for the highest rung that cleared.
+    # Default model_id is "llama3.2", whose rung labels resolve to real
+    # Ollama tag suffixes (see backend.py's _RUNG_LABEL_TO_REAL_TAG).
     last_quant = runner.load_calls[-1][1]
-    assert last_quant == "q8_0"
+    assert last_quant == "3b-instruct-q8_0"
 
 
 # --------------------------------------------------------------------------
@@ -181,7 +183,10 @@ def test_backend_selects_highest_viable_rung(tmp_path) -> None:
 
 def test_backend_steps_down_automatically_on_oom(tmp_path) -> None:
     """OOM on q4_K_M triggers step-down and retry at floor rung."""
-    runner   = FakeRunner(tok_s=5.0, fail_quants=frozenset({"q4_K_M"}))
+    # fail_quants uses the resolved real tag ("3b-instruct-q4_K_M"), since
+    # that's what actually reaches FakeRunner.load() for the default
+    # "llama3.2" model_id (see backend.py's _resolve_real_tag).
+    runner   = FakeRunner(tok_s=5.0, fail_quants=frozenset({"3b-instruct-q4_K_M"}))
     profile_path = _write_profile(tmp_path, tok_s=5.0)
     profiler = HardwareProfiler(runner=runner, profile_path=profile_path)
     # Ladder with two rungs so there IS a rung to step down to
@@ -200,7 +205,10 @@ def test_backend_steps_down_automatically_on_oom(tmp_path) -> None:
 
 def test_backend_raises_when_all_rungs_exhausted(tmp_path) -> None:
     """LocalExecutionBackendError when every rung OOMs."""
-    runner   = FakeRunner(tok_s=20.0, fail_quants=frozenset({"q4_K_M", "q5_K_M"}))
+    runner   = FakeRunner(
+        tok_s=20.0,
+        fail_quants=frozenset({"3b-instruct-q4_K_M", "3b-instruct-q5_K_M"}),
+    )
     profile_path = _write_profile(tmp_path, tok_s=20.0)
     profiler = HardwareProfiler(runner=runner, profile_path=profile_path)
     ladder   = ModelLadder(rungs=(
@@ -247,7 +255,7 @@ def test_speculative_active_true_with_layer3(tmp_path) -> None:
     backend = _backend(
         tmp_path,
         preferred_layer=AccelerationLayer.DRAFT_MODEL,
-        validated_pairs=[DraftPair("cascade-reference-3b", "draft", True)],
+        validated_pairs=[DraftPair("llama3.2", "draft", True)],
     )
     result = backend.generate(SAMPLE_MESSAGES)
     assert result["speculative_active"] is True
@@ -261,7 +269,7 @@ def test_speculative_active_true_with_layer3(tmp_path) -> None:
 def _tok_s_for_layer(tmp_path: Path, layer: AccelerationLayer) -> float:
     heads = layer == AccelerationLayer.DRAFT_HEADS
     pair  = (
-        [DraftPair("cascade-reference-3b", "draft", True)]
+        [DraftPair("llama3.2", "draft", True)]
         if layer == AccelerationLayer.DRAFT_MODEL
         else []
     )

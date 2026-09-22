@@ -263,3 +263,59 @@ dependency of `hardware_profiler.py`, unaffected).
 (mocked HTTP responses -- no live Ollama needed, consistent with
 NFR-09's carve-out for this file being about the *runner itself*, not
 logic that can be tested without one). 257 tests passing total.
+
+## [Unreleased] -- Production model-tag mismatch resolved (`backend.py`)
+
+Resolves the "Found, NOT resolved" item flagged above. `LocalExecutionBackend`
+(`engine/execution/backend.py`) still defaulted `model_id="cascade-reference-3b"`
+and built real Ollama tags as `f"{model_id}:{rung.label}"` -- e.g.
+`"cascade-reference-3b:q4_K_M"`, which is not a real, pullable tag even
+after pointing `model_id` at a real model, since `ModelLadder`'s rung
+labels (`"q4_K_M"`/`"q5_K_M"`/`"q8_0"`) are bare abstract strings, not
+real Ollama tag suffixes (real tags are one dash-joined string, e.g.
+`llama3.2:3b-instruct-q4_K_M`).
+
+Went with option (b) from the earlier entry -- a resolution layer,
+not a constant swap:
+
+- Added `_RUNG_LABEL_TO_REAL_TAG` (a `{model_id: {rung_label: real_tag_suffix}}`
+  map) and `_resolve_real_tag(model_id, rung_label)` to `backend.py`.
+  `ModelLadder` itself is untouched -- it stays generic/abstract, exactly
+  as designed; the resolution lives entirely on the caller side, in the
+  one place that actually needs a real tag.
+- `_generate_with_stepdown()` now calls
+  `_resolve_real_tag(self._model_id, rung.label)` before passing the
+  result to `self._engine.load()`, instead of passing `rung.label`
+  straight through unresolved.
+- `model_id` default changed from `"cascade-reference-3b"` to
+  `"llama3.2"`, with a registered mapping for its three default rungs.
+- A model_id/label combo with no registered mapping falls back to the
+  bare label unresolved -- this fails loudly and honestly at the
+  `ollama pull` step for an unmapped production model (a clear "tag not
+  found" error), rather than silently guessing a tag that might not
+  exist. This also keeps every existing test that builds its own
+  `ModelLadder` with synthetic labels (e.g. `"floor"`) working
+  unchanged, since those never match an entry in the map.
+
+Test fallout fixed in `test_backend_real.py`: three tests asserting on
+the exact quant-level string passed to `FakeRunner.load()`
+(`test_backend_selects_highest_viable_rung`,
+`test_backend_steps_down_automatically_on_oom`,
+`test_backend_raises_when_all_rungs_exhausted`) now expect the resolved
+`"3b-instruct-*"` tags for the default `"llama3.2"` model_id. Two Layer-3
+tests (`test_speculative_active_true_with_layer3`,
+`test_nfr01_layer3_achieves_1_5x_over_layer1`) had `DraftPair` fixtures
+targeting the old `"cascade-reference-3b"` model_id -- updated to
+`"llama3.2"` so `AccelerationEngine._find_validated_pair()` still
+matches. `scripts/benchmark_acceleration.py`'s `--model`/`--quant`
+CLI defaults updated the same way (same tag-shape bug, different call
+site, not covered by pytest since it's a live-only manual script).
+
+Verified live end-to-end, not just unit-tested: with a synthetic
+HardwareProfile forcing rung `q4_K_M`,
+`LocalExecutionBackend(model_id="llama3.2").generate(...)` built and
+pulled the real tag `llama3.2:3b-instruct-q4_K_M` (already present
+locally from the earlier verification run) and returned real generated
+text (`"Hello there friend."`, `1.685 tok/s`). 257 tests passing
+(3 test-fallout fixes, no new tests needed -- this is a resolution
+layer over existing, already-tested load-call plumbing).
