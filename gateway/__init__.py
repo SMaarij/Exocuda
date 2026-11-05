@@ -1,13 +1,12 @@
 """
-gateway/ -- Track C: Platform & Revenue (Master Doc FR-07, Component 7).
+gateway/ -- everything that talks to an OpenAI-compatible endpoint.
 
-Owns:
-    - backend.py       -- CascadeCloudBackend, implementing shared.types.ExecutionBackend
-    - providers/        -- wholesale GPU provider adapter (FR-07.4)
-    - billing/           -- Stripe metering + spend caps (FR-07.2, FR-07.5)
-    - api/                -- FastAPI gateway app
+    byok.py          -- CloudBYOKBackend: the `cloud_byok` tier (your own provider key)
+    backend.py       -- SelfHostedBackend: the `self_hosted` tier's client
+    api/, store.py,  -- the self-hosted Cascade server: run it on a GPU box and
+    serve.py            share it with your team (API keys, optional token quotas)
+    providers/       -- the HTTP client both tiers and the server use
 
-Guiding rule (Section 10, master doc): nothing in here imports from
-engine/execution/ or engine/intelligence/ directly. gateway/backend.py
-only imports the ExecutionBackend protocol from shared/types.py.
+Nothing in here imports from engine/; backends only implement the
+ExecutionBackend protocol from shared/types.py.
 """

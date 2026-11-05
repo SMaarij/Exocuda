@@ -41,14 +41,14 @@ def _statistical_features(query: str) -> list[float]:
     return [
         float(len(query)),
         float(query.count("```")),  # code-block marker -> leans hard/cloud_byok
-        float(sum(lower.count(w) for w in _TIME_SENSITIVE_WORDS)),  # leans cascade_cloud
+        float(sum(lower.count(w) for w in _TIME_SENSITIVE_WORDS)),  # leans self_hosted
         float(query.count("?")),
     ]
 
 
 class SemanticRouterClassifier:
     """
-    FR-05.2: classifies a query into local / cloud_byok / cascade_cloud
+    FR-05.2: classifies a query into local / cloud_byok / self_hosted
     with a calibrated confidence score (predict_proba, not a made-up number).
     """
 

@@ -185,10 +185,10 @@ def test_byok_settings_resolve_key_from_environment(monkeypatch: pytest.MonkeyPa
     assert cli_main._byok_settings({}) is None
 
 
-def test_cascade_cloud_is_not_configured_by_default() -> None:
+def test_self_hosted_is_not_configured_by_default() -> None:
     """No default endpoint: prompts never go to a server the user didn't choose (NFR-05)."""
-    assert cli_main._cascade_settings({}) is None
-    assert cli_main._cascade_settings({"cascade_cloud": {"url": "http://localhost:8000"}})["base_url"] == "http://localhost:8000"
+    assert cli_main._self_hosted_settings({}) is None
+    assert cli_main._self_hosted_settings({"self_hosted": {"url": "http://localhost:8000"}})["base_url"] == "http://localhost:8000"
 
 
 def test_build_local_backend_honours_runner_and_acceleration(monkeypatch: pytest.MonkeyPatch) -> None:

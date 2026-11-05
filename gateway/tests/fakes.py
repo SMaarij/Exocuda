@@ -3,14 +3,13 @@ gateway/tests/fakes.py
 
 Shared test doubles for Track C's test suites. Mirrors Track A's
 FakeReferenceModelRunner and Track B's FakeEmbedder pattern:
-deterministic, no live network/GPU/Stripe call (NFR-09).
+deterministic, no live network/GPU call (NFR-09).
 """
 
 from __future__ import annotations
 
 from typing import Generator, Optional
 
-from gateway.billing.stripe_client import BillingClient
 from gateway.providers.base import CloudGenerationSample, CloudUsage
 
 
@@ -56,27 +55,3 @@ class FakeCloudInferenceProvider:
             yield word + " "
         return CloudUsage(self._prompt_tokens, self._completion_tokens) if self._report_stream_usage else None
 
-
-class FakeBillingClient:
-    """Conforms to BillingClient. Records calls in memory instead of hitting Stripe's API."""
-
-    def __init__(self) -> None:
-        self.usage_records: list[tuple[str, str, int]] = []
-        self.subscriptions: list[tuple[str, str]] = []
-
-    def record_usage(self, customer_id: str, meter_event_name: str, quantity: int) -> None:
-        self.usage_records.append((customer_id, meter_event_name, quantity))
-
-    def create_subscription(self, customer_id: str, price_id: str) -> str:
-        self.subscriptions.append((customer_id, price_id))
-        return f"sub_fake_{len(self.subscriptions)}"
-
-
-# Static type-check aid -- confirms FakeBillingClient actually satisfies
-# the Protocol shape, the same spirit as the isinstance() asserts on
-# the real backend classes.
-def _conforms_to_billing_client(client: BillingClient) -> None:
-    pass
-
-
-_conforms_to_billing_client(FakeBillingClient())

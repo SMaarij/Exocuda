@@ -4,9 +4,24 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cascade"
-version = "0.2.0"
-description = "Adaptive LLM Optimization & Routing Platform"
+version = "0.3.0"
+description = "Local-first LLM runtime: runs models on your machine, caches repeated questions, and routes hard ones to a provider or server you choose."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Syed Maarij" }, { name = "Jaweria Anwer" }]
 requires-python = ">=3.10"
+keywords = ["llm", "ollama", "llama.cpp", "routing", "semantic-cache", "speculative-decoding", "local-first"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "psutil>=5.9",
     "numpy>=1.26",
@@ -17,7 +32,6 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "pydantic>=2.6",
-    "stripe>=9.0",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +39,10 @@ dependencies = [
 #   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 llamacpp = ["llama-cpp-python>=0.3"]
 dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[project.urls]
+Homepage = "https://github.com/SMaarij/Exocuda"
+Issues = "https://github.com/SMaarij/Exocuda/issues"
 
 [project.scripts]
 cascade = "cli.main:app"
@@ -48,6 +66,6 @@ pythonpath = ["."]
 # Track C landed (gateway/, cli/) -- added below per this file's own
 # prior instruction. Track A's own Phase 1 coverage claim (90%
 # hardware_profiler.py, 95% backend.py) was measured with
-# `--cov=engine/execution` directly -- see docs/TRACK_A_PHASE1_SUMMARY.md.
+# `--cov=engine/execution` directly -- see docs/archive/TRACK_A_PHASE1_SUMMARY.md.
 source = ["engine", "shared", "gateway", "cli"]
 omit = ["*/tests/*"]

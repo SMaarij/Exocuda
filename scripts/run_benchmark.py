@@ -32,7 +32,7 @@ WHAT THIS DOES NOT MEASURE, and why (flagged, not faked):
     - Output quality regression vs. an FP16 baseline (NFR-11) -- needs
       a real quantized model to compare against, not measurable from
       routing/caching logic alone.
-    - CascadeCloud GPU throughput / time-to-first-token reduction --
+    - self-hosted GPU throughput / time-to-first-token reduction --
       needs an actual deployed vLLM/SGLang instance behind
       gateway/backend.py, not a fake CloudInferenceProvider.
 
@@ -135,7 +135,7 @@ def estimate_cost_reduction(router_result: dict) -> dict:
     A derived estimate from the router measurement ONLY, explicitly
     labeled as such -- not a live cost measurement (no real cloud API
     calls were made). Local-tier queries cost $0 in cloud spend;
-    cloud_byok/cascade_cloud tier queries would have cost something on
+    cloud_byok/self_hosted tier queries would have cost something on
     a pure-cloud baseline regardless of Cascade's involvement.
 
     Deliberately does NOT fold the cache-hit-rate measurement into this
@@ -241,7 +241,7 @@ def _write_report(router_result: dict, cache_result: dict, cost_result: dict) ->
         "| Speculative decoding speedup (NFR-01) | Needs a live Ollama instance with draft/target pairs loaded — run `scripts/benchmark_acceleration.py` separately against real models. |",
         "| Hardware ladder success rate across ≥5 machines (R-06) | Inherently needs multiple different physical machines — see `docs/hardware_compat_results.md`. |",
         "| Output quality regression vs. FP16 (NFR-11) | Needs a real quantized model loaded to compare against. |",
-        "| CascadeCloud GPU throughput / time-to-first-token | Needs an actual deployed vLLM/SGLang instance behind `gateway/backend.py`, not a fake provider. |",
+        "| self-hosted GPU throughput / time-to-first-token | Needs an actual deployed vLLM/SGLang instance behind `gateway/backend.py`, not a fake provider. |",
         "",
         "No number above this line was estimated and reported as measured — every figure came from a real "
         "run of the code in this repo, against the held-out reference set, on this machine, just now.",

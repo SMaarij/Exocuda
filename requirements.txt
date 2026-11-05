@@ -1,33 +1,24 @@
-# Track A -- engine/execution/ dependencies (Phase 1)
+# Same dependencies as pyproject.toml, for `pip install -r requirements.txt`.
+# Preferred install: `pip install -e ".[dev]"`.
+
+# engine/execution -- hardware profiling, local runners
 psutil>=5.9
 
-# Test tooling
+# engine/intelligence -- cache, compressor, router
+numpy>=1.26           # cosine similarity
+fastembed>=0.3        # ONNX embeddings (bge-small), CPU-only, no torch
+scikit-learn>=1.4     # SemanticRouter classifier
+
+# gateway/, cli/
+httpx>=0.27           # OpenAI-compatible client (BYOK and self-hosted tiers)
+fastapi>=0.110        # self-hosted Cascade server
+uvicorn>=0.29         # ASGI server for it
+pydantic>=2.6         # request models
+typer>=0.12           # the `cascade` CLI
+
+# tests
 pytest>=7.4
 pytest-cov>=4.1
-
-# NOTE: this covers Track A's engine/execution/ code only. Track B
-# (engine/intelligence/ -- sklearn, numpy, etc.) and Track C (gateway/,
-# cli/ -- FastAPI, Stripe, Typer, etc.) should add their own dependency
-# blocks here as their code lands, or split into
-# requirements-{execution,intelligence,gateway}.txt if the list grows
-# large enough that each track pulling in the others' deps becomes
-# annoying. Not decided unilaterally by Track A -- worth a quick note in
-# shared/CHANGELOG.md whichever way the team picks.
-
-# Track B -- engine/intelligence/ dependencies (Phase 2)
-numpy>=1.26          # cosine similarity for SemanticCache/ContextCompressor
-fastembed>=0.3        # ONNX embeddings (bge-small), CPU-only, no torch (Tech Stack 5.1)
-scikit-learn>=1.4     # SemanticRouter classifier (logistic regression / GBT)
-
-# Track C -- gateway/, cli/ dependencies (Phase 2+)
-fastapi>=0.110         # CascadeCloud gateway API
-uvicorn>=0.29           # ASGI server for the gateway
-httpx>=0.27              # HTTP client -- CascadeCloudBackend's provider calls an
-                          # OpenAI-compatible endpoint (vLLM/SGLang serve this API,
-                          # so any wholesale GPU provider exposing it works, FR-07.4)
-stripe>=9.0               # metered usage billing + subscriptions (FR-07.5)
-typer>=0.12                # CLI (FR-08)
-pydantic>=2.6                # FastAPI request/response models
 
 # Optional -- real speculative decoding via engine/execution/llamacpp_runner.py.
 # Prebuilt CPU wheels avoid needing a C++ compiler:

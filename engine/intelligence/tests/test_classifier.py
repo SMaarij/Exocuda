@@ -31,7 +31,7 @@ def test_classify_returns_one_of_the_three_labels() -> None:
     router = _fitted_router()
     decision = router.classify("hi there, how are you")
     assert isinstance(decision, RoutingDecision)
-    assert decision.tier in ("local", "cloud_byok", "cascade_cloud")
+    assert decision.tier in ("local", "cloud_byok", "self_hosted")
 
 
 def test_classify_confidence_is_calibrated_probability() -> None:
@@ -44,7 +44,7 @@ def test_classify_auto_fits_if_never_fitted_explicitly() -> None:
     router = SemanticRouterClassifier(FakeEmbedder())
     decision = router.classify("hello there")
     assert router.is_fitted
-    assert decision.tier in ("local", "cloud_byok", "cascade_cloud")
+    assert decision.tier in ("local", "cloud_byok", "self_hosted")
 
 
 def test_classify_trivial_query_routes_local_on_clean_training_set() -> None:
@@ -63,9 +63,9 @@ def test_classify_trivial_query_routes_local_on_clean_training_set() -> None:
         RoutingExample("write a compiler in rust", "cloud_byok"),
         RoutingExample("prove this theorem rigorously", "cloud_byok"),
         RoutingExample("optimize this algorithm please", "cloud_byok"),
-        RoutingExample("what is today's date now", "cascade_cloud"),
-        RoutingExample("search the web for current news", "cascade_cloud"),
-        RoutingExample("check my current account balance", "cascade_cloud"),
+        RoutingExample("what is today's date now", "self_hosted"),
+        RoutingExample("search the web for current news", "self_hosted"),
+        RoutingExample("check my current account balance", "self_hosted"),
     ]
     router = SemanticRouterClassifier(FakeEmbedder())
     router.fit(examples)

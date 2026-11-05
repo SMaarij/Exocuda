@@ -4,6 +4,13 @@
 > all three tracks build against — Section numbers below match what
 > `shared/types.py`, `shared/CHANGELOG.md`, and every Track A/B handoff
 > doc in `docs/` already reference (e.g. "Section 9," "NFR-07," "R-04").
+>
+> **Revision (0.3.0, 2026-11-05): Cascade is open source (MIT); there is no paid hosted tier.**
+> Read every mention of "CascadeCloud" below as the **self-hosted Cascade server** (`self_hosted`
+> tier): a server you run on your own GPU machine, with API keys and optional token quotas. Stripe
+> billing, pricing, gross margin (NFR-04) and Section 10 (Business Model) no longer apply and are
+> kept only as history. Track hand-off notes now live in `docs/archive/`. Current status:
+> [`../PROJECT_STATUS.md`](../PROJECT_STATUS.md).
 
 ## 1. Executive Summary
 
@@ -120,11 +127,11 @@ quality; anything below 4-bit is an explicit opt-in, never a default
 and Track A/B handoff docs for full SHALL-statement detail)
 
 - **FR-01 HardwareProfiler**, **FR-02 ModelLadder**, **FR-03
-  AccelerationEngine** — Track A, complete (`docs/TRACK_A_PHASE1_SUMMARY.md`,
-  `docs/TRACK_A_HANDOFF_FOR_B_AND_C.md`).
+  AccelerationEngine** — Track A, complete (`docs/archive/TRACK_A_PHASE1_SUMMARY.md`,
+  `docs/archive/TRACK_A_HANDOFF_FOR_B_AND_C.md`).
 - **FR-04 ContextCompressor**, **FR-05 SemanticRouter**, **FR-06
-  SemanticCache** — Track B, complete (`docs/TRACK_B_PHASE2_3_SUMMARY.md`,
-  `docs/TRACK_B_HANDOFF_FOR_C.md`).
+  SemanticCache** — Track B, complete (`docs/archive/TRACK_B_PHASE2_3_SUMMARY.md`,
+  `docs/archive/TRACK_B_HANDOFF_FOR_C.md`).
 - **FR-07 CascadeCloud Gateway**, **FR-08 CLI & Setup** — Track C.
 
 ## 7. Non-Functional Requirements
@@ -228,8 +235,8 @@ R-03, R-05–R-11.
 
 ## 13. Glossary
 
-See `shared/types.py` module docstrings and `docs/TRACK_A_HANDOFF_FOR_B_AND_C.md` /
-`docs/TRACK_B_HANDOFF_FOR_C.md` for term-by-term definitions (ladder
+See `shared/types.py` module docstrings and `docs/archive/TRACK_A_HANDOFF_FOR_B_AND_C.md` /
+`docs/archive/TRACK_B_HANDOFF_FOR_C.md` for term-by-term definitions (ladder
 rung, draft/target pair, acceptance rate, local-incapable,
 shadow-labeling, cold start, the seams, ExecutionBackend, BackendResult,
 join point).

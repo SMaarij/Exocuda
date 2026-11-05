@@ -26,14 +26,14 @@ def test_load_shadow_examples_labels_agreement_as_served_tier(tmp_path: Path) ->
     assert examples[0].query == "hi"
 
 
-def test_load_shadow_examples_labels_disagreement_as_cascade_cloud(tmp_path: Path) -> None:
+def test_load_shadow_examples_labels_disagreement_as_self_hosted(tmp_path: Path) -> None:
     log_path = tmp_path / "log.jsonl"
     log_path.write_text(
         json.dumps({"query": "hard one", "served_tier": "local", "agree": False}) + "\n",
         encoding="utf-8",
     )
     examples = load_shadow_examples(log_path)
-    assert examples[0].label == "cascade_cloud"
+    assert examples[0].label == "self_hosted"
 
 
 def test_retrain_with_no_shadow_log_uses_only_coldstart_data(tmp_path: Path) -> None:
@@ -52,11 +52,11 @@ def test_retrain_incorporates_shadow_examples(tmp_path: Path) -> None:
     # Retraining succeeded on coldstart + shadow data combined -- no
     # exception, and it's still a usable classifier.
     decision = classifier.classify("a new real query")
-    assert decision.tier in ("local", "cloud_byok", "cascade_cloud")
+    assert decision.tier in ("local", "cloud_byok", "self_hosted")
 
 
 def test_retrain_returns_usable_classifier_matching_bootstrap_size(tmp_path: Path) -> None:
     classifier = retrain(FakeEmbedder(), log_path=tmp_path / "nope.jsonl")
     # sanity: coldstart data alone is enough to fit without error
     assert len(BOOTSTRAP_EXAMPLES) > 0
-    assert classifier.classify("hello").tier in ("local", "cloud_byok", "cascade_cloud")
+    assert classifier.classify("hello").tier in ("local", "cloud_byok", "self_hosted")

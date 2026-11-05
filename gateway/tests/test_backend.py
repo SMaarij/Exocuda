@@ -1,115 +1,58 @@
-"""gateway/tests/test_backend.py -- Track C, Tasks 4 & 7 (FR-07.1, FR-07.2)."""
+"""gateway/tests/test_backend.py -- SelfHostedBackend, the client of the self_hosted tier."""
 
 from __future__ import annotations
 
 import pytest
 
-from gateway.backend import CascadeCloudBackend, CascadeCloudBackendError
-from gateway.billing.meter import SpendCapExceededError, UsageMeter
+from gateway.backend import SelfHostedBackend, SelfHostedBackendError
 from gateway.tests.fakes import FakeCloudInferenceProvider
 from shared.types import ExecutionBackend, Message
 
 
 def _messages() -> list[Message]:
-    return [{"role": "user", "content": "hello cascade cloud"}]
+    return [{"role": "user", "content": "hello self-hosted server"}]
 
 
 def test_backend_conforms_to_execution_backend_protocol() -> None:
-    backend = CascadeCloudBackend(provider=FakeCloudInferenceProvider())
-    assert isinstance(backend, ExecutionBackend)
+    assert isinstance(SelfHostedBackend(provider=FakeCloudInferenceProvider()), ExecutionBackend)
 
 
 def test_generate_returns_well_typed_backend_result() -> None:
-    backend = CascadeCloudBackend(provider=FakeCloudInferenceProvider(text="a real answer"))
-    result = backend.generate(_messages())
-
+    result = SelfHostedBackend(provider=FakeCloudInferenceProvider(text="a real answer")).generate(_messages())
     for field in ("text", "confidence", "speculative_active", "tok_s", "latency_ms", "est_cost_usd"):
         assert field in result
     assert result["text"] == "a real answer"
-    assert result["speculative_active"] is False  # no speculative layer in the cloud tier
+    assert result["speculative_active"] is False
+    assert result["est_cost_usd"] == 0.0
 
 
-def test_generate_cost_is_greater_than_zero() -> None:
-    backend = CascadeCloudBackend(provider=FakeCloudInferenceProvider(), price_per_1k_tokens=1.0)
-    result = backend.generate(_messages())
-    assert result["est_cost_usd"] > 0.0
+def test_generate_reports_upstream_throughput() -> None:
+    provider = FakeCloudInferenceProvider(completion_tokens=20, elapsed_s=0.5)
+    assert SelfHostedBackend(provider=provider).generate(_messages())["tok_s"] == pytest.approx(40.0)
 
 
-def test_generate_charges_for_actual_tokens_not_the_estimate() -> None:
-    provider = FakeCloudInferenceProvider(prompt_tokens=5, completion_tokens=5)
-    meter = UsageMeter(cap_usd=None)
-    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=10.0, usage_meter=meter)
-
-    backend.generate(_messages())
-
-    expected_cost = (10 / 1000.0) * 10.0  # 10 actual tokens (5 prompt + 5 completion)
-    assert meter.spent_usd == pytest.approx(expected_cost, rel=0.01)
-
-
-def test_generate_raises_spend_cap_exceeded_before_calling_provider() -> None:
-    provider = FakeCloudInferenceProvider()
-    meter = UsageMeter(cap_usd=0.0001)  # effectively zero budget
-    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=100.0, usage_meter=meter)
-
-    with pytest.raises(SpendCapExceededError):
-        backend.generate(_messages())
-
-    assert provider.call_count == 0  # never called -- the cap was checked first
-
-
-def test_generate_releases_reservation_on_provider_failure() -> None:
-    provider = FakeCloudInferenceProvider(fail=True)
-    meter = UsageMeter(cap_usd=100.0)
-    backend = CascadeCloudBackend(provider=provider, usage_meter=meter)
-
-    with pytest.raises(CascadeCloudBackendError):
-        backend.generate(_messages())
-
-    assert meter.spent_usd == 0.0  # reservation released, not stuck
+def test_generate_wraps_provider_failure() -> None:
+    with pytest.raises(SelfHostedBackendError):
+        SelfHostedBackend(provider=FakeCloudInferenceProvider(fail=True)).generate(_messages())
 
 
 def test_generate_stream_yields_tokens() -> None:
-    backend = CascadeCloudBackend(provider=FakeCloudInferenceProvider(text="one two three"))
-    tokens = list(backend.generate_stream(_messages()))
-    assert len(tokens) >= 1
-    assert "".join(tokens).strip() == "one two three"
+    backend = SelfHostedBackend(provider=FakeCloudInferenceProvider(text="one two three"))
+    assert "".join(backend.generate_stream(_messages())).strip() == "one two three"
 
 
-def test_generate_stream_releases_reservation_on_failure() -> None:
-    provider = FakeCloudInferenceProvider(fail=True)
-    meter = UsageMeter(cap_usd=100.0)
-    backend = CascadeCloudBackend(provider=provider, usage_meter=meter)
-
-    with pytest.raises(CascadeCloudBackendError):
-        list(backend.generate_stream(_messages()))
-
-    assert meter.spent_usd == 0.0
+def test_generate_stream_wraps_provider_failure() -> None:
+    with pytest.raises(SelfHostedBackendError):
+        list(SelfHostedBackend(provider=FakeCloudInferenceProvider(fail=True)).generate_stream(_messages()))
 
 
 def test_generate_passes_messages_through_unflattened() -> None:
     provider = FakeCloudInferenceProvider()
     messages = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}]
-    CascadeCloudBackend(provider=provider).generate(messages)
+    SelfHostedBackend(provider=provider).generate(messages)
     assert provider.last_messages == messages
-
-
-def test_generate_stream_reconciles_to_reported_usage() -> None:
-    provider = FakeCloudInferenceProvider(text="one two", prompt_tokens=30, completion_tokens=70)
-    meter = UsageMeter()
-    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=1.0, usage_meter=meter)
-    list(backend.generate_stream(_messages()))
-    assert meter.spent_usd == pytest.approx(0.1)  # 100 real tokens @ $1/1k, not the worst-case estimate
-
-
-def test_generate_stream_keeps_reservation_when_usage_unreported() -> None:
-    provider = FakeCloudInferenceProvider(report_stream_usage=False)
-    meter = UsageMeter()
-    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=1.0, usage_meter=meter, max_tokens=500)
-    list(backend.generate_stream(_messages()))
-    assert meter.spent_usd > 0.5  # worst-case reservation (>= max_tokens) stands
 
 
 def test_default_construction_does_not_touch_network() -> None:
     """Constructing with all defaults (as the module-level isinstance assert does) must never make an HTTP call."""
-    backend = CascadeCloudBackend()
-    assert isinstance(backend, ExecutionBackend)
+    assert isinstance(SelfHostedBackend(), ExecutionBackend)

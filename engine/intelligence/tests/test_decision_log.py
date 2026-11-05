@@ -52,7 +52,7 @@ def test_summarize_computes_cache_hit_rate() -> None:
 
 
 def test_summarize_computes_local_resolution_rate() -> None:
-    records = [_result(tier="local"), _result(tier="local"), _result(tier="cascade_cloud")]
+    records = [_result(tier="local"), _result(tier="local"), _result(tier="self_hosted")]
     summary = summarize_decisions(records)
     assert summary["local_resolution_rate"] == 2 / 3
 

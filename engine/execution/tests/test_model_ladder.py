@@ -98,7 +98,7 @@ def test_select_rung_returns_floor_when_only_floor_clears() -> None:
 
 
 def test_select_rung_returns_none_below_all_floors() -> None:
-    """Profile that clears no rung -> None (route to CascadeCloud)."""
+    """Profile that clears no rung -> None (route to the self-hosted tier)."""
     ladder  = ModelLadder(rungs=SIMPLE_LADDER)
     profile = _profile(tok_s=1.0, vram_gb=0.0)
     assert ladder.select_rung(profile) is None

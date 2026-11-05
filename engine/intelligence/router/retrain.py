@@ -25,9 +25,9 @@ def load_shadow_examples(log_path: Path = DEFAULT_LOG_PATH) -> list[RoutingExamp
     """
     Turns accumulated shadow-label log lines into RoutingExamples via
     weak supervision: a served answer that *agreed* with the shadow
-    cascade_cloud answer is evidence "local" was the right call for
+    self_hosted answer is evidence "local" was the right call for
     that query; disagreement is evidence it should have gone to
-    cascade_cloud instead.
+    self_hosted instead.
     """
     if not log_path.exists():
         return []
@@ -39,8 +39,8 @@ def load_shadow_examples(log_path: Path = DEFAULT_LOG_PATH) -> list[RoutingExamp
             if not line:
                 continue
             row = json.loads(line)
-            label = row["served_tier"] if row.get("agree") else "cascade_cloud"
-            if label not in ("local", "cloud_byok", "cascade_cloud"):
+            label = row["served_tier"] if row.get("agree") else "self_hosted"
+            if label not in ("local", "cloud_byok", "self_hosted"):
                 continue
             examples.append(RoutingExample(query=row["query"], label=label))
     return examples

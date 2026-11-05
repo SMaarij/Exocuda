@@ -1,18 +1,19 @@
 """
 gateway/store.py
 
-Server-side persistence for CascadeCloud: API keys (stored as SHA-256
-hashes only -- a leaked database doesn't leak usable keys) and per-user
-spend with optional caps. SQLite with `BEGIN IMMEDIATE` transactions, so
+Persistence for the self-hosted Cascade server: users, API keys (stored as
+SHA-256 hashes only -- a leaked database doesn't leak usable keys) and
+per-user token usage with an optional quota, so several people can share
+one GPU box fairly. SQLite with `BEGIN IMMEDIATE` transactions, so
 check-and-reserve stays atomic across threads and processes on one host,
-and caps survive restarts. A multi-host deployment would swap this for
+and usage survives restarts. A multi-host deployment would swap this for
 Postgres behind the same methods.
 """
 
 from __future__ import annotations
 
-import hashlib
 import contextlib
+import hashlib
 import secrets
 import sqlite3
 import threading
@@ -21,17 +22,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Optional
 
-from gateway.billing.meter import SpendCapExceededError
-
 KEY_PREFIX = "csk_"
+
+
+class QuotaExceededError(RuntimeError):
+    """A request would push a user past their token quota."""
 
 
 @dataclass(frozen=True)
 class Account:
     user_id: str
-    cap_usd: Optional[float]
-    spent_usd: float
-    stripe_customer_id: Optional[str]
+    quota_tokens: Optional[int]
+    used_tokens: int
 
 
 def _hash_key(key: str) -> str:
@@ -51,15 +53,14 @@ class GatewayStore:
         try:
             conn.executescript(
                 """
-                CREATE TABLE IF NOT EXISTS accounts (
+                CREATE TABLE IF NOT EXISTS users (
                     user_id TEXT PRIMARY KEY,
-                    cap_usd REAL,
-                    spent_usd REAL NOT NULL DEFAULT 0,
-                    stripe_customer_id TEXT
+                    quota_tokens INTEGER,
+                    used_tokens INTEGER NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS api_keys (
                     key_hash TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL REFERENCES accounts(user_id),
+                    user_id TEXT NOT NULL REFERENCES users(user_id),
                     revoked INTEGER NOT NULL DEFAULT 0
                 );
                 """
@@ -73,81 +74,81 @@ class GatewayStore:
         # The shared in-memory connection is serialised with a lock; file
         # databases rely on SQLite's own locking via BEGIN IMMEDIATE.
         with self._memory_lock:
-            with self._tx_unlocked() as conn:
-                yield conn
-
-    @contextmanager
-    def _tx_unlocked(self) -> Iterator[sqlite3.Connection]:
-        conn = self._memory_conn or sqlite3.connect(self._path, timeout=10, isolation_level=None)
-        try:
-            conn.execute("BEGIN IMMEDIATE")
+            conn = self._memory_conn or sqlite3.connect(self._path, timeout=10, isolation_level=None)
             try:
-                yield conn
-                conn.execute("COMMIT")
-            except BaseException:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            if self._memory_conn is None:
-                conn.close()
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    yield conn
+                    conn.execute("COMMIT")
+                except BaseException:
+                    conn.execute("ROLLBACK")
+                    raise
+            finally:
+                if self._memory_conn is None:
+                    conn.close()
 
-    # ---- accounts & keys -------------------------------------------------
+    # ---- users & keys -----------------------------------------------------
 
-    def create_account(self, user_id: str, cap_usd: Optional[float] = None, stripe_customer_id: Optional[str] = None) -> None:
+    def create_user(self, user_id: str, quota_tokens: Optional[int] = None) -> None:
+        """Create a user, or update an existing user's quota (usage is kept)."""
         with self._tx() as conn:
             conn.execute(
-                "INSERT INTO accounts(user_id, cap_usd, stripe_customer_id) VALUES (?, ?, ?) "
-                "ON CONFLICT(user_id) DO UPDATE SET cap_usd = excluded.cap_usd, "
-                "stripe_customer_id = COALESCE(excluded.stripe_customer_id, accounts.stripe_customer_id)",
-                (user_id, cap_usd, stripe_customer_id),
+                "INSERT INTO users(user_id, quota_tokens) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET quota_tokens = excluded.quota_tokens",
+                (user_id, quota_tokens),
             )
 
     def create_api_key(self, user_id: str) -> str:
         """Returns the plaintext key -- the only time it exists; only its hash is stored."""
         key = KEY_PREFIX + secrets.token_urlsafe(32)
         with self._tx() as conn:
-            if conn.execute("SELECT 1 FROM accounts WHERE user_id = ?", (user_id,)).fetchone() is None:
-                raise KeyError(f"no account {user_id!r}; create_account() first")
+            if conn.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,)).fetchone() is None:
+                raise KeyError(f"no user {user_id!r}; create_user() first")
             conn.execute("INSERT INTO api_keys(key_hash, user_id) VALUES (?, ?)", (_hash_key(key), user_id))
         return key
 
-    def revoke_api_key(self, key: str) -> None:
+    def revoke_api_key(self, key: str) -> bool:
+        """Returns True if a key was revoked."""
         with self._tx() as conn:
-            conn.execute("UPDATE api_keys SET revoked = 1 WHERE key_hash = ?", (_hash_key(key),))
+            cursor = conn.execute("UPDATE api_keys SET revoked = 1 WHERE key_hash = ? AND revoked = 0", (_hash_key(key),))
+            return cursor.rowcount > 0
 
     def authenticate(self, key: str) -> Optional[Account]:
         if not key:
             return None
         with self._tx() as conn:
             row = conn.execute(
-                "SELECT a.user_id, a.cap_usd, a.spent_usd, a.stripe_customer_id FROM api_keys k "
-                "JOIN accounts a ON a.user_id = k.user_id WHERE k.key_hash = ? AND k.revoked = 0",
+                "SELECT u.user_id, u.quota_tokens, u.used_tokens FROM api_keys k "
+                "JOIN users u ON u.user_id = k.user_id WHERE k.key_hash = ? AND k.revoked = 0",
                 (_hash_key(key),),
             ).fetchone()
         return Account(*row) if row else None
 
     def account(self, user_id: str) -> Optional[Account]:
         with self._tx() as conn:
-            row = conn.execute(
-                "SELECT user_id, cap_usd, spent_usd, stripe_customer_id FROM accounts WHERE user_id = ?", (user_id,)
-            ).fetchone()
+            row = conn.execute("SELECT user_id, quota_tokens, used_tokens FROM users WHERE user_id = ?", (user_id,)).fetchone()
         return Account(*row) if row else None
 
-    # ---- metering (FR-07.2) -----------------------------------------------
+    # ---- usage ------------------------------------------------------------
 
-    def check_and_reserve(self, user_id: str, estimated_cost_usd: float) -> None:
-        """Atomically reject (reserving nothing) or reserve the estimate."""
+    def check_and_reserve(self, user_id: str, tokens: int) -> None:
+        """Atomically reject (reserving nothing) or reserve the token estimate."""
         with self._tx() as conn:
-            cap, spent = conn.execute("SELECT cap_usd, spent_usd FROM accounts WHERE user_id = ?", (user_id,)).fetchone()
-            if cap is not None and spent + estimated_cost_usd > cap:
-                raise SpendCapExceededError(
-                    f"Request would bring spend to ${spent + estimated_cost_usd:.4f}, exceeding the ${cap:.4f} cap."
+            quota, used = conn.execute("SELECT quota_tokens, used_tokens FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            if quota is not None and used + tokens > quota:
+                raise QuotaExceededError(
+                    f"request needs up to {tokens} tokens; {user_id} has used {used} of a {quota}-token quota"
                 )
-            conn.execute("UPDATE accounts SET spent_usd = spent_usd + ? WHERE user_id = ?", (estimated_cost_usd, user_id))
+            conn.execute("UPDATE users SET used_tokens = used_tokens + ? WHERE user_id = ?", (tokens, user_id))
 
-    def adjust(self, user_id: str, estimated_cost_usd: float, actual_cost_usd: float) -> None:
+    def adjust(self, user_id: str, reserved_tokens: int, actual_tokens: int) -> None:
+        """Replace a reservation with what the request actually used."""
         with self._tx() as conn:
             conn.execute(
-                "UPDATE accounts SET spent_usd = spent_usd + ? WHERE user_id = ?",
-                (actual_cost_usd - estimated_cost_usd, user_id),
+                "UPDATE users SET used_tokens = used_tokens + ? WHERE user_id = ?",
+                (actual_tokens - reserved_tokens, user_id),
             )
+
+    def reset_usage(self, user_id: str) -> None:
+        with self._tx() as conn:
+            conn.execute("UPDATE users SET used_tokens = 0 WHERE user_id = ?", (user_id,))

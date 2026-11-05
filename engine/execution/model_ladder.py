@@ -99,7 +99,7 @@ class ModelLadder:
     def select_rung(self, profile: HardwareProfile) -> Optional[QuantRung]:
         """
         Return the highest rung this profile can sustain, or None if no
-        rung clears the floor (Pipeline should route to CascadeCloud).
+        rung clears the floor (Pipeline should route to the self-hosted tier).
 
         Pure function of profile -- same input always returns same output
         (FR-02.1 / NFR-08).

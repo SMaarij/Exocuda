@@ -3,21 +3,21 @@ tests/integration/test_j4_three_way_run.py
 
 The first REAL three-way end-to-end run (Section 13.1's Phase 4 join
 point, J-4) -- closes Track B's Individual Task Breakdown Task 17,
-which was blocked pending Track C's CascadeCloudBackend
-(docs/TRACK_B_PHASE2_3_SUMMARY.md's "What's explicitly NOT done"
+which was blocked pending Track C's SelfHostedBackend
+(docs/archive/TRACK_B_PHASE2_3_SUMMARY.md's "What's explicitly NOT done"
 section). Now that gateway/backend.py exists, this test wires all
 three tracks' real classes together:
 
     Track A -- engine.execution.backend.LocalExecutionBackend (real)
     Track B -- engine.intelligence.pipeline.Pipeline (real)
-    Track C -- gateway.backend.CascadeCloudBackend (real)
+    Track C -- gateway.backend.SelfHostedBackend (real)
 
 Only the innermost dependencies each track already fakes for its own
 unit tests are faked here too (a deterministic ReferenceModelRunner for
 Track A, a deterministic CloudInferenceProvider for Track C) -- no live
 Ollama, GPU, or network call anywhere (NFR-09). This is the ceiling of
 what's testable without an actual deployed model/endpoint; a true
-production smoke test still needs docs/TRACK_B_HANDOFF_FOR_C.md
+production smoke test still needs docs/archive/TRACK_B_HANDOFF_FOR_C.md
 Section 4 Step 3's manual verification against real infrastructure.
 """
 
@@ -32,7 +32,7 @@ from engine.intelligence.pipeline import Pipeline
 from engine.intelligence.router.classifier import SemanticRouterClassifier
 from engine.intelligence.router.coldstart_data import RoutingExample
 from engine.intelligence.tests.fakes import FakeEmbedder
-from gateway.backend import CascadeCloudBackend
+from gateway.backend import SelfHostedBackend
 from gateway.tests.fakes import FakeCloudInferenceProvider
 from shared.types import Message
 
@@ -72,12 +72,12 @@ def _msgs(text: str) -> list[Message]:
 
 
 def test_j4_local_capable_machine_stays_on_local_tier(tmp_path: Path) -> None:
-    """local_capable=True -> Pipeline never touches CascadeCloud."""
+    """local_capable=True -> Pipeline never touches the self-hosted server."""
     local = _local_backend(tmp_path, capable=True)
     cascade_provider = FakeCloudInferenceProvider(text="should never be seen")
-    cascade = CascadeCloudBackend(provider=cascade_provider)
+    cascade = SelfHostedBackend(provider=cascade_provider)
 
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, confidence_floor=None)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, confidence_floor=None)
     result = pipeline.run(_msgs("hello"))
 
     assert result["tier"] == "local"
@@ -85,66 +85,49 @@ def test_j4_local_capable_machine_stays_on_local_tier(tmp_path: Path) -> None:
     assert cascade_provider.call_count == 0
 
 
-def test_j4_local_incapable_machine_escalates_to_cascade_cloud_with_real_cost(tmp_path: Path) -> None:
+def test_j4_local_incapable_machine_escalates_to_self_hosted(tmp_path: Path) -> None:
     """
     All local rungs OOM (LocalExecutionBackendError) -> Pipeline
-    escalates to Track C's real CascadeCloudBackend, which returns a
-    real, non-zero est_cost_usd -- the exact chain the master doc's
+    escalates to Track C's real SelfHostedBackend -- the exact chain the master doc's
     Section 4 architecture diagram describes: local_capable=False
-    (or, here, a runtime OOM) routes to CascadeCloud, FR-07.
+    (or, here, a runtime OOM) routes to the self-hosted tier, FR-07.
     """
     local = _local_backend(tmp_path, capable=False)  # every rung OOMs
-    cascade_provider = FakeCloudInferenceProvider(text="answered by CascadeCloud", prompt_tokens=10, completion_tokens=20)
-    cascade = CascadeCloudBackend(provider=cascade_provider, price_per_1k_tokens=0.5)
+    cascade_provider = FakeCloudInferenceProvider(text="answered by the self-hosted server", prompt_tokens=10, completion_tokens=20)
+    cascade = SelfHostedBackend(provider=cascade_provider)
 
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, confidence_floor=None)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, confidence_floor=None)
     result = pipeline.run(_msgs("hello"))
 
-    assert result["tier"] == "cascade_cloud"
+    assert result["tier"] == "self_hosted"
     assert result["escalated"] is True
-    assert result["text"] == "answered by CascadeCloud"
-    assert result["est_cost_usd"] > 0.0  # Track C's real cost model, not a stub
+    assert result["text"] == "answered by the self-hosted server"
+    assert result["est_cost_usd"] == 0.0  # your own server: no per-token charge
     assert cascade_provider.call_count == 1
 
 
-def test_j4_router_sends_tool_required_query_straight_to_cascade_cloud(tmp_path: Path) -> None:
+def test_j4_router_sends_tool_required_query_straight_to_self_hosted(tmp_path: Path) -> None:
     """
     SemanticRouter (Track B) classifies a tool-required query and sends
-    it directly to CascadeCloud (Track C) without ever attempting local
+    it directly to the self-hosted server (Track C) without ever attempting local
     (Track A) execution at all -- FR-05.2's routing decision, not an
     error-driven fallback.
     """
     local = _local_backend(tmp_path, capable=True)
     cascade_provider = FakeCloudInferenceProvider(text="today's date is fetched live")
-    cascade = CascadeCloudBackend(provider=cascade_provider)
+    cascade = SelfHostedBackend(provider=cascade_provider)
 
     router = SemanticRouterClassifier(FakeEmbedder())
     router.fit([
         RoutingExample("hello there friend", "local"),
         RoutingExample("hi good morning", "local"),
-        RoutingExample("what is today's date now", "cascade_cloud"),
-        RoutingExample("search the current news", "cascade_cloud"),
+        RoutingExample("what is today's date now", "self_hosted"),
+        RoutingExample("search the current news", "self_hosted"),
     ])
 
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, router=router, confidence_floor=None)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, router=router, confidence_floor=None)
     result = pipeline.run(_msgs("what is today's date now"))
 
-    assert result["tier"] == "cascade_cloud"
+    assert result["tier"] == "self_hosted"
     assert cascade_provider.call_count == 1
 
-
-def test_j4_spend_cap_on_cascade_backend_is_respected_during_escalation(tmp_path: Path) -> None:
-    """Track C's real FR-07.2 spend cap applies even when Track B's Pipeline is the one triggering the call."""
-    from gateway.billing.meter import SpendCapExceededError, UsageMeter
-
-    local = _local_backend(tmp_path, capable=False)  # forces escalation
-    meter = UsageMeter(cap_usd=0.0001)  # effectively zero budget
-    cascade = CascadeCloudBackend(provider=FakeCloudInferenceProvider(), usage_meter=meter)
-
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, confidence_floor=None)
-
-    try:
-        pipeline.run(_msgs("hello"))
-        assert False, "expected SpendCapExceededError to propagate"
-    except SpendCapExceededError:
-        pass  # correctly propagated -- Pipeline does not swallow this

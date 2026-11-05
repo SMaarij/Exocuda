@@ -9,14 +9,14 @@ shadow labeling (Master Doc Section 4's architecture diagram).
 Pipeline is one of the two shared seams (Master Doc Section 9): the
 orchestrator Track C's CLI and gateway call, and which itself calls
 whichever ExecutionBackend is selected -- Track A's LocalExecutionBackend
-or Track C's CascadeCloudBackend -- through the shared ExecutionBackend
+or Track C's SelfHostedBackend -- through the shared ExecutionBackend
 protocol only. Neither backend knows the other exists (NFR-07).
 
 Constructor shape matches Track A's own documented example exactly
-(docs/TRACK_A_HANDOFF_FOR_B_AND_C.md, Section 4a) so that the J-2
+(docs/archive/TRACK_A_HANDOFF_FOR_B_AND_C.md, Section 4a) so that the J-2
 integration test's `FakePipeline(backend)` single-argument call keeps
 working unmodified: `backend` is the only required argument, everything
-else -- cascade_backend included -- is optional and defaults to a
+else -- self_hosted_backend included -- is optional and defaults to a
 behavior identical to the Task 2 skeleton. Verified: j2_integration_test.py
 still passes 5/5 with zero test-body changes after every task below
 landed (run it yourself: pytest engine/execution/j2_integration_test.py).
@@ -64,7 +64,7 @@ class Pipeline:
     def __init__(
         self,
         backend: ExecutionBackend,
-        cascade_backend: Optional[ExecutionBackend] = None,
+        self_hosted_backend: Optional[ExecutionBackend] = None,
         cloud_byok_backend: Optional[ExecutionBackend] = None,
         compressor: Optional[ContextCompressor] = None,
         cache: Optional[SemanticCache] = None,
@@ -74,7 +74,7 @@ class Pipeline:
         decision_log_path: Optional[Path] = None,
     ) -> None:
         self._backend = backend
-        self._cascade_backend = cascade_backend
+        self._self_hosted_backend = self_hosted_backend
         self._cloud_byok_backend = cloud_byok_backend
         self._compressor = compressor
         self._cache = cache
@@ -100,12 +100,12 @@ class Pipeline:
         tier = self._decide_initial_tier(compressed)
         result, tier, escalated = self._execute(compressed, tier)
 
-        if tier == "local" and self._confidence_floor is not None and self._cascade_backend is not None:
+        if tier == "local" and self._confidence_floor is not None and self._self_hosted_backend is not None:
             local_confidence = estimate_local_confidence(result["text"])
             if local_confidence < self._confidence_floor:
                 try:
-                    result = self._cascade_backend.generate(compressed)
-                    tier = "cascade_cloud"
+                    result = self._self_hosted_backend.generate(compressed)
+                    tier = "self_hosted"
                     escalated = True
                 except Exception:
                     pass  # NFR-03: keep the local answer rather than fail the request
@@ -151,9 +151,9 @@ class Pipeline:
         try:
             yield from stream_backend.generate_stream(compressed)
         except LocalExecutionBackendError:
-            if self._cascade_backend is None:
+            if self._self_hosted_backend is None:
                 raise
-            yield from self._cascade_backend.generate_stream(compressed)
+            yield from self._self_hosted_backend.generate_stream(compressed)
 
     # ---- Internal: tier decision & execution -----------------------------
 
@@ -174,8 +174,8 @@ class Pipeline:
     def _backend_for_tier(self, tier: str) -> ExecutionBackend:
         if tier == "cloud_byok" and self._cloud_byok_backend is not None:
             return self._cloud_byok_backend
-        if tier == "cascade_cloud" and self._cascade_backend is not None:
-            return self._cascade_backend
+        if tier == "self_hosted" and self._self_hosted_backend is not None:
+            return self._self_hosted_backend
         return self._backend  # local, or a requested tier with no backend configured -> fall back to local
 
     def _execute(self, messages: list[Message], tier: str) -> tuple[BackendResult, str, bool]:
@@ -194,18 +194,18 @@ class Pipeline:
                 return remote.generate(messages), tier, False
             except Exception:
                 # NFR-03: a remote tier being down (no network, bad key,
-                # spend cap) degrades to local instead of failing the request.
-                cascade_failed = tier == "cascade_cloud"
+                # quota) degrades to local instead of failing the request.
+                cascade_failed = tier == "self_hosted"
 
         # "local", a requested tier whose backend isn't configured, or a failed remote tier.
         try:
             result = self._backend.generate(messages)
             return result, "local", False
         except LocalExecutionBackendError:
-            if self._cascade_backend is None or cascade_failed:
+            if self._self_hosted_backend is None or cascade_failed:
                 raise
-            result = self._cascade_backend.generate(messages)
-            return result, "cascade_cloud", True
+            result = self._self_hosted_backend.generate(messages)
+            return result, "self_hosted", True
 
     def _cache_hit_result(self, cached_text: str, start: float) -> PipelineResult:
         latency_ms = (time.monotonic() - start) * 1000

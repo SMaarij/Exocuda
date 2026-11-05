@@ -18,7 +18,7 @@ def test_bootstrap_dataset_is_non_empty() -> None:
 
 def test_bootstrap_dataset_covers_all_three_labels() -> None:
     labels = {e.label for e in BOOTSTRAP_EXAMPLES}
-    assert labels == {"local", "cloud_byok", "cascade_cloud"}
+    assert labels == {"local", "cloud_byok", "self_hosted"}
 
 
 def test_load_coldstart_dataset_defaults_to_bootstrap_when_no_path() -> None:
@@ -49,8 +49,8 @@ def test_load_coldstart_dataset_reads_real_csv_file(tmp_path: Path) -> None:
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["query", "label"])
         writer.writeheader()
-        writer.writerow({"query": "what's the weather now", "label": "cascade_cloud"})
+        writer.writerow({"query": "what's the weather now", "label": "self_hosted"})
 
     examples = load_coldstart_dataset(path)
     assert len(examples) == 1
-    assert examples[0].label == "cascade_cloud"
+    assert examples[0].label == "self_hosted"

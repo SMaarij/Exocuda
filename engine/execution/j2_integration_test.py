@@ -145,7 +145,7 @@ class TestJ2VerificationChecklist:
         """
         J-2.5: If all rungs OOM, LocalExecutionBackend raises
         LocalExecutionBackendError -- Pipeline can catch it and escalate
-        to CascadeCloud without a traceback reaching the user.
+        to the self-hosted tier without a traceback reaching the user.
         """
         from engine.execution.backend import LocalExecutionBackendError
 

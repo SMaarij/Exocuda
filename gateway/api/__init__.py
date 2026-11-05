@@ -1,1 +1,1 @@
-"""gateway/api/ -- the CascadeCloud gateway's HTTP surface (FR-07). See app.py."""
+"""gateway/api/ -- the self-hosted Cascade server's HTTP surface. See app.py."""

@@ -15,8 +15,8 @@ Config keys (set with `cascade config set KEY VALUE`):
     byok.model            e.g. gpt-4o-mini
     byok.api_key_env      env var holding the key       (default OPENAI_API_KEY)
     byok.input_price_per_1k / byok.output_price_per_1k  (optional, for cost estimates)
-    cascade_cloud.url     your CascadeCloud gateway, e.g. http://127.0.0.1:8000
-    cascade_cloud.api_key_env  env var holding the csk_ key (default CASCADE_API_KEY)
+    self_hosted.url       a Cascade server you or your team run, e.g. http://gpu-box:8000
+    self_hosted.api_key_env  env var holding its csk_ key (default CASCADE_SERVER_KEY)
 """
 
 from __future__ import annotations
@@ -88,11 +88,11 @@ def _byok_settings(config: dict) -> Optional[dict]:
     }
 
 
-def _cascade_settings(config: dict) -> Optional[dict]:
-    url = _get(config, "cascade_cloud.url") or config.get("cascade_cloud_url")
+def _self_hosted_settings(config: dict) -> Optional[dict]:
+    url = _get(config, "self_hosted.url")
     if not url:
         return None
-    key = os.environ.get(_get(config, "cascade_cloud.api_key_env", "CASCADE_API_KEY"), "")
+    key = os.environ.get(_get(config, "self_hosted.api_key_env", "CASCADE_SERVER_KEY"), "")
     return {"base_url": url, "api_key": key}
 
 
@@ -126,17 +126,17 @@ def build_pipeline(decision_logging: bool = True):
     from engine.intelligence.embeddings import FastEmbedEmbedder
     from engine.intelligence.pipeline import Pipeline
     from engine.intelligence.router.classifier import SemanticRouterClassifier
-    from gateway.backend import CascadeCloudBackend
+    from gateway.backend import SelfHostedBackend
     from gateway.byok import CloudBYOKBackend
 
     config = load_config()
     embedder = FastEmbedEmbedder()
     byok = _byok_settings(config)
-    cascade = _cascade_settings(config)
+    self_hosted = _self_hosted_settings(config)
 
     return Pipeline(
         backend=build_local_backend(config),
-        cascade_backend=CascadeCloudBackend(**cascade) if cascade else None,
+        self_hosted_backend=SelfHostedBackend(**self_hosted) if self_hosted else None,
         cloud_byok_backend=CloudBYOKBackend(**byok) if byok and byok["api_key"] else None,
         compressor=ContextCompressor(embedder),
         cache=SemanticCache(embedder),
@@ -181,7 +181,7 @@ def init() -> None:
     if not local_capable:
         typer.secho(
             "This machine doesn't clear any local model rung -- configure a cloud tier "
-            "(`cascade config set byok.base_url ...` or `cascade_cloud.url ...`).",
+            "(`cascade config set byok.base_url ...` or `self_hosted.url ...`).",
             fg=typer.colors.YELLOW,
         )
 
@@ -314,17 +314,17 @@ def doctor() -> None:
         env = _get(config, "byok.api_key_env", "OPENAI_API_KEY")
         report(bool(byok["api_key"]), f"cloud_byok: {byok['model']} at {byok['base_url']}", f"set the {env} environment variable")
 
-    cascade = _cascade_settings(config)
-    if cascade is None:
-        note("cascade_cloud tier: not configured")
+    self_hosted = _self_hosted_settings(config)
+    if self_hosted is None:
+        note("self_hosted tier: not configured")
     else:
         try:
-            healthy = httpx.get(cascade["base_url"].rstrip("/") + "/health", timeout=3).status_code == 200
+            healthy = httpx.get(self_hosted["base_url"].rstrip("/") + "/health", timeout=3).status_code == 200
         except httpx.HTTPError:
             healthy = False
-        report(healthy, f"cascade_cloud gateway at {cascade['base_url']}", "is the gateway running? `python -m gateway.serve run`")
-        env = _get(config, "cascade_cloud.api_key_env", "CASCADE_API_KEY")
-        report(bool(cascade["api_key"]), "cascade_cloud API key present", f"set the {env} environment variable")
+        report(healthy, f"self_hosted server at {self_hosted['base_url']}", "is the server running? `python -m gateway.serve run` on that machine")
+        env = _get(config, "self_hosted.api_key_env", "CASCADE_SERVER_KEY")
+        report(bool(self_hosted["api_key"]), "self_hosted API key present", f"set the {env} environment variable")
 
     typer.echo()
     typer.echo("All good." if problems == 0 else f"{problems} thing(s) to fix.")

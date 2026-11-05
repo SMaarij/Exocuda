@@ -9,7 +9,7 @@ each other's folders:
                           and gateway API.
   2. ExecutionBackend  -- implemented independently by Track A
                           (LocalExecutionBackend) and Track C
-                          (CascadeCloudBackend); called only by Track B's
+                          (SelfHostedBackend); called only by Track B's
                           Pipeline. Neither backend knows the other exists.
 
 CHANGES TO THIS FILE REQUIRE ALL THREE TRACKS' REVIEW, EVERY TIME, NO
@@ -75,7 +75,7 @@ class HardwareProfile(TypedDict):
         local_capable          -- FR-01.5: False means no candidate rung
                                    cleared the configured latency floor --
                                    Pipeline routes this profile to
-                                   CascadeCloud (FR-07) by default.
+                                   the self-hosted tier (FR-07) by default.
     """
 
     schema_version: int
@@ -97,7 +97,7 @@ class BackendResult(TypedDict):
     The typed result any ExecutionBackend implementation (local or
     hosted) returns to Pipeline. Identical shape regardless of which tier
     produced it -- this is what lets Pipeline treat
-    Track A's LocalExecutionBackend and Track C's CascadeCloudBackend
+    Track A's LocalExecutionBackend and Track C's SelfHostedBackend
     interchangeably (NFR-07).
     """
 
@@ -116,7 +116,7 @@ class PipelineResult(TypedDict):
     BackendResult plus routing metadata."""
 
     text: str
-    tier: Literal["cache", "local", "cloud_byok", "cascade_cloud"]
+    tier: Literal["cache", "local", "cloud_byok", "self_hosted"]
     cache_hit: bool
     confidence: float
     escalated: bool
@@ -131,7 +131,7 @@ class ExecutionBackend(Protocol):
     """
     Implemented independently by:
         - Track A: engine/execution/backend.py -> LocalExecutionBackend
-        - Track C: gateway/backend.py           -> CascadeCloudBackend
+        - Track C: gateway/backend.py           -> SelfHostedBackend
 
     Track B's Pipeline calls ONLY this protocol -- never anything inside
     engine/execution/ or gateway/ directly (NFR-07, Section 10.4's

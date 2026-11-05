@@ -67,8 +67,8 @@ def router() -> SemanticRouterClassifier:
         RoutingExample("hi good morning", "local"),
         RoutingExample("write a compiler in rust", "cloud_byok"),
         RoutingExample("optimize this algorithm", "cloud_byok"),
-        RoutingExample("what is today's date now", "cascade_cloud"),
-        RoutingExample("search the current news", "cascade_cloud"),
+        RoutingExample("what is today's date now", "self_hosted"),
+        RoutingExample("search the current news", "self_hosted"),
     ])
     return r
 
@@ -129,14 +129,14 @@ def test_router_directs_hard_query_to_cloud_byok(router: SemanticRouterClassifie
     assert cloud_byok.call_count == 1
 
 
-def test_router_directs_tool_query_to_cascade_cloud(router: SemanticRouterClassifier) -> None:
+def test_router_directs_tool_query_to_self_hosted(router: SemanticRouterClassifier) -> None:
     local = _FakeBackend(text="local answer")
     cascade = _FakeBackend(text="cascade answer")
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, router=router)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, router=router)
 
     result = pipeline.run(_msgs("search the current news"))
 
-    assert result["tier"] == "cascade_cloud"
+    assert result["tier"] == "self_hosted"
     assert local.call_count == 0
     assert cascade.call_count == 1
 
@@ -168,11 +168,11 @@ def test_router_falls_back_to_local_when_requested_backend_missing(router: Seman
 def test_low_confidence_local_answer_escalates_to_cascade() -> None:
     local = _FakeBackend(text="I'm not sure, but maybe")  # hedged -> low confidence
     cascade = _FakeBackend(text="a confident cascade answer")
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, confidence_floor=0.8)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, confidence_floor=0.8)
 
     result = pipeline.run(_msgs("some question"))
 
-    assert result["tier"] == "cascade_cloud"
+    assert result["tier"] == "self_hosted"
     assert result["escalated"] is True
     assert result["text"] == "a confident cascade answer"
 
@@ -180,7 +180,7 @@ def test_low_confidence_local_answer_escalates_to_cascade() -> None:
 def test_confident_local_answer_does_not_escalate() -> None:
     local = _FakeBackend(text="The definite correct answer is 42.")
     cascade = _FakeBackend(text="should not be called")
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, confidence_floor=0.5)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, confidence_floor=0.5)
 
     result = pipeline.run(_msgs("some question"))
 
@@ -192,7 +192,7 @@ def test_confident_local_answer_does_not_escalate() -> None:
 def test_confidence_escalation_disabled_when_floor_is_none() -> None:
     local = _FakeBackend(text="I'm not sure, but maybe")
     cascade = _FakeBackend(text="should not be called")
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, confidence_floor=None)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, confidence_floor=None)
 
     result = pipeline.run(_msgs("some question"))
 
@@ -223,8 +223,8 @@ def test_compressor_runs_before_cache_and_backend() -> None:
 def test_shadow_labeler_invoked_after_response_finalized(tmp_path: Path) -> None:
     local = _FakeBackend(text="local answer")
     cascade = _FakeBackend(text="cloud answer")
-    labeler = ShadowLabeler(cascade_backend=cascade, sample_rate=1.0, log_path=tmp_path / "shadow.jsonl")
-    pipeline = Pipeline(backend=local, cascade_backend=cascade, shadow_labeler=labeler, confidence_floor=None)
+    labeler = ShadowLabeler(self_hosted_backend=cascade, sample_rate=1.0, log_path=tmp_path / "shadow.jsonl")
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade, shadow_labeler=labeler, confidence_floor=None)
 
     result = pipeline.run(_msgs("some question"))
 
@@ -244,7 +244,7 @@ def test_full_stack_end_to_end(cache: SemanticCache, compressor: ContextCompress
     pipeline = Pipeline(
         backend=local,
         cloud_byok_backend=cloud_byok,
-        cascade_backend=cascade,
+        self_hosted_backend=cascade,
         compressor=compressor,
         cache=cache,
         router=router,

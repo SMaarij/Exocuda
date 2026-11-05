@@ -13,7 +13,7 @@ Owns FR-01 in full:
     FR-01.4  Support re-profiling on demand (`cascade profile`) without
              requiring reinstall.
     FR-01.5  Flag a profile that clears no local rung's latency floor as
-             local_capable=False, routed to CascadeCloud (FR-07) by
+             local_capable=False, routed to the self-hosted tier (FR-07) by
              default.
 
 R-06 mitigation: profiling is time-boxed (see `time_budget_s`) and uses
@@ -49,7 +49,7 @@ from shared.types import HARDWARE_PROFILE_SCHEMA_VERSION, HardwareProfile
 # --------------------------------------------------------------------------
 
 # Resolved from the placeholder Track A flagged in
-# docs/TRACK_A_HANDOFF_FOR_B_AND_C.md's fakes/placeholders table --
+# docs/archive/TRACK_A_HANDOFF_FOR_B_AND_C.md's fakes/placeholders table --
 # "Joint team decision. Once agreed (e.g. llama3.2:3b), update...".
 # llama3.2 is real, small (fast to pull/probe), and its published
 # Ollama tags for 3b + these three quant levels are verified real:

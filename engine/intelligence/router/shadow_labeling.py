@@ -4,7 +4,7 @@ engine/intelligence/router/shadow_labeling.py
 Track B, Task 14 (FR-05.4).
 
 Samples a configurable percentage of already-served local-tier traffic
-for a background comparison call against cascade_backend, purely to
+for a background comparison call against self_hosted_backend, purely to
 generate a training label for the next SemanticRouter retrain -- with
 zero effect on the response actually served (call this only AFTER
 Pipeline has already returned its result to the caller).
@@ -35,25 +35,25 @@ DEFAULT_LOG_PATH = Path.home() / ".cascade" / "shadow_labels.jsonl"
 class ShadowLabeler:
     def __init__(
         self,
-        cascade_backend: Optional[ExecutionBackend],
+        self_hosted_backend: Optional[ExecutionBackend],
         sample_rate: float = 0.05,
         log_path: Path = DEFAULT_LOG_PATH,
         rng: Optional[random.Random] = None,
     ) -> None:
-        self._cascade_backend = cascade_backend
+        self._self_hosted_backend = self_hosted_backend
         self._sample_rate = sample_rate
         self._log_path = log_path
         self._rng = rng or random.Random()
 
     def maybe_label(self, messages: list[Message], served_tier: str, served_text: str) -> bool:
-        """Returns True if a shadow label was written, False if skipped (not sampled, or no cascade_backend)."""
-        if self._cascade_backend is None:
+        """Returns True if a shadow label was written, False if skipped (not sampled, or no self_hosted_backend)."""
+        if self._self_hosted_backend is None:
             return False
         if self._rng.random() > self._sample_rate:
             return False
 
         try:
-            shadow_result = self._cascade_backend.generate(messages)
+            shadow_result = self._self_hosted_backend.generate(messages)
         except Exception:
             return False  # shadow labeling must never raise into the caller (FR-05.4)
 

@@ -320,6 +320,36 @@ text (`"Hello there friend."`, `1.685 tok/s`). 257 tests passing
 (3 test-fallout fixes, no new tests needed -- this is a resolution
 layer over existing, already-tested load-call plumbing).
 
+## [0.3.0] -- 2026-11-05 -- open-source release
+
+Cascade is now an MIT-licensed open-source project with no paid hosted tier.
+
+### Changed -- seam (`shared/types.py`)
+- `PipelineResult.tier`: the literal `"cascade_cloud"` is renamed `"self_hosted"`. The router's
+  label space, `Pipeline(cascade_backend=...)` (now `self_hosted_backend=`), `ShadowLabeler`,
+  retraining and the benchmark fixtures follow. The tier's meaning is unchanged: a remote server
+  the router sends live-data/tool queries to and the confidence check escalates to.
+
+### Removed -- Track C (`gateway/`)
+- `gateway/billing/` (Stripe client, `UsageMeter`, `SpendCapExceededError`), the `stripe`
+  dependency, all per-token prices, the `cascade.cost_usd` response field and client-side
+  spend metering.
+
+### Changed -- Track C
+- `CascadeCloudBackend` -> `SelfHostedBackend` (`gateway/backend.py`); `est_cost_usd` is 0.0.
+- Server store: `accounts(cap_usd, spent_usd, stripe_customer_id)` -> `users(quota_tokens,
+  used_tokens)`; `QuotaExceededError`; over-quota requests get HTTP 429 (was 402);
+  `/v1/usage` reports tokens. New `reset_usage()`; `revoke_api_key()` returns whether a key was revoked.
+- `gateway.serve`: `create-account --cap` -> `create-user --quota`; new `revoke-key`, `usage`,
+  `reset-usage`. `CASCADE_GATEWAY_DB` -> `CASCADE_SERVER_DB` (default `~/.cascade/server.db`);
+  `CASCADE_PRICE_PER_1K` and `STRIPE_API_KEY` removed.
+- CLI config: `cascade_cloud.url` -> `self_hosted.url`; key env default `CASCADE_API_KEY` ->
+  `CASCADE_SERVER_KEY`.
+
+### Added
+- `LICENSE` (MIT), `CONTRIBUTING.md`, `SECURITY.md`, package metadata in `pyproject.toml`.
+- Track hand-off notes and the business/competitive planning docs moved to `docs/archive/`.
+
 ## [0.2.0] -- 2026-11-05 -- completion pass (solo; `shared/types.py` unchanged)
 
 No change to either seam or to any `shared/types.py` type. Changes behind them:

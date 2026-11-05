@@ -1,1 +1,1 @@
-"""gateway/providers/ -- wholesale GPU inference provider adapter (FR-07.4). See base.py, http_provider.py."""
+"""gateway/providers/ -- OpenAI-compatible inference provider adapter. See base.py, http_provider.py."""

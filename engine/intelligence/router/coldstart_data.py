@@ -8,7 +8,7 @@ it ships cold-started on real prior data rather than an empty or
 handwritten ruleset (FR-05.1) -- this is the direct fix for the
 hardcoded-heuristic complaint the V1 router drew.
 
-Label space (RoutingLabel): "local" / "cloud_byok" / "cascade_cloud".
+Label space (RoutingLabel): "local" / "cloud_byok" / "self_hosted".
 Note this is the post-cache-miss execution tier, not a difficulty
 label -- by the time SemanticRouter runs, SemanticCache has already had
 its chance at a hit (see the pipeline architecture: Compressor -> Cache
@@ -20,7 +20,7 @@ Label rationale (used to build BOOTSTRAP_EXAMPLES below):
     cloud_byok     -- hard reasoning/coding queries where answer quality
                       benefits from a larger model, and no live external
                       data or tool call is needed.
-    cascade_cloud  -- queries needing live/current data or a tool call
+    self_hosted  -- queries needing live/current data or a tool call
                       (search, current date, account lookups) -- FR-07.1
                       is the tier with tool-calling enabled; local has no
                       tool execution in this version.
@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
-RoutingLabel = Literal["local", "cloud_byok", "cascade_cloud"]
+RoutingLabel = Literal["local", "cloud_byok", "self_hosted"]
 
 
 @dataclass(frozen=True)
@@ -82,15 +82,15 @@ BOOTSTRAP_EXAMPLES: tuple[RoutingExample, ...] = (
     RoutingExample("explain how transformers work in deep learning in depth", "cloud_byok"),
     RoutingExample("refactor this class to follow solid principles", "cloud_byok"),
     RoutingExample("walk through the time complexity of quicksort step by step", "cloud_byok"),
-    # -- cascade_cloud: needs live/current data or a tool call
-    RoutingExample("what's today's date", "cascade_cloud"),
-    RoutingExample("search the web for the latest news on the election", "cascade_cloud"),
-    RoutingExample("what's the current stock price of apple", "cascade_cloud"),
-    RoutingExample("book me a flight to tokyo next friday", "cascade_cloud"),
-    RoutingExample("what's the weather like right now in london", "cascade_cloud"),
-    RoutingExample("look up my account balance", "cascade_cloud"),
-    RoutingExample("what time is it in tokyo currently", "cascade_cloud"),
-    RoutingExample("find the latest reviews for this restaurant", "cascade_cloud"),
+    # -- self_hosted: needs live/current data or a tool call
+    RoutingExample("what's today's date", "self_hosted"),
+    RoutingExample("search the web for the latest news on the election", "self_hosted"),
+    RoutingExample("what's the current stock price of apple", "self_hosted"),
+    RoutingExample("book me a flight to tokyo next friday", "self_hosted"),
+    RoutingExample("what's the weather like right now in london", "self_hosted"),
+    RoutingExample("look up my account balance", "self_hosted"),
+    RoutingExample("what time is it in tokyo currently", "self_hosted"),
+    RoutingExample("find the latest reviews for this restaurant", "self_hosted"),
 )
 
 

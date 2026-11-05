@@ -1,4 +1,4 @@
-"""gateway/tests/test_api.py -- FastAPI TestClient, no network/Stripe (NFR-09)."""
+"""gateway/tests/test_api.py -- FastAPI TestClient, no network (NFR-09)."""
 
 from __future__ import annotations
 
@@ -8,17 +8,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gateway.api.app import create_app
-from gateway.backend import CascadeCloudBackend
+from gateway.backend import SelfHostedBackend
 from gateway.providers.http_provider import HTTPInferenceProvider
 from gateway.store import GatewayStore
-from gateway.tests.fakes import FakeBillingClient, FakeCloudInferenceProvider
+from gateway.tests.fakes import FakeCloudInferenceProvider
 
 BODY = {"messages": [{"role": "user", "content": "hello"}], "max_tokens": 50}
 
 
-def _setup(provider=None, cap=None, **app_kwargs):
+def _setup(provider=None, quota=None, **app_kwargs):
     store = GatewayStore()
-    store.create_account("alice", cap_usd=cap)
+    store.create_user("alice", quota_tokens=quota)
     key = store.create_api_key("alice")
     app = create_app(provider=provider or FakeCloudInferenceProvider(), store=store, **app_kwargs)
     return TestClient(app), store, {"Authorization": f"Bearer {key}"}
@@ -71,51 +71,40 @@ def test_rejects_max_tokens_over_limit() -> None:
     assert client.post("/v1/chat/completions", json={**BODY, "max_tokens": 101}, headers=headers).status_code == 400
 
 
-def test_returns_402_when_spend_cap_exceeded_without_calling_upstream() -> None:
+def test_returns_429_over_quota_without_calling_upstream() -> None:
     provider = FakeCloudInferenceProvider()
-    client, _, headers = _setup(provider, cap=0.0001, price_per_1k_tokens=100.0)
-    assert client.post("/v1/chat/completions", json=BODY, headers=headers).status_code == 402
+    client, _, headers = _setup(provider, quota=10)
+    assert client.post("/v1/chat/completions", json=BODY, headers=headers).status_code == 429
     assert provider.call_count == 0
 
 
 def test_returns_502_and_releases_reservation_on_upstream_failure() -> None:
     client, store, headers = _setup(FakeCloudInferenceProvider(fail=True))
     assert client.post("/v1/chat/completions", json=BODY, headers=headers).status_code == 502
-    assert store.account("alice").spent_usd == pytest.approx(0.0)
+    assert store.account("alice").used_tokens == 0
 
 
-def test_charges_real_usage_and_reports_to_billing() -> None:
-    billing = FakeBillingClient()
-    client, store, headers = _setup(FakeCloudInferenceProvider(prompt_tokens=100, completion_tokens=100), billing_client=billing, price_per_1k_tokens=1.0)
-    body = client.post("/v1/chat/completions", json=BODY, headers=headers).json()
-    assert body["cascade"]["cost_usd"] == pytest.approx(0.2)
-    assert store.account("alice").spent_usd == pytest.approx(0.2)
-    assert billing.usage_records == [("alice", "cascade_tokens", 200)]
-
-
-def test_billing_uses_stripe_customer_id_when_set() -> None:
-    billing = FakeBillingClient()
-    client, store, headers = _setup(billing_client=billing)
-    store.create_account("alice", stripe_customer_id="cus_123")
+def test_records_real_usage_not_the_reservation() -> None:
+    client, store, headers = _setup(FakeCloudInferenceProvider(prompt_tokens=100, completion_tokens=100))
     client.post("/v1/chat/completions", json=BODY, headers=headers)
-    assert billing.usage_records[0][0] == "cus_123"
+    assert store.account("alice").used_tokens == 200
 
 
-def test_second_request_over_cap_fails() -> None:
-    client, _, headers = _setup(FakeCloudInferenceProvider(prompt_tokens=100, completion_tokens=100), cap=0.21, price_per_1k_tokens=1.0)
+def test_second_request_over_quota_fails() -> None:
+    client, _, headers = _setup(FakeCloudInferenceProvider(prompt_tokens=100, completion_tokens=100), quota=210)  # 200 used, next reserves 15
     body = {"messages": [{"role": "user", "content": "x"}], "max_tokens": 10}
     assert client.post("/v1/chat/completions", json=body, headers=headers).status_code == 200
-    assert client.post("/v1/chat/completions", json=body, headers=headers).status_code == 402
+    assert client.post("/v1/chat/completions", json=body, headers=headers).status_code == 429
 
 
-def test_usage_endpoint_reports_spend() -> None:
-    client, _, headers = _setup(FakeCloudInferenceProvider(prompt_tokens=500, completion_tokens=500), cap=5.0, price_per_1k_tokens=1.0)
+def test_usage_endpoint_reports_tokens() -> None:
+    client, _, headers = _setup(FakeCloudInferenceProvider(prompt_tokens=500, completion_tokens=500), quota=5000)
     client.post("/v1/chat/completions", json=BODY, headers=headers)
-    assert client.get("/v1/usage", headers=headers).json() == {"user_id": "alice", "spent_usd": 1.0, "cap_usd": 5.0}
+    assert client.get("/v1/usage", headers=headers).json() == {"user_id": "alice", "used_tokens": 1000, "quota_tokens": 5000}
 
 
 def test_streaming_yields_openai_chunks_and_usage() -> None:
-    client, store, headers = _setup(FakeCloudInferenceProvider(text="one two", prompt_tokens=5, completion_tokens=5), price_per_1k_tokens=1.0)
+    client, store, headers = _setup(FakeCloudInferenceProvider(text="one two", prompt_tokens=5, completion_tokens=5))
     response = client.post("/v1/chat/completions", json={**BODY, "stream": True, "stream_options": {"include_usage": True}}, headers=headers)
     events = _sse_events(response.text)
     deltas = [e["choices"][0]["delta"].get("content") for e in events[:-1] if isinstance(e, dict) and e["choices"]]
@@ -123,26 +112,26 @@ def test_streaming_yields_openai_chunks_and_usage() -> None:
     usage_event = events[-2]
     assert usage_event["usage"] == {"prompt_tokens": 5, "completion_tokens": 5, "total_tokens": 10}
     assert events[-1] == "[DONE]"
-    assert store.account("alice").spent_usd == pytest.approx(0.01)
+    assert store.account("alice").used_tokens == 10
 
 
 def test_streaming_upstream_failure_emits_error_and_releases_reservation() -> None:
     client, store, headers = _setup(FakeCloudInferenceProvider(fail=True))
     events = _sse_events(client.post("/v1/chat/completions", json={**BODY, "stream": True}, headers=headers).text)
     assert "error" in events[0]
-    assert store.account("alice").spent_usd == pytest.approx(0.0)
+    assert store.account("alice").used_tokens == 0
 
 
-def test_cascade_cloud_backend_talks_to_the_real_gateway() -> None:
-    """The client and server speak the same protocol -- this was broken before (different response shapes)."""
-    client, store, headers = _setup(FakeCloudInferenceProvider(text="served by gateway", prompt_tokens=10, completion_tokens=10), price_per_1k_tokens=1.0)
+def test_self_hosted_backend_talks_to_the_real_server() -> None:
+    """The CLI's client and the server speak the same protocol, end to end."""
+    client, store, headers = _setup(FakeCloudInferenceProvider(text="served by the server", prompt_tokens=10, completion_tokens=10))
     key = headers["Authorization"].removeprefix("Bearer ")
     provider = HTTPInferenceProvider(base_url="http://testserver", api_key=key, model_id="cascade", client=client)
-    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=1.0)
+    backend = SelfHostedBackend(provider=provider)
 
     result = backend.generate([{"role": "user", "content": "hello"}])
-    assert result["text"] == "served by gateway"
-    assert result["est_cost_usd"] == pytest.approx(0.02)
+    assert result["text"] == "served by the server"
+    assert result["est_cost_usd"] == 0.0
 
-    assert "".join(backend.generate_stream([{"role": "user", "content": "hello"}])).strip() == "served by gateway"
-    assert store.account("alice").spent_usd == pytest.approx(0.04)
+    assert "".join(backend.generate_stream([{"role": "user", "content": "hello"}])).strip() == "served by the server"
+    assert store.account("alice").used_tokens == 40

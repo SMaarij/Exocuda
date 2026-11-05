@@ -3,11 +3,11 @@ gateway/byok.py
 
 CloudBYOKBackend: the `cloud_byok` tier SemanticRouter routes hard
 reasoning/coding queries to. Calls the user's own provider with the
-user's own key, straight from their machine -- Cascade's servers are not
-involved and nothing is metered by Cascade.
+user's own key, straight from their machine -- nothing goes through
+any Cascade server.
 
 Any OpenAI-compatible endpoint works (OpenAI, OpenRouter, Groq, Together,
-DeepSeek, a local vLLM...), via the same HTTPInferenceProvider the hosted
+DeepSeek, a local vLLM...), via the same HTTPInferenceProvider the self-hosted
 tier uses. This covers what the master doc planned LiteLLM for -- one
 interface, config-only provider swap -- without the extra dependency.
 """

@@ -36,7 +36,7 @@ def test_reference_queries_file_exists_and_is_well_formed() -> None:
     assert len(queries) > 0
     for row in queries:
         assert "query" in row
-        assert row["expected_tier"] in ("local", "cloud_byok", "cascade_cloud")
+        assert row["expected_tier"] in ("local", "cloud_byok", "self_hosted")
 
 
 def test_cache_paraphrase_pairs_file_exists_and_is_well_formed() -> None:
@@ -76,7 +76,7 @@ def test_estimate_cost_reduction_matches_local_fraction() -> None:
             {"predicted": "local", "expected": "local", "confidence": 0.9, "correct": True, "query": "a"},
             {"predicted": "local", "expected": "local", "confidence": 0.9, "correct": True, "query": "b"},
             {"predicted": "cloud_byok", "expected": "cloud_byok", "confidence": 0.9, "correct": True, "query": "c"},
-            {"predicted": "cascade_cloud", "expected": "cascade_cloud", "confidence": 0.9, "correct": True, "query": "d"},
+            {"predicted": "self_hosted", "expected": "self_hosted", "confidence": 0.9, "correct": True, "query": "d"},
         ],
     }
     result = run_benchmark.estimate_cost_reduction(router_result)

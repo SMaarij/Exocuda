@@ -1,7 +1,7 @@
 """
 gateway/providers/base.py
 
-The wholesale-GPU-provider seam (FR-07.4): swapping providers is a config
+The inference-provider seam (FR-07.4): swapping providers is a config
 change, not a code change. One Protocol targeting the OpenAI-compatible
 chat-completions shape that vLLM, SGLang, Ollama, OpenAI, OpenRouter,
 Groq and most serverless GPU providers all serve -- so one

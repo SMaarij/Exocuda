@@ -51,7 +51,7 @@ Confusion matrix (expected tier → predicted tier counts):
 | Speculative decoding speedup (NFR-01) | Needs a live Ollama instance with draft/target pairs loaded — run `scripts/benchmark_acceleration.py` separately against real models. |
 | Hardware ladder success rate across ≥5 machines (R-06) | Inherently needs multiple different physical machines — see `docs/hardware_compat_results.md`. |
 | Output quality regression vs. FP16 (NFR-11) | Needs a real quantized model loaded to compare against. |
-| CascadeCloud GPU throughput / time-to-first-token | Needs an actual deployed vLLM/SGLang instance behind `gateway/backend.py`, not a fake provider. |
+| Self-hosted server GPU throughput / time-to-first-token | Needs an actual deployed vLLM/SGLang instance behind `gateway/backend.py`, not a fake provider. |
 
 No number above this line was estimated and reported as measured — every figure came from a real run of the code in this repo, against the held-out reference set, on this machine, just now.
 
@@ -207,6 +207,11 @@ Run on the same laptop through the real `cascade` CLI, with an isolated config d
 | Gateway: completion and streamed completion | billed from real usage (35 and 37 tokens) |
 | Gateway: request over the account's spend cap | 402 before any upstream call |
 | Router picks `cascade_cloud` but the gateway refuses (cap) | answered locally instead of failing (NFR-03) |
+
+> **0.3.0 note:** these rows were measured on 0.2.0, when the server billed in dollars. In 0.3.0
+> billing was removed: the same reserve-then-reconcile mechanism now counts tokens against an
+> optional per-user quota (HTTP 429 instead of 402), and the `cascade_cloud` tier is named
+> `self_hosted`. The router label in the raw output near the top of this report is the old name.
 
 Bugs this run found and fixed:
 

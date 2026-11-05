@@ -5,7 +5,7 @@ Track B, Task 9 (FR-05.3).
 
 Computes local-tier answer confidence AFTER a BackendResult comes back
 -- used by Pipeline to decide whether to escalate a locally-answered
-query to cascade_backend even though local execution technically
+query to self_hosted_backend even though local execution technically
 succeeded (the answer might just be weak).
 
 FLAGGED GAP -- not a shortcut, the spec-anticipated case:
@@ -16,7 +16,7 @@ FLAGGED GAP -- not a shortcut, the spec-anticipated case:
     Today, no ExecutionBackend implementation exposes logprobs/entropy.
     BackendResult.confidence (as Track A implemented it) is the
     speculative-decoding acceptance rate -- a *speed-layer* signal, not
-    an answer-quality signal (see docs/TRACK_A_HANDOFF_FOR_B_AND_C.md,
+    an answer-quality signal (see docs/archive/TRACK_A_HANDOFF_FOR_B_AND_C.md,
     Section 1's field table: "confidence: Acceptance rate of
     speculative tokens"). So estimate_local_confidence() always takes
     the heuristic fallback branch right now -- that's FR-05.3's own

@@ -104,14 +104,14 @@ def test_run_escalates_to_cascade_when_local_raises_and_cascade_provided(
     messages: list[Message],
 ) -> None:
     local = FakeBackend(raise_error=True)
-    cascade = FakeBackend(text="answered by cascade cloud", est_cost_usd=0.002)
-    pipeline = Pipeline(backend=local, cascade_backend=cascade)
+    cascade = FakeBackend(text="answered by the self-hosted server", est_cost_usd=0.002)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade)
 
     result = pipeline.run(messages)
 
-    assert result["tier"] == "cascade_cloud"
+    assert result["tier"] == "self_hosted"
     assert result["escalated"] is True
-    assert result["text"] == "answered by cascade cloud"
+    assert result["text"] == "answered by the self-hosted server"
     assert result["est_cost_usd"] == 0.002
 
 
@@ -149,7 +149,7 @@ def test_run_stream_escalates_to_cascade_when_local_raises(
 ) -> None:
     local = FakeBackend(raise_error=True)
     cascade = FakeBackend(text="cloud stream")
-    pipeline = Pipeline(backend=local, cascade_backend=cascade)
+    pipeline = Pipeline(backend=local, self_hosted_backend=cascade)
 
     tokens = list(pipeline.run_stream(messages))
 
@@ -173,7 +173,7 @@ def test_pipeline_constructs_with_single_positional_backend_argument(
 ) -> None:
     """
     This is the exact call shape j2_integration_test.py uses:
-    `FakePipeline(backend)`, one positional argument, no cascade_backend.
+    `FakePipeline(backend)`, one positional argument, no self_hosted_backend.
     If this test breaks, J-2 will break too.
     """
     pipeline = Pipeline(FakeBackend())
@@ -199,9 +199,9 @@ class _FailingRemote(FakeBackend):
         raise RuntimeError("simulated: network down / bad key")
 
 
-@pytest.mark.parametrize("tier", ["cloud_byok", "cascade_cloud"])
+@pytest.mark.parametrize("tier", ["cloud_byok", "self_hosted"])
 def test_failing_remote_tier_falls_back_to_local(messages: list[Message], tier: str) -> None:
-    remote = {"cloud_byok_backend": _FailingRemote()} if tier == "cloud_byok" else {"cascade_backend": _FailingRemote()}
+    remote = {"cloud_byok_backend": _FailingRemote()} if tier == "cloud_byok" else {"self_hosted_backend": _FailingRemote()}
     pipeline = Pipeline(FakeBackend(text="local answer"), router=_FixedRouter(tier), confidence_floor=None, **remote)
     result = pipeline.run(messages)
     assert result["text"] == "local answer"
@@ -215,12 +215,12 @@ def test_byok_tier_is_used_when_configured(messages: list[Message]) -> None:
 
 
 def test_failed_cascade_is_not_retried_when_local_also_fails(messages: list[Message]) -> None:
-    pipeline = Pipeline(FakeBackend(raise_error=True), cascade_backend=_FailingRemote(), router=_FixedRouter("cascade_cloud"))
+    pipeline = Pipeline(FakeBackend(raise_error=True), self_hosted_backend=_FailingRemote(), router=_FixedRouter("self_hosted"))
     with pytest.raises(LocalExecutionBackendError):
         pipeline.run(messages)
 
 
 def test_failed_escalation_keeps_the_local_answer(messages: list[Message]) -> None:
-    pipeline = Pipeline(FakeBackend(text="?"), cascade_backend=_FailingRemote(), confidence_floor=0.99)
+    pipeline = Pipeline(FakeBackend(text="?"), self_hosted_backend=_FailingRemote(), confidence_floor=0.99)
     result = pipeline.run(messages)
     assert (result["text"], result["tier"], result["escalated"]) == ("?", "local", False)
