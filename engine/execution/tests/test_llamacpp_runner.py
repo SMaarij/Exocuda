@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from engine.execution import llamacpp_runner
 from engine.execution.acceleration_engine import AccelerationEngine, AccelerationLayer, DraftPair
 from engine.execution.llamacpp_runner import DraftCounter, LlamaCppRunner, ModelDraft
 from engine.execution.model_runner import ACCEL_DRAFT_MODEL, ACCEL_NONE, ACCEL_PROMPT_LOOKUP, AcceleratedRunner
@@ -55,6 +56,28 @@ class FakeLlama:
 
     def tokenize(self, data: bytes, add_bos: bool = True):
         return data.decode().split()
+
+
+class FakePromptLookup:
+    """Stands in for llama_cpp's LlamaPromptLookupDecoding, which is an optional dependency."""
+
+    def __init__(self, num_pred_tokens: int = 10) -> None:
+        self.num_pred_tokens = num_pred_tokens
+
+    def __call__(self, input_ids, /, **kwargs):
+        return np.array([7, 8], dtype=np.intc)
+
+
+@pytest.fixture(autouse=True)
+def _fake_prompt_lookup(monkeypatch):
+    # Without this, these tests pass only where llama-cpp-python happens to be installed.
+    monkeypatch.setattr(llamacpp_runner, "LlamaPromptLookupDecoding", FakePromptLookup)
+
+
+def test_prompt_lookup_unavailable_without_llama_cpp(monkeypatch) -> None:
+    monkeypatch.setattr(llamacpp_runner, "LlamaPromptLookupDecoding", None)
+    runner, _ = _runner()
+    assert runner.set_acceleration(ACCEL_PROMPT_LOOKUP) is False
 
 
 def _runner(**kwargs):

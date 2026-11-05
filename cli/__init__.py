@@ -1,1 +1,1 @@
-"""cli/ -- Track C: Platform & Revenue (FR-08). See main.py."""
+"""cli/ -- the `cascade` command-line tool (FR-08). See main.py."""
