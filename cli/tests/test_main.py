@@ -41,6 +41,9 @@ class _FakeHardwareProfiler:
     def __init__(self, runner=None) -> None:
         pass
 
+    def load_cached_profile(self):
+        return None
+
     def profile(self) -> dict:
         return {
             "schema_version": 1, "profiled_at": "2026-01-01T00:00:00Z", "os": "linux",
@@ -86,7 +89,7 @@ def test_init_warns_when_local_incapable(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(hp_module, "HardwareProfiler", _FakeIncapableHardwareProfiler)
     result = runner.invoke(app, ["init"])
     assert result.exit_code == 0
-    assert "CascadeCloud" in result.stdout
+    assert "configure a cloud tier" in result.stdout
 
 
 def test_ask_prints_answer(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,3 +158,74 @@ def test_save_and_load_config_round_trip(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(cli_main, "CONFIG_PATH", tmp_path / "config.json")
     cli_main.save_config({"key": "value"})
     assert cli_main.load_config() == {"key": "value"}
+
+
+# ---- config / tier wiring / doctor -------------------------------------------------
+
+
+def test_config_set_show_unset_round_trip() -> None:
+    assert runner.invoke(app, ["config", "set", "byok.model", "gpt-4o-mini"]).exit_code == 0
+    assert runner.invoke(app, ["config", "set", "byok.input_price_per_1k", "0.15"]).exit_code == 0
+    assert cli_main.load_config()["byok"] == {"model": "gpt-4o-mini", "input_price_per_1k": 0.15}
+    assert '"gpt-4o-mini"' in runner.invoke(app, ["config", "show"]).output
+    runner.invoke(app, ["config", "unset", "byok.model"])
+    assert "model" not in cli_main.load_config()["byok"]
+
+
+def test_config_refuses_to_store_a_secret() -> None:
+    result = runner.invoke(app, ["config", "set", "byok.api_key", "sk-live-123"])
+    assert result.exit_code == 1
+    assert "sk-live-123" not in cli_main.CONFIG_PATH.read_text() if cli_main.CONFIG_PATH.exists() else True
+
+
+def test_byok_settings_resolve_key_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = {"byok": {"base_url": "https://api.openai.com", "model": "gpt-4o-mini", "api_key_env": "MY_KEY"}}
+    monkeypatch.setenv("MY_KEY", "sk-test")
+    assert cli_main._byok_settings(config)["api_key"] == "sk-test"
+    assert cli_main._byok_settings({}) is None
+
+
+def test_cascade_cloud_is_not_configured_by_default() -> None:
+    """No default endpoint: prompts never go to a server the user didn't choose (NFR-05)."""
+    assert cli_main._cascade_settings({}) is None
+    assert cli_main._cascade_settings({"cascade_cloud": {"url": "http://localhost:8000"}})["base_url"] == "http://localhost:8000"
+
+
+def test_build_local_backend_honours_runner_and_acceleration(monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.execution.llamacpp_runner as lr
+
+    monkeypatch.setattr(lr, "LlamaCppRunner", lambda draft_model_tag: _AcceleratedStub())
+    backend = cli_main.build_local_backend({"runner": "llamacpp", "acceleration": "draft_model"})
+    from engine.execution.acceleration_engine import AccelerationLayer
+
+    assert backend._engine._preferred_layer == AccelerationLayer.DRAFT_MODEL
+    assert cli_main.build_local_backend({})._model_id == "llama3.2"
+
+
+class _AcceleratedStub:
+    def load(self, m, q): ...
+    def generate(self, p, n): ...
+    def unload(self): ...
+    def set_acceleration(self, mode): return True
+
+
+def test_footer_shows_tier_speed_and_cost() -> None:
+    footer = cli_main._status_footer({"tier": "local", "cache_hit": False, "tok_s": 12.34, "latency_ms": 900.0, "est_cost_usd": 0.0, "escalated": False})
+    assert footer == "[local | 12.3 tok/s | 900ms | $0.0000]"
+
+
+def test_ask_stream_prints_streamed_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_main, "build_pipeline", lambda **kw: _FakePipeline(text="streamed answer"))
+    assert "streamed answer" in runner.invoke(app, ["ask", "hi", "--stream"]).output
+
+
+def test_doctor_reports_missing_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.execution.model_runner as mr
+
+    class _DownOllama:
+        def is_available(self): return False
+
+    monkeypatch.setattr(mr, "OllamaReferenceModelRunner", lambda: _DownOllama())
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 1
+    assert "Ollama server reachable" in result.output

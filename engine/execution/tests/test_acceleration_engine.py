@@ -1,20 +1,20 @@
-
 """
-Tests for engine/execution/acceleration_engine.py -- Tasks 7-10.
+Tests for engine/execution/acceleration_engine.py (FR-03).
 
-Per NFR-09: all tests run with no live GPU, no live Ollama.
-All runner calls go through FakeRunner (deterministic).
+NFR-09: no live GPU or Ollama. FakeRunner is a plain runner (like
+Ollama); FakeAcceleratedRunner simulates a runner that can genuinely
+switch decoding modes (like LlamaCppRunner) and reports what it did.
 """
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from engine.execution.acceleration_engine import (
+    ACCEL_DRAFT_HEADS,
     DEFAULT_ACCEPTANCE_THRESHOLD,
-    LAYER1_SPEEDUP_FACTOR,
-    LAYER2_SPEEDUP_FACTOR,
-    LAYER3_SPEEDUP_FACTOR,
     AcceleratedGenerationSample,
     AccelerationEngine,
     AccelerationLayer,
@@ -22,59 +22,89 @@ from engine.execution.acceleration_engine import (
     DraftPair,
     load_validated_pairs,
 )
-from engine.execution.model_runner import GenerationSample
+from engine.execution.model_runner import (
+    ACCEL_DRAFT_MODEL,
+    ACCEL_NONE,
+    ACCEL_PROMPT_LOOKUP,
+    GenerationSample,
+)
 
-
-# --------------------------------------------------------------------------
-# Fake runner
-# --------------------------------------------------------------------------
+ALL_MODES = frozenset({ACCEL_PROMPT_LOOKUP, ACCEL_DRAFT_HEADS, ACCEL_DRAFT_MODEL})
 
 
 class FakeRunner:
-    """Deterministic ReferenceModelRunner double."""
-    def __init__(self, tok_s: float = 20.0, fail_load: bool = False) -> None:
-        self._tok_s     = tok_s
-        self._fail_load = fail_load
+    """Plain runner: no set_acceleration, always reports ACCEL_NONE."""
+
+    def __init__(self, tok_s: float = 20.0) -> None:
+        self._tok_s = tok_s
         self._loaded: str | None = None
-        self.load_calls: list[tuple] = []
-        self.unload_calls: int = 0
+        self.unload_calls = 0
 
     def load(self, model_id: str, quant_level: str) -> None:
-        self.load_calls.append((model_id, quant_level))
-        if self._fail_load:
-            raise RuntimeError("simulated OOM")
         self._loaded = quant_level
 
     def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
         assert self._loaded is not None, "generate() called before load()"
-        return GenerationSample(
-            tokens_generated=max_tokens,
-            elapsed_s=max_tokens / self._tok_s,
-            peak_memory_gb=2.0,
-        )
+        return GenerationSample(tokens_generated=max_tokens, elapsed_s=max_tokens / self._tok_s, peak_memory_gb=2.0)
 
     def unload(self) -> None:
         self.unload_calls += 1
         self._loaded = None
 
 
-# --------------------------------------------------------------------------
-# AcceptanceRateMonitor (FR-03.3)
-# --------------------------------------------------------------------------
+class FakeAcceleratedRunner(FakeRunner):
+    def __init__(self, tok_s: float = 20.0, supported: frozenset[str] = ALL_MODES, acceptance_rate: float = 0.8) -> None:
+        super().__init__(tok_s)
+        self._supported = supported
+        self._acceptance_rate = acceptance_rate
+        self.mode = ACCEL_NONE
+        self.mode_requests: list[str] = []
+
+    def set_acceleration(self, mode: str) -> bool:
+        self.mode_requests.append(mode)
+        if mode != ACCEL_NONE and mode not in self._supported:
+            return False
+        self.mode = mode
+        return True
+
+    def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
+        base = super().generate(prompt, max_tokens)
+        speculative = self.mode != ACCEL_NONE
+        return GenerationSample(
+            tokens_generated=base.tokens_generated,
+            elapsed_s=base.elapsed_s,
+            peak_memory_gb=base.peak_memory_gb,
+            acceleration=self.mode,
+            acceptance_rate=self._acceptance_rate if speculative else None,
+        )
+
+
+def _engine(layer: AccelerationLayer, runner=None, heads: bool = False, pair: bool = False, monitor=None) -> AccelerationEngine:
+    engine = AccelerationEngine(
+        runner=runner or FakeAcceleratedRunner(),
+        preferred_layer=layer,
+        monitor=monitor,
+        model_has_draft_heads=heads,
+        validated_pairs=[DraftPair("model", "draft", True)] if pair else [],
+    )
+    engine.load("model", "q4_K_M")
+    return engine
+
+
+# ---- AcceptanceRateMonitor (FR-03.3) -----------------------------------------
 
 
 class TestAcceptanceRateMonitor:
-
     def test_should_not_step_down_before_window_full(self) -> None:
         monitor = AcceptanceRateMonitor(threshold=0.60, window=5)
-        for _ in range(4):          # one short of the window
-            monitor.record(0.0)     # all zeros -- would trigger if window full
+        for _ in range(4):
+            monitor.record(0.0)
         assert monitor.should_step_down() is False
 
     def test_should_step_down_when_average_below_threshold(self) -> None:
         monitor = AcceptanceRateMonitor(threshold=0.60, window=5)
         for _ in range(5):
-            monitor.record(0.30)    # avg = 0.30 < 0.60
+            monitor.record(0.30)
         assert monitor.should_step_down() is True
 
     def test_should_not_step_down_when_average_at_or_above_threshold(self) -> None:
@@ -87,276 +117,168 @@ class TestAcceptanceRateMonitor:
         monitor = AcceptanceRateMonitor(threshold=0.60, window=3)
         for _ in range(3):
             monitor.record(0.0)
-        assert monitor.should_step_down() is True
         monitor.reset()
         assert monitor.should_step_down() is False
 
-    def test_current_average_is_none_when_empty(self) -> None:
+    def test_current_average(self) -> None:
         assert AcceptanceRateMonitor().current_average is None
-
-    def test_current_average_reflects_recorded_samples(self) -> None:
         monitor = AcceptanceRateMonitor(window=4)
         for v in [0.5, 0.7, 0.9]:
             monitor.record(v)
-        assert monitor.current_average == pytest.approx((0.5 + 0.7 + 0.9) / 3)
+        assert monitor.current_average == pytest.approx(0.7)
 
 
-# --------------------------------------------------------------------------
-# Layer resolution (FR-03.2)
-# --------------------------------------------------------------------------
+# ---- Layer resolution (FR-03.2) ------------------------------------------------
 
 
 class TestLayerResolution:
+    def test_plain_runner_never_reports_acceleration(self) -> None:
+        """A runner that can't change decoding (e.g. Ollama) is honestly NONE, whatever was preferred."""
+        engine = _engine(AccelerationLayer.DRAFT_MODEL, runner=FakeRunner(), heads=True, pair=True)
+        assert engine.active_layer == AccelerationLayer.NONE
+        assert engine.generate_accelerated("p", 10).speculative_active is False
 
-    def test_layer1_is_default_when_no_heads_no_pair(self) -> None:
-        """FR-03.1: Layer 1 always available, zero draft model required."""
-        engine = AccelerationEngine(
-            runner=FakeRunner(),
-            preferred_layer=AccelerationLayer.LOOKAHEAD,
-        )
-        engine.load("model", "q4_K_M")
-        assert engine.active_layer == AccelerationLayer.LOOKAHEAD
+    def test_layer1_activates_on_capable_runner(self) -> None:
+        assert _engine(AccelerationLayer.LOOKAHEAD).active_layer == AccelerationLayer.LOOKAHEAD
 
     def test_layer2_activates_when_model_has_heads(self) -> None:
-        engine = AccelerationEngine(
-            runner=FakeRunner(),
-            preferred_layer=AccelerationLayer.DRAFT_HEADS,
-            model_has_draft_heads=True,
-        )
-        engine.load("model", "q4_K_M")
-        assert engine.active_layer == AccelerationLayer.DRAFT_HEADS
+        assert _engine(AccelerationLayer.DRAFT_HEADS, heads=True).active_layer == AccelerationLayer.DRAFT_HEADS
 
     def test_layer2_falls_back_to_layer1_when_no_heads(self) -> None:
-        """FR-03.2: silent fallback, never a crash or quality regression."""
-        engine = AccelerationEngine(
-            runner=FakeRunner(),
-            preferred_layer=AccelerationLayer.DRAFT_HEADS,
-            model_has_draft_heads=False,  # no heads available
-        )
-        engine.load("model", "q4_K_M")
-        assert engine.active_layer == AccelerationLayer.LOOKAHEAD
+        assert _engine(AccelerationLayer.DRAFT_HEADS, heads=False).active_layer == AccelerationLayer.LOOKAHEAD
 
     def test_layer3_activates_when_validated_pair_exists(self) -> None:
-        pair   = DraftPair("target-model", "draft-model", validated=True)
-        engine = AccelerationEngine(
-            runner=FakeRunner(),
-            preferred_layer=AccelerationLayer.DRAFT_MODEL,
-            validated_pairs=[pair],
-        )
-        engine.load("target-model", "q4_K_M")
-        assert engine.active_layer == AccelerationLayer.DRAFT_MODEL
+        assert _engine(AccelerationLayer.DRAFT_MODEL, pair=True).active_layer == AccelerationLayer.DRAFT_MODEL
 
     def test_layer3_falls_back_to_layer2_when_pair_missing_but_heads_exist(self) -> None:
-        engine = AccelerationEngine(
-            runner=FakeRunner(),
-            preferred_layer=AccelerationLayer.DRAFT_MODEL,
-            model_has_draft_heads=True,
-            validated_pairs=[],         # no pair for this model
-        )
-        engine.load("model", "q4_K_M")
-        assert engine.active_layer == AccelerationLayer.DRAFT_HEADS
+        assert _engine(AccelerationLayer.DRAFT_MODEL, heads=True).active_layer == AccelerationLayer.DRAFT_HEADS
 
     def test_layer3_falls_back_to_layer1_when_no_pair_and_no_heads(self) -> None:
-        engine = AccelerationEngine(
-            runner=FakeRunner(),
-            preferred_layer=AccelerationLayer.DRAFT_MODEL,
-            model_has_draft_heads=False,
-            validated_pairs=[],
-        )
-        engine.load("model", "q4_K_M")
-        assert engine.active_layer == AccelerationLayer.LOOKAHEAD
+        assert _engine(AccelerationLayer.DRAFT_MODEL).active_layer == AccelerationLayer.LOOKAHEAD
 
     def test_unvalidated_pair_is_ignored(self) -> None:
-        pair   = DraftPair("model", "draft", validated=False)
         engine = AccelerationEngine(
-            runner=FakeRunner(),
+            runner=FakeAcceleratedRunner(),
             preferred_layer=AccelerationLayer.DRAFT_MODEL,
-            validated_pairs=[pair],
+            validated_pairs=[DraftPair("model", "draft", validated=False)],
         )
         engine.load("model", "q4_K_M")
         assert engine.active_layer == AccelerationLayer.LOOKAHEAD
 
+    def test_walks_down_when_runner_rejects_eligible_layer(self) -> None:
+        """Eligible for Layer 2 (heads), but the runner can't do it -> Layer 1."""
+        runner = FakeAcceleratedRunner(supported=frozenset({ACCEL_PROMPT_LOOKUP}))
+        engine = _engine(AccelerationLayer.DRAFT_HEADS, runner=runner, heads=True)
+        assert engine.active_layer == AccelerationLayer.LOOKAHEAD
+        assert runner.mode_requests == [ACCEL_DRAFT_HEADS, ACCEL_PROMPT_LOOKUP]
 
-# --------------------------------------------------------------------------
-# Speedup factors (NFR-01: Layer 2/3 >= 1.5x)
-# --------------------------------------------------------------------------
+    def test_falls_to_none_when_runner_supports_nothing(self) -> None:
+        runner = FakeAcceleratedRunner(supported=frozenset())
+        engine = _engine(AccelerationLayer.LOOKAHEAD, runner=runner)
+        assert engine.active_layer == AccelerationLayer.NONE
+        assert runner.mode == ACCEL_NONE
 
-
-class TestSpeedupFactors:
-
-    def _tok_s_for_layer(self, layer: AccelerationLayer) -> float:
-        runner = FakeRunner(tok_s=20.0)
-        heads  = layer == AccelerationLayer.DRAFT_HEADS
-        pair   = (
-            [DraftPair("model", "draft", True)]
-            if layer == AccelerationLayer.DRAFT_MODEL
-            else []
-        )
-        engine = AccelerationEngine(
-            runner=runner,
-            preferred_layer=layer,
-            model_has_draft_heads=heads,
-            validated_pairs=pair,
-        )
-        engine.load("model", "q4_K_M")
-        sample = engine.generate_accelerated("prompt", 64)
-        engine.unload()
-        return sample.tok_s
-
-    def test_layer1_provides_modest_speedup_over_baseline(self) -> None:
-        tok_s  = self._tok_s_for_layer(AccelerationLayer.LOOKAHEAD)
-        # Layer 1 multiplier > 1.0
-        assert tok_s > 20.0 * 1.0
-
-    def test_layer2_meets_nfr01_1_5x_target_over_layer1(self) -> None:
-        """NFR-01: Layer 2 >= 1.5x vs Layer 1 baseline."""
-        layer1_tok_s = self._tok_s_for_layer(AccelerationLayer.LOOKAHEAD)
-        layer2_tok_s = self._tok_s_for_layer(AccelerationLayer.DRAFT_HEADS)
-        assert layer2_tok_s >= layer1_tok_s * 1.5
-
-    def test_layer3_meets_nfr01_1_5x_target_over_layer1(self) -> None:
-        """NFR-01: Layer 3 >= 1.5x vs Layer 1 baseline."""
-        layer1_tok_s = self._tok_s_for_layer(AccelerationLayer.LOOKAHEAD)
-        layer3_tok_s = self._tok_s_for_layer(AccelerationLayer.DRAFT_MODEL)
-        assert layer3_tok_s >= layer1_tok_s * 1.5
+    def test_preferring_none_disables_acceleration(self) -> None:
+        runner = FakeAcceleratedRunner()
+        assert _engine(AccelerationLayer.NONE, runner=runner).active_layer == AccelerationLayer.NONE
+        assert runner.mode == ACCEL_NONE
 
 
-# --------------------------------------------------------------------------
-# Auto step-down on acceptance-rate collapse (FR-03.3, FR-03.4)
-# --------------------------------------------------------------------------
+# ---- Measured numbers pass through unchanged -----------------------------------
+
+
+class TestNoFabricatedSpeedup:
+    @pytest.mark.parametrize("layer", list(AccelerationLayer))
+    def test_tok_s_is_exactly_the_runners_measurement(self, layer: AccelerationLayer) -> None:
+        engine = _engine(layer, runner=FakeAcceleratedRunner(tok_s=20.0), heads=True, pair=True)
+        assert engine.generate_accelerated("p", 64).tok_s == pytest.approx(20.0)
+
+    def test_acceptance_rate_is_the_runners_measurement(self) -> None:
+        engine = _engine(AccelerationLayer.DRAFT_MODEL, runner=FakeAcceleratedRunner(acceptance_rate=0.73), pair=True)
+        assert engine.generate_accelerated("p", 10).acceptance_rate == pytest.approx(0.73)
+
+    def test_reported_layer_is_what_the_runner_says_ran(self) -> None:
+        engine = _engine(AccelerationLayer.DRAFT_MODEL, pair=True)
+        sample = engine.generate_accelerated("p", 10)
+        assert sample.active_layer == AccelerationLayer.DRAFT_MODEL
+        assert sample.speculative_active is True
+
+
+# ---- Auto step-down (FR-03.3, FR-03.4) -----------------------------------------
+
+
+def _bad_monitor(window: int = 3) -> AcceptanceRateMonitor:
+    monitor = AcceptanceRateMonitor(threshold=DEFAULT_ACCEPTANCE_THRESHOLD, window=window)
+    for _ in range(window):
+        monitor.record(0.10)
+    return monitor
 
 
 class TestAutoStepDown:
-
-    def _engine_with_full_bad_monitor(self, layer: AccelerationLayer, window: int = 3) -> AccelerationEngine:
-        """Return an engine whose monitor is already full of low-rate samples."""
-        runner  = FakeRunner(tok_s=20.0)
-        heads   = layer == AccelerationLayer.DRAFT_HEADS
-        pair    = (
-            [DraftPair("model", "draft", True)]
-            if layer == AccelerationLayer.DRAFT_MODEL
-            else []
-        )
-        monitor = AcceptanceRateMonitor(threshold=DEFAULT_ACCEPTANCE_THRESHOLD, window=window)
-        for _ in range(window):
-            monitor.record(0.10)  # well below 0.60
-        engine = AccelerationEngine(
-            runner=runner,
-            preferred_layer=layer,
-            monitor=monitor,
-            model_has_draft_heads=heads,
-            validated_pairs=pair,
-        )
-        engine.load("model", "q4_K_M")
-        return engine
-
-    def test_layer2_steps_down_to_layer1_when_acceptance_rate_collapses(self) -> None:
-        engine = self._engine_with_full_bad_monitor(AccelerationLayer.DRAFT_HEADS)
-        assert engine.active_layer == AccelerationLayer.DRAFT_HEADS
-        engine.generate_accelerated("prompt", 10)  # triggers monitor check
-        # After step-down:
+    def test_layer2_steps_down_to_layer1_when_acceptance_collapses(self) -> None:
+        runner = FakeAcceleratedRunner(acceptance_rate=0.1)
+        engine = _engine(AccelerationLayer.DRAFT_HEADS, runner=runner, heads=True, monitor=_bad_monitor())
+        engine.generate_accelerated("p", 10)
         assert engine.active_layer == AccelerationLayer.LOOKAHEAD
+        assert runner.mode == ACCEL_PROMPT_LOOKUP
 
     def test_layer3_steps_down_to_layer2_when_heads_available(self) -> None:
-        runner  = FakeRunner(tok_s=20.0)
-        monitor = AcceptanceRateMonitor(threshold=0.60, window=3)
-        for _ in range(3):
-            monitor.record(0.10)
-        engine  = AccelerationEngine(
-            runner=runner,
-            preferred_layer=AccelerationLayer.DRAFT_MODEL,
-            monitor=monitor,
-            model_has_draft_heads=True,
-            validated_pairs=[DraftPair("model", "draft", True)],
-        )
-        engine.load("model", "q4_K_M")
-        engine.generate_accelerated("prompt", 10)
+        engine = _engine(AccelerationLayer.DRAFT_MODEL, runner=FakeAcceleratedRunner(acceptance_rate=0.1), heads=True, pair=True, monitor=_bad_monitor())
+        engine.generate_accelerated("p", 10)
         assert engine.active_layer == AccelerationLayer.DRAFT_HEADS
 
+    def test_layer1_steps_down_to_plain_decoding(self) -> None:
+        """Prompt lookup has real rejections, so it can be disabled too."""
+        runner = FakeAcceleratedRunner(acceptance_rate=0.1)
+        engine = _engine(AccelerationLayer.LOOKAHEAD, runner=runner, monitor=_bad_monitor())
+        engine.generate_accelerated("p", 10)
+        assert engine.active_layer == AccelerationLayer.NONE
+        assert runner.mode == ACCEL_NONE
+
     def test_step_down_resets_monitor(self) -> None:
-        engine = self._engine_with_full_bad_monitor(AccelerationLayer.DRAFT_HEADS)
-        engine.generate_accelerated("prompt", 10)   # triggers step-down
-        # Monitor should be fresh (no old bad samples carrying over)
+        engine = _engine(AccelerationLayer.DRAFT_HEADS, runner=FakeAcceleratedRunner(acceptance_rate=0.1), heads=True, monitor=_bad_monitor())
+        engine.generate_accelerated("p", 10)
         assert engine.monitor.current_average is None
 
-    def test_layer1_never_steps_down(self) -> None:
-        """Layer 1 (lookahead) never produces rejectable speculative tokens."""
-        runner  = FakeRunner(tok_s=20.0)
-        monitor = AcceptanceRateMonitor(threshold=0.60, window=1)
-        monitor.record(0.0)   # force monitor full and bad
-        engine  = AccelerationEngine(
-            runner=runner,
-            preferred_layer=AccelerationLayer.LOOKAHEAD,
-            monitor=monitor,
-        )
-        engine.load("model", "q4_K_M")
-        engine.generate_accelerated("prompt", 10)
-        assert engine.active_layer == AccelerationLayer.LOOKAHEAD   # unchanged
+    def test_good_acceptance_keeps_layer(self) -> None:
+        engine = _engine(AccelerationLayer.DRAFT_MODEL, runner=FakeAcceleratedRunner(acceptance_rate=0.9), pair=True, monitor=AcceptanceRateMonitor(window=2))
+        for _ in range(5):
+            engine.generate_accelerated("p", 10)
+        assert engine.active_layer == AccelerationLayer.DRAFT_MODEL
+
+    def test_plain_samples_never_feed_the_monitor(self) -> None:
+        monitor = AcceptanceRateMonitor(window=1)
+        engine = _engine(AccelerationLayer.LOOKAHEAD, runner=FakeRunner(), monitor=monitor)
+        engine.generate_accelerated("p", 10)
+        assert monitor.current_average is None
 
     def test_output_is_valid_after_step_down(self) -> None:
-        """FR-03.4: no quality regression -- result is still a valid sample."""
-        engine = self._engine_with_full_bad_monitor(AccelerationLayer.DRAFT_HEADS)
-        sample = engine.generate_accelerated("prompt", 64)
+        engine = _engine(AccelerationLayer.DRAFT_HEADS, runner=FakeAcceleratedRunner(acceptance_rate=0.1), heads=True, monitor=_bad_monitor())
+        sample = engine.generate_accelerated("p", 64)
         assert isinstance(sample, AcceleratedGenerationSample)
         assert sample.tok_s > 0.0
-        assert sample.peak_memory_gb >= 0.0
+
+    def test_unload_resets_active_layer(self) -> None:
+        engine = _engine(AccelerationLayer.LOOKAHEAD)
+        engine.unload()
+        assert engine.active_layer == AccelerationLayer.NONE
+        assert engine.speculative_active is False
 
 
-# --------------------------------------------------------------------------
-# speculative_active flag
-# --------------------------------------------------------------------------
-
-
-def test_speculative_active_false_for_layer1() -> None:
-    engine = AccelerationEngine(FakeRunner(), AccelerationLayer.LOOKAHEAD)
-    engine.load("model", "q4_K_M")
-    sample = engine.generate_accelerated("p", 10)
-    assert sample.speculative_active is False
-
-
-def test_speculative_active_true_for_layer2() -> None:
-    engine = AccelerationEngine(
-        FakeRunner(), AccelerationLayer.DRAFT_HEADS,
-        model_has_draft_heads=True,
-    )
-    engine.load("model", "q4_K_M")
-    sample = engine.generate_accelerated("p", 10)
-    assert sample.speculative_active is True
-
-
-def test_speculative_active_true_for_layer3() -> None:
-    engine = AccelerationEngine(
-        FakeRunner(), AccelerationLayer.DRAFT_MODEL,
-        validated_pairs=[DraftPair("model", "draft", True)],
-    )
-    engine.load("model", "q4_K_M")
-    sample = engine.generate_accelerated("p", 10)
-    assert sample.speculative_active is True
-
-
-# --------------------------------------------------------------------------
-# load_validated_pairs
-# --------------------------------------------------------------------------
+# ---- load_validated_pairs --------------------------------------------------------
 
 
 def test_load_validated_pairs_returns_empty_when_file_missing(tmp_path) -> None:
     assert load_validated_pairs(tmp_path / "nonexistent.json") == []
 
 
-def test_load_validated_pairs_parses_valid_file(tmp_path) -> None:
-    import json
-    data = {"pairs": [
-        {"target_model_id": "llama3", "draft_model_id": "llama1", "validated": True},
-    ]}
+def test_load_validated_pairs_returns_empty_on_malformed_file(tmp_path) -> None:
     p = tmp_path / "pairs.json"
-    p.write_text(json.dumps(data), encoding="utf-8")
-    pairs = load_validated_pairs(p)
-    assert len(pairs) == 1
-    assert pairs[0].target_model_id == "llama3"
+    p.write_text("{not json", encoding="utf-8")
+    assert load_validated_pairs(p) == []
 
 
 def test_load_validated_pairs_skips_unvalidated(tmp_path) -> None:
-    import json
     data = {"pairs": [
         {"target_model_id": "m1", "draft_model_id": "d1", "validated": True},
         {"target_model_id": "m2", "draft_model_id": "d2", "validated": False},
@@ -364,5 +286,4 @@ def test_load_validated_pairs_skips_unvalidated(tmp_path) -> None:
     p = tmp_path / "pairs.json"
     p.write_text(json.dumps(data), encoding="utf-8")
     pairs = load_validated_pairs(p)
-    assert len(pairs) == 1
-    assert pairs[0].target_model_id == "m1"
+    assert [pp.target_model_id for pp in pairs] == ["m1"]

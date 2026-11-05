@@ -8,28 +8,32 @@ NFR-09 requires every component's unit tests to reach 70%+ coverage
 
 Those two requirements together mean the actual model-loading/generation
 mechanics must sit behind a small interface (`ReferenceModelRunner`) that
-HardwareProfiler depends on but never constructs a concrete instance of
-internally. Production code injects `OllamaReferenceModelRunner`
-(subprocess against a locally installed Ollama/llama.cpp, matching the
-Development Stack in Section 5.1); tests inject a deterministic fake that
-returns canned tok/s and memory numbers with zero external dependencies.
-
-This mirrors, at a smaller scale, the same seam discipline the rest of
-Cascade uses (ExecutionBackend in shared/types.py): HardwareProfiler
-codes against the Protocol, never the concrete runner.
+HardwareProfiler, AccelerationEngine and LocalExecutionBackend depend on
+but never construct internally. Production code injects
+`OllamaReferenceModelRunner` (Ollama's local HTTP API) or
+`engine.execution.llamacpp_runner.LlamaCppRunner` (in-process llama.cpp,
+the only runner that can do real speculative decoding); tests inject
+deterministic fakes.
 """
 
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
-import threading
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
+
+# 127.0.0.1, not localhost: on Windows "localhost" tries IPv6 ::1 first and
+# stalls ~2s per request before falling back, since Ollama listens on IPv4.
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
+
+# What a runner actually did for one generation. Reported by the runner,
+# never assumed by the caller -- see AccelerationEngine.
+ACCEL_NONE = "none"
+ACCEL_PROMPT_LOOKUP = "prompt_lookup"
+ACCEL_DRAFT_MODEL = "draft_model"
 
 
 @dataclass(frozen=True)
@@ -37,14 +41,16 @@ class GenerationSample:
     """One timed generation against one (model, quant_level) pair."""
 
     tokens_generated: int
+    # Decode time in seconds. Runners that can separate decode time from
+    # model-load/prompt-processing time report decode time only, so
+    # tok_s is a real decode-speed figure comparable across runs.
     elapsed_s: float
     peak_memory_gb: float
-    # Defaults to "" so every existing FakeReferenceModelRunner /
-    # _FakeRunner construction across the test suite (none of which set
-    # this) keeps working unchanged -- an empty string is an honest
-    # value for a fake that was never asked to produce real text,
-    # rather than a placeholder that looks like real output.
     output_text: str = ""
+    acceleration: str = ACCEL_NONE
+    # Fraction of drafted tokens the target model accepted; None when no
+    # speculative decoding ran.
+    acceptance_rate: Optional[float] = None
 
     @property
     def tok_s(self) -> float:
@@ -56,88 +62,120 @@ class GenerationSample:
 @runtime_checkable
 class ReferenceModelRunner(Protocol):
     """
-    What HardwareProfiler needs from "a model backend" to benchmark a
-    machine. Deliberately narrow -- this is NOT the full
-    AccelerationEngine/ModelLadder model-loading surface (that's Phase
-    2's job); it only needs to load one quant level and time one
-    generation.
+    What the engine needs from "a model backend". Deliberately narrow:
+    load one quant level, time one generation, release it.
     """
 
     def load(self, model_id: str, quant_level: str) -> None:
         """Load `model_id` at `quant_level`. Raise on failure (e.g. OOM)
-        so the caller can record that quant level as unsupported rather
-        than silently skip it."""
+        so the caller can step down rather than silently skip it."""
         ...
 
     def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
-        """Run one timed generation against the currently loaded model
-        and return tokens produced, elapsed wall-clock time, and peak
-        memory observed during the call."""
+        """Run one timed generation against the currently loaded model."""
         ...
 
     def unload(self) -> None:
-        """Release the currently loaded model before the next quant
-        level is loaded, so peak-memory measurements don't carry over
-        between quant levels."""
+        """Release the currently loaded model."""
         ...
+
+
+@runtime_checkable
+class AcceleratedRunner(Protocol):
+    """
+    Optional capability. A runner that can genuinely change how it
+    decodes implements this; AccelerationEngine only reports a layer as
+    active when the runner accepted it AND the sample says it ran.
+    """
+
+    def set_acceleration(self, mode: str) -> bool:
+        """Switch decoding mode (ACCEL_* constant). Return False if this
+        runner cannot do `mode` -- the caller then tries a lower one."""
+        ...
+
+
+class OllamaError(RuntimeError):
+    """Ollama server unreachable, model missing, or a request failed."""
 
 
 class OllamaReferenceModelRunner:
     """
-    Production `ReferenceModelRunner`: drives a locally installed Ollama
-    instance via subprocess (Section 5.1's local dev stack:
-    "Ollama/llama.cpp (local)"). Intentionally NOT used in unit tests
-    (NFR-09) -- exercised only by integration/manual testing against a
-    real Ollama install.
+    Production runner over Ollama's local HTTP API.
+
+    - Real token counts and decode timings (`eval_count`/`eval_duration`)
+      instead of a whitespace approximation of CLI stdout.
+    - The model stays resident between requests (`keep_alive`); a
+      registry pull only happens when the model is missing locally, so a
+      normal request never leaves the machine (NFR-05).
+    - Peak memory comes from `/api/ps`, which reports the serving
+      process's real footprint.
+
+    Does not implement AcceleratedRunner: Ollama exposes no speculative
+    decoding control, so every sample honestly reports ACCEL_NONE.
+    Integration-test scope only (NFR-09); the HTTP parsing is unit-tested
+    by mocking `urllib.request.urlopen`.
     """
 
-    def __init__(self, ollama_binary: str = "ollama", api_base_url: str = "http://localhost:11434") -> None:
-        self._ollama_binary = ollama_binary
-        self._api_base_url = api_base_url
-        self._loaded_model: str | None = None
+    def __init__(
+        self,
+        api_base_url: str = DEFAULT_OLLAMA_URL,
+        keep_alive: str = "10m",
+        request_timeout_s: float = 300.0,
+        pull_timeout_s: float = 1800.0,
+    ) -> None:
+        self._api_base_url = api_base_url.rstrip("/")
+        self._keep_alive = keep_alive
+        self._request_timeout_s = request_timeout_s
+        self._pull_timeout_s = pull_timeout_s
+        self._loaded_model: Optional[str] = None
 
-    def _check_available(self) -> None:
-        if shutil.which(self._ollama_binary) is None:
-            raise RuntimeError(
-                f"'{self._ollama_binary}' not found on PATH. Install "
-                "Ollama (https://ollama.com) or inject a different "
-                "ReferenceModelRunner."
-            )
+    # ---- HTTP plumbing -------------------------------------------------
 
-    def load(self, model_id: str, quant_level: str) -> None:
-        self._check_available()
-        tag = f"{model_id}:{quant_level}"
-        # `ollama pull` is a no-op if the tag is already present locally.
-        # encoding/errors explicit: `ollama pull`'s progress output uses
-        # Unicode block-drawing characters that aren't valid in the
-        # cp1252 codec subprocess.run's `text=True` falls back to by
-        # default on Windows -- found via a real live-model benchmark
-        # run (docs/BENCHMARK_REPORT.md), not a hypothetical.
-        result = subprocess.run(
-            [self._ollama_binary, "pull", tag],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=55,
+    def _request(self, path: str, payload: Optional[dict] = None, timeout: float = 10.0) -> dict:
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        req = urllib.request.Request(
+            f"{self._api_base_url}{path}",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST" if payload is not None else "GET",
         )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to load {tag} via Ollama: {result.stderr.strip()}"
-            )
-        self._loaded_model = tag
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read()
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            try:
+                detail = json.loads(detail).get("error", detail)
+            except ValueError:
+                pass
+            raise OllamaError(f"Ollama {path} failed ({exc.code}): {detail}") from exc
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+            raise OllamaError(
+                f"Can't reach Ollama at {self._api_base_url} ({exc}). "
+                "Is it installed and running? See https://ollama.com"
+            ) from exc
+        return json.loads(body) if body else {}
+
+    def is_available(self) -> bool:
+        try:
+            self._request("/api/version", timeout=3)
+            return True
+        except OllamaError:
+            return False
+
+    def local_models(self) -> list[str]:
+        return [m.get("name", "") for m in self._request("/api/tags").get("models", [])]
+
+    def model_file_path(self, tag: str) -> Optional[str]:
+        """Path of the GGUF blob Ollama stores for `tag` (lets LlamaCppRunner reuse Ollama's downloads)."""
+        modelfile = self._request("/api/show", {"model": tag}).get("modelfile", "")
+        for line in modelfile.splitlines():
+            if line.startswith("FROM "):
+                return line[len("FROM "):].strip()
+        return None
 
     def _query_loaded_model_bytes(self) -> int:
-        """
-        Real memory footprint (bytes) for whatever model is currently
-        loaded, from Ollama's own /api/ps -- NOT psutil on the `ollama
-        run` CLI subprocess's PID. `ollama run` is a thin client; the
-        model weights live in the ollama SERVER process (or one it
-        manages), which is a different PID entirely. Confirmed by
-        running this for real (docs/BENCHMARK_REPORT.md's addendum):
-        the psutil-on-proc.pid approach always measured ~0, because it
-        was measuring the wrong process's memory the whole time.
-        """
+        """Real memory footprint (bytes) of loaded models, from /api/ps. Never raises."""
         try:
             with urllib.request.urlopen(f"{self._api_base_url}/api/ps", timeout=2) as resp:
                 data = json.loads(resp.read())
@@ -148,61 +186,55 @@ class OllamaReferenceModelRunner:
             return 0
         return max(m.get("size_vram") or m.get("size") or 0 for m in models)
 
+    # ---- ReferenceModelRunner ------------------------------------------
+
+    def load(self, model_id: str, quant_level: str) -> None:
+        tag = f"{model_id}:{quant_level}"
+        if tag not in self.local_models():
+            self._request("/api/pull", {"model": tag, "stream": False}, timeout=self._pull_timeout_s)
+        # An empty prompt makes Ollama load the weights without generating,
+        # so an OOM surfaces here rather than mid-request.
+        self._request(
+            "/api/generate",
+            {"model": tag, "prompt": "", "keep_alive": self._keep_alive},
+            timeout=self._request_timeout_s,
+        )
+        self._loaded_model = tag
+
     def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
         if self._loaded_model is None:
-            raise RuntimeError("No model loaded -- call load() first.")
-
-        proc = subprocess.Popen(
-            [self._ollama_binary, "run", self._loaded_model, prompt],
-            encoding="utf-8",
-            errors="replace",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-
-        # Poll Ollama's own /api/ps on a background thread WHILE
-        # generation runs (the model is only reliably reported as
-        # "loaded" during that window) and keep the max seen.
-        peak_bytes = 0
-        stop_polling = threading.Event()
-
-        def _poll() -> None:
-            nonlocal peak_bytes
-            while not stop_polling.is_set():
-                peak_bytes = max(peak_bytes, self._query_loaded_model_bytes())
-                stop_polling.wait(0.25)
-
-        poll_thread = threading.Thread(target=_poll, daemon=True)
+            raise OllamaError("No model loaded -- call load() first.")
         start = time.monotonic()
-        poll_thread.start()
-        try:
-            stdout, _stderr = proc.communicate(timeout=55)
-        finally:
-            stop_polling.set()
-            poll_thread.join(timeout=1)
-        elapsed = time.monotonic() - start
-
-        # Ollama doesn't report a token count on stdout by default; a
-        # whitespace-token approximation is a reasonable stand-in for
-        # relative tok/s comparisons across quant levels of the *same*
-        # model, which is all HardwareProfiler needs it for.
-        tokens_generated = max(1, len(stdout.split()))
-        return GenerationSample(
-            tokens_generated=min(tokens_generated, max_tokens) or tokens_generated,
-            elapsed_s=elapsed,
-            peak_memory_gb=peak_bytes / (1024**3),
-            output_text=stdout.strip(),
+        payload = self._request(
+            "/api/generate",
+            {
+                "model": self._loaded_model,
+                "prompt": prompt,
+                "stream": False,
+                "keep_alive": self._keep_alive,
+                "options": {"num_predict": max_tokens},
+            },
+            timeout=self._request_timeout_s,
         )
+        wall_s = time.monotonic() - start
+        return parse_generate_response(payload, wall_s, self._query_loaded_model_bytes())
 
     def unload(self) -> None:
         if self._loaded_model is not None:
-            subprocess.run(
-                [self._ollama_binary, "stop", self._loaded_model],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=15,
-            )
+            try:
+                self._request("/api/generate", {"model": self._loaded_model, "keep_alive": 0})
+            except OllamaError:
+                pass
         self._loaded_model = None
+
+
+def parse_generate_response(payload: dict, wall_s: float, loaded_bytes: int) -> GenerationSample:
+    """Turn an Ollama /api/generate response into a GenerationSample using its own timing fields."""
+    eval_count = int(payload.get("eval_count") or 0)
+    eval_duration_s = (payload.get("eval_duration") or 0) / 1e9
+    return GenerationSample(
+        tokens_generated=eval_count,
+        elapsed_s=eval_duration_s if eval_duration_s > 0 else wall_s,
+        peak_memory_gb=loaded_bytes / (1024**3),
+        output_text=(payload.get("response") or "").strip(),
+    )

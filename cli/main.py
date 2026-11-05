@@ -1,16 +1,29 @@
 """
-cli/main.py
+cli/main.py -- the `cascade` command (FR-08).
 
-Track C, Tasks 1, 12, 13, 14 (FR-08.1-08.3).
+Builds the Pipeline from ~/.cascade/config.json. Only tiers that are
+actually configured get a backend: nothing is sent to a cloud endpoint
+the user didn't set up (NFR-05). Secrets are never stored in the config
+file -- it names the environment variable that holds each key.
 
-Wires the full Pipeline together exactly as
-docs/TRACK_B_HANDOFF_FOR_C.md Section 4, Step 2 shows -- this is the
-one place all three tracks' code actually meets.
+Config keys (set with `cascade config set KEY VALUE`):
+    model                 local model family            (default llama3.2)
+    runner                ollama | llamacpp             (default ollama)
+    acceleration          none | prompt_lookup | draft_model   (llamacpp only)
+    draft_model           draft tag for draft_model     (default llama3.2:1b-instruct-q4_K_M)
+    byok.base_url         OpenAI-compatible root, e.g. https://api.openai.com
+    byok.model            e.g. gpt-4o-mini
+    byok.api_key_env      env var holding the key       (default OPENAI_API_KEY)
+    byok.input_price_per_1k / byok.output_price_per_1k  (optional, for cost estimates)
+    cascade_cloud.url     your CascadeCloud gateway, e.g. http://127.0.0.1:8000
+    cascade_cloud.api_key_env  env var holding the csk_ key (default CASCADE_API_KEY)
 """
 
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -18,43 +31,20 @@ import typer
 
 CONFIG_PATH = Path.home() / ".cascade" / "config.json"
 
-app = typer.Typer(name="cascade", help="Cascade -- adaptive local/cloud LLM routing.")
+# Model output routinely contains characters a Windows codepage (cp1252)
+# can't encode when stdout is piped; print a replacement char, never crash.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
+
+app = typer.Typer(name="cascade", help="Cascade -- adaptive local/cloud LLM routing.", no_args_is_help=True)
+config_app = typer.Typer(help="Show or change ~/.cascade/config.json.", no_args_is_help=True)
+app.add_typer(config_app, name="config")
+
+_ACCELERATION_LAYERS = {"none": "NONE", "prompt_lookup": "LOOKAHEAD", "draft_model": "DRAFT_MODEL"}
 
 
-# ---- Pipeline construction (FR-08.1's dependency graph) --------------------
-
-
-def build_pipeline(decision_logging: bool = True):
-    """
-    Constructs the full Pipeline. A separate function (not inlined into
-    each command) so tests can monkeypatch it with a fake Pipeline
-    instead of needing a real Ollama instance or CascadeCloud endpoint
-    (NFR-09).
-    """
-    from engine.execution.backend import LocalExecutionBackend
-    from engine.intelligence.cache import SemanticCache
-    from engine.intelligence.context_compressor import ContextCompressor
-    from engine.intelligence.decision_log import DEFAULT_DECISION_LOG_PATH
-    from engine.intelligence.embeddings import FastEmbedEmbedder
-    from engine.intelligence.pipeline import Pipeline
-    from engine.intelligence.router.classifier import SemanticRouterClassifier
-    from gateway.backend import CascadeCloudBackend
-
-    config = load_config()
-    embedder = FastEmbedEmbedder()
-    cascade_backend = CascadeCloudBackend(
-        base_url=config.get("cascade_cloud_url", "https://api.cascade.dev"),
-        api_key=config.get("cascade_cloud_api_key", ""),
-    )
-
-    return Pipeline(
-        backend=LocalExecutionBackend(),
-        cascade_backend=cascade_backend,
-        compressor=ContextCompressor(embedder),
-        cache=SemanticCache(embedder),
-        router=SemanticRouterClassifier(embedder),
-        decision_log_path=DEFAULT_DECISION_LOG_PATH if decision_logging else None,
-    )
+# ---- Config -------------------------------------------------------------------
 
 
 def load_config() -> dict:
@@ -68,41 +58,130 @@ def save_config(config: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
-# ---- Status footer (FR-08.2) -----------------------------------------------
+def _get(config: dict, dotted: str, default=None):
+    node = config
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return default
+        node = node[part]
+    return node
 
 
-def _status_footer(result: dict) -> str:
-    return (
-        f"[{result['tier']}"
-        f" | cache_hit={result['cache_hit']}"
-        f" | {result['latency_ms']:.0f}ms"
-        f" | ${result['est_cost_usd']:.4f}]"
+def _parse_value(raw: str):
+    try:
+        return json.loads(raw)
+    except ValueError:
+        return raw
+
+
+def _byok_settings(config: dict) -> Optional[dict]:
+    """BYOK settings with the key resolved from the environment, or None if not fully configured."""
+    if not _get(config, "byok.base_url") or not _get(config, "byok.model"):
+        return None
+    key = os.environ.get(_get(config, "byok.api_key_env", "OPENAI_API_KEY"), "")
+    return {
+        "base_url": _get(config, "byok.base_url"),
+        "model": _get(config, "byok.model"),
+        "api_key": key,
+        "input_price_per_1k": float(_get(config, "byok.input_price_per_1k", 0.0)),
+        "output_price_per_1k": float(_get(config, "byok.output_price_per_1k", 0.0)),
+    }
+
+
+def _cascade_settings(config: dict) -> Optional[dict]:
+    url = _get(config, "cascade_cloud.url") or config.get("cascade_cloud_url")
+    if not url:
+        return None
+    key = os.environ.get(_get(config, "cascade_cloud.api_key_env", "CASCADE_API_KEY"), "")
+    return {"base_url": url, "api_key": key}
+
+
+# ---- Pipeline construction (FR-08.1) ----------------------------------------------
+
+
+def build_local_backend(config: dict):
+    from engine.execution.acceleration_engine import AccelerationLayer, DraftPair
+    from engine.execution.backend import LocalExecutionBackend
+
+    model = config.get("model", "llama3.2")
+    if config.get("runner", "ollama") == "llamacpp":
+        from engine.execution.llamacpp_runner import DEFAULT_DRAFT_MODEL_TAG, LlamaCppRunner
+
+        draft = config.get("draft_model", DEFAULT_DRAFT_MODEL_TAG)
+        layer = AccelerationLayer[_ACCELERATION_LAYERS.get(config.get("acceleration", "none"), "NONE")]
+        return LocalExecutionBackend(
+            runner=LlamaCppRunner(draft_model_tag=draft),
+            model_id=model,
+            preferred_layer=layer,
+            validated_pairs=[DraftPair(model, draft, True)],
+        )
+    return LocalExecutionBackend(model_id=model)
+
+
+def build_pipeline(decision_logging: bool = True):
+    """Separate function so tests can monkeypatch in a fake Pipeline (NFR-09)."""
+    from engine.intelligence.cache import SemanticCache
+    from engine.intelligence.context_compressor import ContextCompressor
+    from engine.intelligence.decision_log import DEFAULT_DECISION_LOG_PATH
+    from engine.intelligence.embeddings import FastEmbedEmbedder
+    from engine.intelligence.pipeline import Pipeline
+    from engine.intelligence.router.classifier import SemanticRouterClassifier
+    from gateway.backend import CascadeCloudBackend
+    from gateway.byok import CloudBYOKBackend
+
+    config = load_config()
+    embedder = FastEmbedEmbedder()
+    byok = _byok_settings(config)
+    cascade = _cascade_settings(config)
+
+    return Pipeline(
+        backend=build_local_backend(config),
+        cascade_backend=CascadeCloudBackend(**cascade) if cascade else None,
+        cloud_byok_backend=CloudBYOKBackend(**byok) if byok and byok["api_key"] else None,
+        compressor=ContextCompressor(embedder),
+        cache=SemanticCache(embedder),
+        router=SemanticRouterClassifier(embedder),
+        decision_log_path=DEFAULT_DECISION_LOG_PATH if decision_logging else None,
     )
 
 
-# ---- Commands ---------------------------------------------------------------
+# ---- Output -----------------------------------------------------------------------
+
+
+def _status_footer(result: dict) -> str:
+    parts = [result["tier"]]
+    if result.get("escalated"):
+        parts.append("escalated")
+    if result["cache_hit"]:
+        parts.append("cache hit")
+    elif result.get("tok_s"):
+        parts.append(f"{result['tok_s']:.1f} tok/s")
+    parts.append(f"{result['latency_ms']:.0f}ms")
+    parts.append(f"${result['est_cost_usd']:.4f}")
+    return "[" + " | ".join(parts) + "]"
+
+
+# ---- Commands ---------------------------------------------------------------------
 
 
 @app.command()
 def init() -> None:
-    """FR-08.1: detect hardware, pick an initial local model rung, write config.yaml -- under 5 minutes on a typical connection."""
+    """FR-08.1: profile this machine's hardware and write the config."""
     from engine.execution.hardware_profiler import HardwareProfiler
     from engine.execution.model_runner import OllamaReferenceModelRunner
 
-    typer.echo("Profiling your hardware...")
-    profiler = HardwareProfiler(OllamaReferenceModelRunner())
-    profile = profiler.profile()
+    typer.echo("Profiling your hardware (benchmarks a small local model; first run downloads it)...")
+    profile = HardwareProfiler(OllamaReferenceModelRunner()).profile()
 
     local_capable = profile["local_capable"]
     best_tok_s = max(profile["measured_tok_s"].values()) if profile["measured_tok_s"] else 0.0
-
     typer.echo(f"local_capable: {local_capable}")
     typer.echo(f"best measured tok/s: {best_tok_s:.1f}")
 
     if not local_capable:
         typer.secho(
-            "This machine doesn't clear any local model rung -- Cascade "
-            "will route your requests to CascadeCloud instead.",
+            "This machine doesn't clear any local model rung -- configure a cloud tier "
+            "(`cascade config set byok.base_url ...` or `cascade_cloud.url ...`).",
             fg=typer.colors.YELLOW,
         )
 
@@ -114,10 +193,20 @@ def init() -> None:
 
 
 @app.command()
-def ask(query: str, no_log: bool = typer.Option(False, help="Disable decision logging for this request.")) -> None:
+def ask(
+    query: str,
+    no_log: bool = typer.Option(False, help="Disable decision logging for this request."),
+    stream: bool = typer.Option(False, help="Print the answer as it's generated."),
+) -> None:
     """FR-08.2: one-shot, scriptable use."""
     pipeline = build_pipeline(decision_logging=not no_log)
-    result = pipeline.run([{"role": "user", "content": query}])
+    messages = [{"role": "user", "content": query}]
+    if stream:
+        for piece in pipeline.run_stream(messages):
+            typer.echo(piece, nl=False)
+        typer.echo()
+        return
+    result = pipeline.run(messages)
     typer.echo(result["text"])
     typer.secho(_status_footer(result), fg=typer.colors.BRIGHT_BLACK, err=True)
 
@@ -142,12 +231,11 @@ def chat(no_log: bool = typer.Option(False, help="Disable decision logging for t
 
 @app.command()
 def stats(log_path: Optional[Path] = None) -> None:
-    """FR-08.3: aggregate cache hit rate, local-resolution rate, and speculative-decoding speedup from the local log file."""
+    """FR-08.3: cache hit rate, local-resolution rate, and speculative speedup from the local log."""
     from engine.intelligence.decision_log import DEFAULT_DECISION_LOG_PATH, load_decisions, summarize_decisions
 
     path = log_path or DEFAULT_DECISION_LOG_PATH
-    records = load_decisions(path)
-    summary = summarize_decisions(records)
+    summary = summarize_decisions(load_decisions(path))
 
     if summary["total_requests"] == 0:
         typer.echo(f"No requests logged yet at {path}.")
@@ -165,13 +253,117 @@ def stats(log_path: Optional[Path] = None) -> None:
 
 @app.command()
 def profile() -> None:
-    """Re-run HardwareProfiler after a hardware change (FR-01.4, exposed via the CLI)."""
+    """Re-run HardwareProfiler after a hardware change (FR-01.4)."""
     from engine.execution.hardware_profiler import HardwareProfiler
     from engine.execution.model_runner import OllamaReferenceModelRunner
 
-    profiler = HardwareProfiler(OllamaReferenceModelRunner())
-    hw_profile = profiler.profile()
-    typer.echo(json.dumps(hw_profile, indent=2))
+    typer.echo(json.dumps(HardwareProfiler(OllamaReferenceModelRunner()).profile(), indent=2))
+
+
+@app.command()
+def doctor() -> None:
+    """Check that every configured piece of Cascade can actually run."""
+    import importlib.util
+
+    import httpx
+
+    from engine.execution.hardware_profiler import HardwareProfiler
+    from engine.execution.model_runner import OllamaReferenceModelRunner
+
+    config = load_config()
+    problems = 0
+
+    def report(ok: bool, label: str, hint: str = "") -> None:
+        nonlocal problems
+        problems += 0 if ok else 1
+        mark = typer.style("ok  ", fg=typer.colors.GREEN) if ok else typer.style("FIX ", fg=typer.colors.RED)
+        typer.echo(f"{mark} {label}" + (f"\n       -> {hint}" if hint and not ok else ""))
+
+    def note(label: str) -> None:
+        typer.echo(f"{typer.style('--  ', fg=typer.colors.BRIGHT_BLACK)} {label}")
+
+    report(sys.version_info >= (3, 10), f"Python {sys.version.split()[0]}", "Cascade needs Python 3.10+")
+
+    ollama = OllamaReferenceModelRunner()
+    up = ollama.is_available()
+    report(up, "Ollama server reachable", "install from https://ollama.com and start it")
+    if up:
+        model = config.get("model", "llama3.2")
+        local = [m for m in ollama.local_models() if m.startswith(model + ":")]
+        report(bool(local), f"local {model} models: {', '.join(local) or 'none'}", f"run `ollama pull {model}:3b-instruct-q4_K_M` or `cascade init`")
+
+    cached = HardwareProfiler(runner=ollama).load_cached_profile()
+    if cached is None:
+        report(False, "hardware profile", "run `cascade init`")
+    else:
+        best = max(cached["measured_tok_s"].values(), default=0.0)
+        report(cached["local_capable"], f"hardware profile: local_capable={cached['local_capable']}, best {best:.1f} tok/s",
+               "this machine is below the local floor -- configure a cloud tier")
+
+    runner_kind = config.get("runner", "ollama")
+    if runner_kind == "llamacpp":
+        report(importlib.util.find_spec("llama_cpp") is not None, "llama-cpp-python installed (runner=llamacpp)", "pip install llama-cpp-python")
+        note(f"acceleration: {config.get('acceleration', 'none')}")
+    else:
+        note("runner: ollama (no speculative decoding; set runner=llamacpp to enable it)")
+
+    byok = _byok_settings(config)
+    if byok is None:
+        note("cloud_byok tier: not configured (hard queries stay local)")
+    else:
+        env = _get(config, "byok.api_key_env", "OPENAI_API_KEY")
+        report(bool(byok["api_key"]), f"cloud_byok: {byok['model']} at {byok['base_url']}", f"set the {env} environment variable")
+
+    cascade = _cascade_settings(config)
+    if cascade is None:
+        note("cascade_cloud tier: not configured")
+    else:
+        try:
+            healthy = httpx.get(cascade["base_url"].rstrip("/") + "/health", timeout=3).status_code == 200
+        except httpx.HTTPError:
+            healthy = False
+        report(healthy, f"cascade_cloud gateway at {cascade['base_url']}", "is the gateway running? `python -m gateway.serve run`")
+        env = _get(config, "cascade_cloud.api_key_env", "CASCADE_API_KEY")
+        report(bool(cascade["api_key"]), "cascade_cloud API key present", f"set the {env} environment variable")
+
+    typer.echo()
+    typer.echo("All good." if problems == 0 else f"{problems} thing(s) to fix.")
+    raise typer.Exit(code=0 if problems == 0 else 1)
+
+
+@config_app.command("show")
+def config_show() -> None:
+    """Print the current config."""
+    typer.echo(json.dumps(load_config(), indent=2))
+
+
+@config_app.command("set")
+def config_set(key: str, value: str) -> None:
+    """Set a (dotted) key, e.g. `cascade config set byok.model gpt-4o-mini`."""
+    if "api_key" in key and not key.endswith("_env"):
+        typer.secho("Refusing to store a key in the config file -- put it in an environment variable and set *.api_key_env instead.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+    config = load_config()
+    node = config
+    parts = key.split(".")
+    for part in parts[:-1]:
+        node = node.setdefault(part, {})
+    node[parts[-1]] = _parse_value(value)
+    save_config(config)
+    typer.echo(f"{key} = {json.dumps(node[parts[-1]])}")
+
+
+@config_app.command("unset")
+def config_unset(key: str) -> None:
+    """Remove a (dotted) key."""
+    config = load_config()
+    node = config
+    parts = key.split(".")
+    for part in parts[:-1]:
+        node = node.get(part, {})
+    node.pop(parts[-1], None)
+    save_config(config)
+    typer.echo(f"removed {key}")
 
 
 if __name__ == "__main__":

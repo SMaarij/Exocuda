@@ -123,3 +123,95 @@ real figure) on a background thread while generation runs, instead of
 inspecting the wrong process. Re-run after the fix: `peak_memory_gb`
 now reports a real, plausible `0.534` GB for this quantized 3B model,
 not zero.
+## Addendum 3 — acceleration measured for real (NFR-01), 2026-11-05
+
+### What changed before measuring
+
+Until this run, `AccelerationEngine.generate_accelerated()` divided the
+real measured generation time by hard-coded constants (1.15x for "Layer
+1", 1.80x / 1.75x for Layers 2/3). Every `tok_s` the local backend
+reported was inflated by at least 15%, and the NFR-01 unit tests passed
+by construction. Those multipliers are gone: the engine now reports only
+what the runner measured, and a layer counts as active only if the
+runner actually ran it. The Ollama runner cannot do speculative decoding
+at all, so it honestly reports none.
+
+Real speculative decoding was added through `engine/execution/llamacpp_runner.py`
+(llama-cpp-python, CPU wheel), reusing the GGUF files Ollama already stores:
+
+- **Layer 1 — prompt lookup:** n-gram drafts copied from the context, no extra model.
+- **Layer 3 — draft model:** `llama3.2:1b-instruct-q4_K_M` drafting 4 tokens per step for `llama3.2:3b-instruct-q4_K_M` (same tokenizer).
+- Layer 2 (Medusa/EAGLE heads) remains unavailable: no trained heads exist for this model.
+
+### Setup
+
+`scripts/benchmark_acceleration.py`: 6 prompts (3 context-grounded —
+code rewrites and a paragraph copy — and 3 open-ended), 128 max tokens,
+greedy decoding (temperature 0), a warm-up call per mode, decode speed
+timed from first to last token. Machine: Windows 11 laptop, 8 CPU
+threads, 15.7 GB RAM, NVIDIA MX330 2 GB (unused — CPU wheel). Raw
+per-prompt data: `docs/benchmark/acceleration_results.json`.
+
+### Results
+
+| Mode | Decode tok/s | vs plain | Grounded prompts | Open prompts | Mean draft acceptance | Output identical to plain |
+|---|---:|---:|---:|---:|---:|---:|
+| Plain decoding | 6.56 | 1.00x | 1.00x | 1.00x | – | – |
+| Layer 1: prompt lookup | 3.94 | **0.60x** | 0.70x | 0.50x | 14.8% | 2 / 6 |
+| Layer 3: 1B draft model | 5.85 | **0.89x** | 0.98x (1.14x wall-clock) | 0.80x | 70.9% | 2 / 6 |
+
+**NFR-01 (≥1.5x) is not met on this machine.** Neither speculative
+layer speeds up decoding on a CPU-only laptop. The draft model is
+accepted often (71%; 87% on grounded prompts), but on a CPU verifying a
+batch of drafted tokens costs nearly as much as generating them, so
+there is little to gain. Speculative decoding pays off when the target
+model is memory-bandwidth-bound with spare compute, which typically
+means a GPU. The one prompt where prompt lookup helped (copying a
+paragraph, 63% acceptance) ran at 1.19x.
+
+**"Lossless" doesn't hold exactly in practice.** Only 2 of 6 accelerated
+outputs were token-identical to plain greedy output. The algorithm
+is lossless mathematically, but llama.cpp computes a batch of tokens
+with slightly different floating-point results than one token at a
+time, so greedy decoding can take a different path. The outputs stay
+fluent and on-topic, but "identical output" is not something to promise.
+
+### Consequences in the code
+
+- Acceleration is now **off by default** (`LocalExecutionBackend(preferred_layer=NONE)`);
+  it is an explicit per-machine opt-in (`cascade config set runner llamacpp`,
+  `cascade config set acceleration draft_model`).
+- `scripts/validate_draft_pairs.py` now measures a real acceptance rate
+  and speedup, and only registers a pair if it is actually faster on the
+  machine it ran on. On this laptop it would not register `llama3.2:1b → 3b`.
+- The acceptance-rate monitor (FR-03.3) now works from real
+  measurements, and can switch prompt lookup off too.
+
+### Still unmeasured
+
+NFR-01 on a GPU machine, which is where it is most likely to pass. Run
+`python scripts/benchmark_acceleration.py` on one (with a CUDA/Metal
+build of llama-cpp-python) and append the result here.
+
+## Addendum 4 — end-to-end live run of every tier, 2026-11-05
+
+Run on the same laptop through the real `cascade` CLI, with an isolated config directory:
+
+| Check | Result |
+|---|---|
+| `cascade init` (HardwareProfiler via Ollama HTTP API) | local_capable=True, 4.5 tok/s on `3b-instruct-q4_K_M`, 0.55 GB measured |
+| Local answer, short factual question | 4.9 s end to end (13.1 s before the `127.0.0.1` fix below) |
+| Close paraphrase of a previous question | cache hit; warm lookup 22–55 ms (NFR-02 <150 ms met); first lookup in a new process ~2.4 s while the embedding model loads |
+| Hard coding question with BYOK configured | routed to `cloud_byok` and answered by the BYOK endpoint (Ollama's OpenAI-compatible API standing in for a real provider) |
+| Gateway: no key / spoofed `x-cascade-user` header | 401 / 401 |
+| Gateway: completion and streamed completion | billed from real usage (35 and 37 tokens) |
+| Gateway: request over the account's spend cap | 402 before any upstream call |
+| Router picks `cascade_cloud` but the gateway refuses (cap) | answered locally instead of failing (NFR-03) |
+
+Bugs this run found and fixed:
+
+- **~2 s added to every local request on Windows.** `localhost` resolves to IPv6 `::1` first; Ollama listens on IPv4 only, so each urllib call stalled ~2 s before falling back (2.03 s vs 0.001 s measured). All local defaults now use `127.0.0.1`.
+- **CLI crash on non-cp1252 characters** (e.g. `√`) when output is piped on Windows. The CLI now prints a replacement character instead of crashing.
+- **SQLite schema setup** committed the wrapping transaction early (caught by the new tests before shipping).
+
+The semantic cache threshold (0.92 cosine) is deliberately conservative: a paraphrase that also moves an instruction around ("…Answer in one sentence." → "In one sentence, …") scored 0.875 and was correctly treated as a miss.

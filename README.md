@@ -2,666 +2,147 @@
 
 ### Run the right model in the right place — automatically.
 
-Cascade is a **local-first LLM runtime** that profiles your hardware, selects the best model and quantization it can realistically run, accelerates inference with speculative decoding, and automatically falls back to the cloud only when local execution is not suitable.
-
-A **semantic cache** and **learned router** keep repeated and easy queries fast and free, while a metered, provider-agnostic gateway handles workloads that require cloud compute.
-
-> **Note:** This README is a project overview generated from the internal **Master Requirements & Development Document (V2.2)** and its companion **Individual Task Breakdown**. It is intended to orient contributors and visitors and does not replace those documents.
-
----
-
-## Table of Contents
-
-* [Why Cascade](#why-cascade)
-* [How It Works](#how-it-works)
-* [Architecture](#architecture)
-* [Repository Layout](#repository-layout)
-* [Quickstart](#quickstart)
-* [The Three Tracks](#the-three-tracks)
-
-  * [Track A — Execution Engine](#track-a--execution-engine)
-  * [Track B — Intelligence Layer](#track-b--intelligence-layer)
-  * [Track C — Platform & Revenue](#track-c--platform--revenue)
-* [Joint Integration Points](#joint-integration-points)
-* [Roadmap](#roadmap)
-* [Benchmarks](#benchmarks)
-* [Contributing](#contributing)
-* [License](#license)
-
----
-
-## Why Cascade
-
-Most local-LLM tooling forces users to choose between:
-
-* Running everything locally and accepting hardware limitations
-* Sending everything to the cloud and paying for every request
-
-**Cascade removes that choice.**
-
-For every query, Cascade automatically determines the most appropriate execution path:
-
-| Situation                                          | Cascade's Action                           |
-| -------------------------------------------------- | ------------------------------------------ |
-| Query already exists in cache                      | Return cached response instantly           |
-| Local hardware can handle it                       | Run locally                                |
-| Local execution is possible but needs optimization | Select model + quantization + acceleration |
-| Local hardware cannot handle it                    | Route to cloud                             |
-| User provides their own cloud API key              | Use cloud-BYOK                             |
-| User requires Cascade's hosted infrastructure      | Use CascadeCloud                           |
-
-### The Result
-
-* No unnecessary cloud costs
-* No manual model switching
-* Better utilization of local hardware
-* Faster responses for repeated queries
-* Automatic cloud fallback when required
-* Provider-agnostic cloud infrastructure
-
----
-
-## How It Works
-
-Every request passes through the Cascade runtime, which decides where and how the query should be executed.
-
-```mermaid
-flowchart TD
-    A[User Query] --> B[Cascade Runtime]
-
-    B --> C[Semantic Cache]
-    C --> D{Cache Hit?}
-
-    D -->|Yes| E[Return Cached Response]
-    D -->|No| F[Query Analyzer]
-
-    F --> G[Learned Router]
-    G --> H[Hardware Profiler]
-
-    H --> I{Local Execution Suitable?}
-
-    I -->|Yes| J[Select Local Model]
-    J --> K[Select Quantization]
-    K --> L[Speculative Decoding]
-    L --> M[Local Inference]
-
-    I -->|No| N[Cloud Gateway]
-    N --> O{API Key Available?}
-
-    O -->|Yes| P[Cloud BYOK]
-    O -->|No| Q[CascadeCloud]
-
-    M --> R[Response]
-    P --> R
-    Q --> R
-    E --> R
-
-    R --> S[User]
-```
-
----
-
-
-# Architecture
-
-Cascade is organized around **three loosely coupled tracks** that share a single frozen contract.
-
-```mermaid
-flowchart TB
-
-    USER["👤 User Query"]
-
-    NORMALIZER["Normalizer<br/>Clean • Format • Validate"]
-
-    CACHE["Semantic Cache<br/>Semantic + Exact-Prefix"]
-
-    RESPONSE["⚡ Cached Response"]
-
-    ROUTER["Semantic Router<br/>Cache • Local • Cloud-BYOK • CascadeCloud"]
-
-    LOCAL["💻 Local Execution Backend<br/>HardwareProfiler<br/>ModelLadder<br/>AccelerationEngine"]
-
-    CLOUD["☁️ CascadeCloud Backend<br/>FastAPI • vLLM/SGLang<br/>Metering • Billing"]
-
-    CHECK["🛡️ Confidence Check<br/>Quality + Safety"]
-
-    WRITE["💾 Write to Cache<br/>Learn & Improve"]
-
-    USER --> NORMALIZER
-    NORMALIZER --> CACHE
-
-    CACHE -->|Hit| RESPONSE
-    CACHE -->|Miss| ROUTER
-
-    ROUTER --> LOCAL
-    ROUTER --> CLOUD
-
-    LOCAL --> CHECK
-    CLOUD --> CHECK
-
-    CHECK --> WRITE
-    CHECK --> RESPONSE
-
-    WRITE -.-> CACHE
-
-    subgraph EXEC["Track A — Execution Engine"]
-        LOCAL
-    end
-
-    subgraph INTEL["Track B — Intelligence Layer"]
-        ROUTER
-        CACHE
-        CHECK
-    end
-
-    subgraph PLATFORM["Track C — Platform & Revenue"]
-        CLOUD
-    end
-```
-
-### Architecture Responsibilities
-
-| Layer | Responsibility | Main Components |
-|---|---|---|
-| **Execution** | Run models efficiently on available hardware | `HardwareProfiler`, `ModelLadder`, `AccelerationEngine` |
-| **Intelligence** | Decide where each query should execute | `ContextCompressor`, `SemanticRouter`, `SemanticCache`, `Pipeline` |
-| **Platform & Revenue** | Cloud execution, billing, CLI and distribution | `CascadeCloud`, Gateway, Billing, CLI |
-
-The main cross-track contract is:
+Cascade is a local-first LLM runtime. It benchmarks your machine, runs a
+model locally when your hardware can handle the query, answers repeated
+questions from a semantic cache, and routes hard queries to your own
+cloud API key or to a hosted, metered gateway — only when you've
+configured one.
 
 ```text
-shared/types.py
+query ─▶ ContextCompressor ─▶ SemanticCache ──hit──▶ answer (free, instant)
+                                   │ miss
+                                   ▼
+                            SemanticRouter (trained classifier)
+              ┌────────────────────┼─────────────────────┐
+           local                cloud_byok           cascade_cloud
+   Ollama or llama.cpp      your own key, any      Cascade's gateway:
+   (+ speculative decoding)  OpenAI-compatible      auth, spend caps,
+                             provider               Stripe metering
+              └────────────────────┼─────────────────────┘
+                                   ▼
+          confidence check ─▶ escalate if weak ─▶ cache write + decision log
 ```
 
-It defines the common:
-
-- `Message`
-- `HardwareProfile`
-- `BackendResult`
-- `ExecutionBackend`
-- `PipelineResult`
-
-Once this contract is frozen, each track can be developed independently.
+Every tier degrades gracefully: if a cloud tier is down, mis-keyed or over
+its cap, the request is answered locally instead of failing.
 
 ---
 
-# Repository Layout
+## Quickstart
 
-```text
-cascade/
-│
-├── engine/
-│   ├── execution/                  # Track A
-│   │   ├── hardware_profiler.py
-│   │   ├── model_ladder.py
-│   │   ├── acceleration_engine.py
-│   │   ├── backend.py
-│   │   └── tests/
-│   │
-│   └── intelligence/               # Track B
-│       ├── pipeline.py
-│       ├── context_compressor.py
-│       ├── cache.py
-│       ├── router/
-│       │   ├── coldstart_data.py
-│       │   ├── classifier.py
-│       │   └── retrain.py
-│       └── tests/
-│
-├── gateway/                         # Track C
-│   ├── api/
-│   ├── billing/
-│   ├── providers/
-│   ├── backend.py
-│   └── tests/
-│
-├── cli/                             # Track C
-│   ├── main.py
-│   └── setup_wizard.py
-│
-├── shared/
-│   └── types.py                     # Frozen cross-track contract
-│
-├── docs/
-│   ├── quickstart.md
-│   ├── config-reference.md
-│   └── benchmark-report.md
-│
-├── scripts/
-│   ├── run_benchmark.py
-│   └── validate_draft_pairs.py
-│
-└── .github/
-    └── workflows/
-```
-
----
-
-# Quickstart
-
-The goal is for a new user to reach their first cached response in **under 5 minutes** on a fresh machine.
-
-### Install
+Requirements: Python 3.10+, [Ollama](https://ollama.com) running locally.
 
 ```bash
-pip install cascade-cli
-```
-
-Or install directly from source:
-
-```bash
-git clone <repository-url>
-cd cascade
+git clone https://github.com/SMaarij/Exocuda.git
+cd Exocuda
 pip install -e .
 ```
 
-### Initialize Cascade
-
 ```bash
-cascade init
-```
-
-The setup wizard:
-
-- Detects available hardware
-- Profiles CPU, RAM and GPU
-- Selects an appropriate model configuration
-- Creates `config.yaml`
-
-### Profile Hardware
-
-```bash
-cascade profile
-```
-
-### Start an Interactive Session
-
-```bash
+cascade init        # benchmarks this machine (downloads llama3.2 3B on first run)
+cascade doctor      # checks every configured piece and says how to fix what isn't
+cascade ask "What is a hash table?"
 cascade chat
+cascade stats       # cache hit rate, local-resolution rate, speculative speedup, cost
 ```
 
-### Ask a One-Shot Question
+Each answer ends with a status footer, e.g. `[local | 9.8 tok/s | 2140ms | $0.0000]`.
+
+### Optional: hard queries to your own API key (cloud_byok)
+
+Any OpenAI-compatible provider works (OpenAI, OpenRouter, Groq, Together, DeepSeek, a vLLM box...).
+Keys are read from environment variables; `cascade config` refuses to store a key in the file.
 
 ```bash
-cascade ask "your question"
+cascade config set byok.base_url https://api.openai.com
+cascade config set byok.model gpt-4o-mini
+cascade config set byok.api_key_env OPENAI_API_KEY      # then export OPENAI_API_KEY=...
+cascade config set byok.input_price_per_1k 0.00015      # optional, for cost estimates
+cascade config set byok.output_price_per_1k 0.0006
 ```
 
-### View Statistics
+### Optional: real speculative decoding (llama.cpp runner)
 
 ```bash
-cascade stats
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+cascade config set runner llamacpp
+cascade config set acceleration prompt_lookup     # or draft_model, or none
 ```
 
-Example statistics include:
+The llama.cpp runner loads the GGUF files Ollama already downloaded — nothing is fetched twice.
+Whether acceleration actually helps depends on the machine; measure it first
+(`python scripts/benchmark_acceleration.py`) — see [Benchmarks](#benchmarks).
 
-```text
-Cache hit rate
-Local-resolution rate
-Cloud usage
-Speculative decoding speedup
-Estimated cost saved
+### Optional: run CascadeCloud (the hosted, metered tier)
+
+The gateway is OpenAI-compatible. Point it at any OpenAI-compatible upstream
+(a vLLM/SGLang deployment in production; Ollama works for local testing).
+
+```bash
+python -m gateway.serve create-account alice --cap 5.00
+python -m gateway.serve create-key alice                 # prints csk_... once; only a hash is stored
+CASCADE_UPSTREAM_URL=http://127.0.0.1:11434 python -m gateway.serve run --port 8000
 ```
 
-Each response is tagged with its execution tier:
-
-```text
-CACHE
-LOCAL
-CLOUD-BYOK
-CASCADECLOUD
+```bash
+cascade config set cascade_cloud.url http://127.0.0.1:8000   # then export CASCADE_API_KEY=csk_...
 ```
+
+Server settings (all environment variables): `CASCADE_GATEWAY_DB`, `CASCADE_UPSTREAM_URL`,
+`CASCADE_UPSTREAM_MODEL`, `CASCADE_UPSTREAM_API_KEY`, `CASCADE_PRICE_PER_1K`, `STRIPE_API_KEY`
+(enables metered Stripe billing).
 
 ---
 
-# The Three Tracks
+## What's in the box
 
-Cascade is divided into three independently developable tracks.
-
----
-
-## Track A — Execution Engine
-
-### Hardware & Systems Track
-
-The Execution Engine makes models run efficiently on whatever hardware is available.
-
-It owns:
-
-```text
-engine/execution/
-```
-
-### Hardware Profiler
-
-Detects:
-
-- CPU
-- RAM
-- GPU vendor
-- GPU VRAM
-- Disk throughput
-
-It then benchmarks available configurations and generates a versioned:
-
-```text
-HardwareProfile
-```
-
-with a `local_capable` decision.
-
-### Model Ladder
-
-Maintains a ranked:
-
-```text
-Model × Quantization
-```
-
-ladder.
-
-It provides:
-
-- Deterministic model selection
-- Quantization selection
-- OOM detection
-- Throughput-collapse detection
-- Automatic step-down
-- MoE expert offloading
-
-### Acceleration Engine
-
-Cascade supports three speculative decoding layers:
-
-```text
-Layer 1 — Lookahead Decoding
-           ↓
-Layer 2 — Self-Speculative Draft Heads
-           ↓
-Layer 3 — Paired Draft Model
-```
-
-A real-time acceptance monitor automatically disables underperforming acceleration layers without compromising output quality.
-
-### Target
-
-- **≥ 1.5× token/s improvement** on Layer 2/3
-- Working local rung on **≥ 90% of 8GB-RAM-or-better test machines**
-
----
-
-# Track B — Intelligence Layer
-
-### Applied ML Track
-
-The Intelligence Layer decides what should happen with every query and remembers previous answers.
-
-It owns:
-
-```text
-engine/intelligence/
-```
-
-### Context Compressor
-
-Ranks conversation turns according to relevance using embedding similarity.
-
-Low-relevance context can be:
-
-- Summarized
-- Dropped
-- Retained when relevant
-
-The compressor is designed as a pure, I/O-free function.
-
-### Semantic Router
-
-The router determines the best execution path:
-
-```text
-CACHE
-LOCAL
-CLOUD-BYOK
-CASCADECLOUD
-```
-
-The initial router uses lightweight models such as:
-
-- Logistic Regression
-- Gradient-Boosted Trees
-
-It is bootstrapped using RouteLLM's public cold-start dataset.
-
-The router produces:
-
-```text
-Route + Confidence Score
-```
-
-When available, token-level log probabilities or entropy can provide additional routing signals.
-
-A shadow-labeling pipeline can continuously collect retraining data from live traffic without affecting served responses.
-
-### Semantic Cache
-
-Cascade uses semantic similarity to identify previously answered queries.
-
-The cache includes:
-
-- Embedding similarity
-- Configurable similarity threshold
-- TTL
-- Cacheability classifier
-- Exact-prefix KV cache
-- Time-sensitive query exclusion
-- Personalized query exclusion
-
-### Targets
-
-- Paraphrased-query cache hit rate ≥ **90% of exact-duplicate hit rate**
-- Router must outperform naive always-local and always-cloud baselines
-- p95 cache lookup latency < **50ms** at 10,000 entries
-
----
-
-# Track C — Platform & Revenue
-
-### Product & Infrastructure Track
-
-This track owns everything users interact with and the infrastructure through which cloud execution and billing occur.
-
-It owns:
-
-```text
-gateway/
-cli/
-```
-
-## CascadeCloud
-
-CascadeCloud provides hosted inference through:
-
-```text
-FastAPI
-   ↓
-vLLM / SGLang
-   ↓
-GPU Provider
-```
-
-The gateway is designed to support:
-
-- Continuous batching
-- PagedAttention
-- Prefix caching
-- FlashAttention
-- Provider adapters
-- Usage metering
-- Spend caps
-
-Provider switching should require configuration changes rather than application rewrites.
-
-## Billing
-
-Cascade supports:
-
-- Metered usage
-- Pro subscriptions
-- Team subscriptions
-- Stripe integration
-- Spend-cap enforcement
-
-Payment information is never stored as plaintext inside Cascade's own storage.
-
-## CLI
-
-The CLI provides:
-
-```text
-cascade init
-cascade profile
-cascade chat
-cascade ask
-cascade stats
-```
-
-The CLI supports:
-
-- Token streaming
-- Setup wizard
-- Execution-tier indicators
-- Cache status
-- Cost-saved information
-
----
-
-# Joint Integration Points
-
-Although the three tracks are independently developed, five integration points require coordinated validation.
-
-| Checkpoint | Phase | Purpose |
+| Component | Where | What it does |
 |---|---|---|
-| **J-1** | Phase 1 | Freeze `shared/types.py`, `Pipeline`, and `ExecutionBackend` |
-| **J-2** | Phase 2 | Verify Local and CascadeCloud backends plug into Pipeline without calling-code changes |
-| **J-3** | Phase 3 | Ensure tests do not require live GPUs or external services |
-| **J-4** | Phase 4 | Perform the first complete local → router → cloud → billing run |
-| **J-5** | Phase 5 | Run the complete benchmark suite and final Definition-of-Done review |
+| HardwareProfiler | `engine/execution/hardware_profiler.py` | Detects CPU/RAM/GPU/disk and benchmarks real tok/s at several quant levels |
+| ModelLadder | `engine/execution/model_ladder.py` | Picks the highest quant rung the measured profile clears; steps down on OOM |
+| Ollama runner | `engine/execution/model_runner.py` | Ollama HTTP API: real token counts and decode timings, model kept resident, pulls only when missing |
+| llama.cpp runner | `engine/execution/llamacpp_runner.py` | In-process llama.cpp with prompt-lookup (Layer 1) and draft-model (Layer 3) speculative decoding |
+| AccelerationEngine | `engine/execution/acceleration_engine.py` | Layer fallback chain + acceptance-rate monitor; reports only what the runner measured |
+| ContextCompressor, SemanticCache, SemanticRouter, Pipeline | `engine/intelligence/` | Relevance-ranked compression, exact + fuzzy cache, trained 3-way router, orchestration |
+| CloudBYOKBackend | `gateway/byok.py` | The `cloud_byok` tier, any OpenAI-compatible endpoint |
+| CascadeCloudBackend | `gateway/backend.py` | Client for the hosted tier; streamed requests are billed from real usage |
+| Gateway | `gateway/api/app.py`, `gateway/store.py`, `gateway/serve.py` | OpenAI-compatible server: API-key auth, persistent spend caps (SQLite), streaming, Stripe metering |
+| CLI | `cli/main.py` | `init`, `ask`, `chat`, `stats`, `profile`, `doctor`, `config` |
 
-These checkpoints prevent interface drift between independently developed components.
+All components meet at `shared/types.py` (`ExecutionBackend`, `BackendResult`, `PipelineResult`, ...),
+so each backend is swappable without touching the Pipeline (NFR-07).
 
----
+## Tests
 
-# Roadmap
-
-| Phase | Weeks | Focus |
-|---|---:|---|
-| **1 — Foundation** | 1–2 | Shared contracts, hardware profiling, Pipeline skeleton, CLI skeleton |
-| **2 — Adaptive Execution** | 3–5 | Model ladder, acceleration, context compression, router v1, gateway |
-| **3 — Hardening** | 6–7 | Performance tuning, cache optimization, billing, integration tests |
-| **4 — CascadeCloud Launch** | 8–9 | Router retraining, E2E execution, hosted billing |
-| **5 — Polish & Launch** | 10 | Hardware bug triage, CLI polish, documentation, benchmark report |
-
----
-
-# Benchmarks
-
-Cascade benchmarks are designed to use **real measured results rather than placeholders or estimates**.
-
-The benchmark suite is available through:
-
-```text
-scripts/run_benchmark.py
+```bash
+pip install -e ".[dev]"
+pytest
 ```
 
-The generated report lives in:
+No test needs a GPU, a running Ollama, the network or Stripe (NFR-09). Live behaviour is covered
+by the scripts in `scripts/` and recorded in `docs/BENCHMARK_REPORT.md`.
 
-```text
-docs/benchmark-report.md
-```
+## Benchmarks
 
-The benchmark suite evaluates:
+Measured on this project's development laptop, not estimated. Full details, methodology and raw
+numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 
-### Execution
+| Metric | Target | Measured | |
+|---|---|---|---|
+| Router agreement on held-out queries | ≥85% | 89.2% (37 hand-labelled queries) | met |
+| Paraphrase cache hit rate vs exact | ≥90% | 93.3% | met |
+| Warm cache-hit lookup latency (NFR-02) | <150 ms | 22–55 ms | met |
+| Speculative decoding speedup (NFR-01), CPU-only laptop | ≥1.5x | prompt lookup 0.60x, 1B draft model 0.89x | **not met** — acceleration is off by default |
+| Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 
-- Token/s improvement
-- Speculative decoding speedup
-- Hardware-ladder success rate
-- Multi-machine compatibility
+The 37-query router set and 15 paraphrase pairs are small hand-made fixtures, not the planned
+200-query TriviaQA/GSM8K/HumanEval/MT-Bench suite.
 
-### Intelligence
+## Status
 
-- Exact cache hit rate
-- Paraphrased cache hit rate
-- Cache lookup latency
-- Router agreement
-- Comparison against always-local baseline
-- Comparison against always-cloud baseline
+See [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for what is done, what was found and fixed,
+and what still needs a decision or an account rather than code.
 
-### Platform
+## License
 
-- Gateway performance
-- Shared-prefix cost savings
-- Billing behavior
-- Four-tier CLI status rendering
-
----
-
-# Contributing
-
-Cascade is structured so contributors can generally own one track end-to-end.
-
-Each track has its own task ordering and test suite.
-
-### Development Principles
-
-- Keep the shared contract stable
-- Maintain loose coupling between tracks
-- Write tests for every major component
-- Avoid hardware-dependent CI tests
-- Avoid requiring live external services in CI
-- Keep interfaces provider-agnostic
-- Validate integration points at the scheduled checkpoints
-
-A pull request cannot merge unless its test suite is green.
-
-No track should require:
-
-```text
-Live GPU
-Live external API
-Live cloud infrastructure
-```
-
-for its standard CI test suite.
-
----
-
-# More Details
-
-The full project documentation includes:
-
-```text
-docs/
-├── quickstart.md
-├── config-reference.md
-└── benchmark-report.md
-```
-
-For the complete development requirements and task breakdown, refer to:
-
-```text
-Master Requirements & Development Document V2.2
-Individual Task Breakdown
-```
-
----
-
-# License
-
-MIT — see [`LICENSE`](LICENSE).
-
----
-
-<p align="center">
-  <b>Cascade</b><br>
-  Run the right model in the right place — automatically.
-</p>
+No license file has been chosen yet — all rights reserved by the authors until one is added.

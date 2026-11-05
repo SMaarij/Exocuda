@@ -103,9 +103,12 @@ class Pipeline:
         if tier == "local" and self._confidence_floor is not None and self._cascade_backend is not None:
             local_confidence = estimate_local_confidence(result["text"])
             if local_confidence < self._confidence_floor:
-                tier = "cascade_cloud"
-                escalated = True
-                result = self._cascade_backend.generate(compressed)
+                try:
+                    result = self._cascade_backend.generate(compressed)
+                    tier = "cascade_cloud"
+                    escalated = True
+                except Exception:
+                    pass  # NFR-03: keep the local answer rather than fail the request
 
         if self._cache is not None:
             self._cache.write(compressed, result["text"])
@@ -184,18 +187,22 @@ class Pipeline:
         configured -- and re-raises, uncaught, if not: this is the
         exact behavior j2_integration_test.py's test_j2_5 verifies).
         """
-        if tier == "cloud_byok" and self._cloud_byok_backend is not None:
-            return self._cloud_byok_backend.generate(messages), "cloud_byok", False
+        cascade_failed = False
+        remote = self._backend_for_tier(tier)
+        if remote is not self._backend:
+            try:
+                return remote.generate(messages), tier, False
+            except Exception:
+                # NFR-03: a remote tier being down (no network, bad key,
+                # spend cap) degrades to local instead of failing the request.
+                cascade_failed = tier == "cascade_cloud"
 
-        if tier == "cascade_cloud" and self._cascade_backend is not None:
-            return self._cascade_backend.generate(messages), "cascade_cloud", False
-
-        # "local", or a requested tier whose backend isn't configured yet.
+        # "local", a requested tier whose backend isn't configured, or a failed remote tier.
         try:
             result = self._backend.generate(messages)
             return result, "local", False
         except LocalExecutionBackendError:
-            if self._cascade_backend is None:
+            if self._cascade_backend is None or cascade_failed:
                 raise
             result = self._cascade_backend.generate(messages)
             return result, "cascade_cloud", True

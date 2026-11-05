@@ -1,0 +1,261 @@
+{
+  "run_at": "2026-11-05T08:12:24.159371+00:00",
+  "machine": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel"
+  },
+  "model": "llama3.2:3b-instruct-q4_K_M",
+  "draft": "llama3.2:1b-instruct-q4_K_M",
+  "max_tokens": 128,
+  "runner": "llama-cpp-python (CPU build)",
+  "summary": {
+    "none": {
+      "grounded": {
+        "mean_decode_tok_s": 6.688,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 65.8,
+        "wall_speedup_vs_plain": 1.0,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "3/3"
+      },
+      "open": {
+        "mean_decode_tok_s": 6.432,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 42.7,
+        "wall_speedup_vs_plain": 1.0,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "3/3"
+      },
+      "all": {
+        "mean_decode_tok_s": 6.56,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 108.5,
+        "wall_speedup_vs_plain": 1.0,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "6/6"
+      }
+    },
+    "prompt_lookup": {
+      "grounded": {
+        "mean_decode_tok_s": 4.684,
+        "decode_speedup_vs_plain": 0.7,
+        "total_wall_s": 99.4,
+        "wall_speedup_vs_plain": 0.662,
+        "mean_acceptance_rate": 0.283,
+        "outputs_identical_to_plain": "1/3"
+      },
+      "open": {
+        "mean_decode_tok_s": 3.206,
+        "decode_speedup_vs_plain": 0.498,
+        "total_wall_s": 88.1,
+        "wall_speedup_vs_plain": 0.485,
+        "mean_acceptance_rate": 0.014,
+        "outputs_identical_to_plain": "1/3"
+      },
+      "all": {
+        "mean_decode_tok_s": 3.945,
+        "decode_speedup_vs_plain": 0.601,
+        "total_wall_s": 187.5,
+        "wall_speedup_vs_plain": 0.579,
+        "mean_acceptance_rate": 0.148,
+        "outputs_identical_to_plain": "2/6"
+      }
+    },
+    "draft_model": {
+      "grounded": {
+        "mean_decode_tok_s": 6.553,
+        "decode_speedup_vs_plain": 0.98,
+        "total_wall_s": 57.6,
+        "wall_speedup_vs_plain": 1.143,
+        "mean_acceptance_rate": 0.865,
+        "outputs_identical_to_plain": "1/3"
+      },
+      "open": {
+        "mean_decode_tok_s": 5.144,
+        "decode_speedup_vs_plain": 0.8,
+        "total_wall_s": 53.4,
+        "wall_speedup_vs_plain": 0.8,
+        "mean_acceptance_rate": 0.552,
+        "outputs_identical_to_plain": "1/3"
+      },
+      "all": {
+        "mean_decode_tok_s": 5.848,
+        "decode_speedup_vs_plain": 0.892,
+        "total_wall_s": 111.0,
+        "wall_speedup_vs_plain": 0.978,
+        "mean_acceptance_rate": 0.709,
+        "outputs_identical_to_plain": "2/6"
+      }
+    }
+  },
+  "per_prompt": {
+    "none": [
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.921,
+        "wall_s": 21.48,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "```python\ndef merge_sorted(a: list, b: list) -> list:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Args:\n        a (list): The first sorted list.\n        b (list): The second sorted list.\n\n    Returns:\n        list: A new sorted list containing all elements from a and b.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j"
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.449,
+        "wall_s": 23.04,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "```python\ndef merge_sorted_lists(list1, list2):\n    list1_index, list2_index, merged_list = 0, 0, []\n    while list1_index < len(list1) and list2_index < len(list2):\n        if list1[list1_index] <= list2[list2_index]:\n            merged_list.append(list1[list1_index]); list1_index += 1\n        else:\n            merged_list.append(list2[list2_index]); list2_index += 1\n    merged_list.extend(list1[list1_index:]); merged_list.extend(list2[list2_index:])\n    return merged_list"
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.695,
+        "wall_s": 21.3,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "Here's the paragraph with British spelling:\n\nCascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.\n\nNote that the only change made was replacing \"model\" with \"model\" (no change needed), and \"API key\" with \"API key\" (no change needed). However, I did replace \"LLM\" with \"LLM\" (no change needed), but I should have changed"
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 6.681,
+        "wall_s": 19.56,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "A hash table is a data structure that stores key-value pairs in an array using a hash function to map keys to specific indices. The hash function takes a key as input and generates a unique index, known as the hash code, which corresponds to a specific location in the array. When a key-value pair is inserted into the hash table, the hash function is used to determine the location where the value should be stored. This allows for efficient lookup, insertion, and deletion of key-value pairs, with an average time complexity of O(1), making hash tables a popular choice for many applications, including databases, caching systems, and data storage"
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 6.166,
+        "wall_s": 2.96,
+        "tokens": 16,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "Crashing waves abide\nMoonlight dances on the tide\nPeaceful ocean night"
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 6.448,
+        "wall_s": 20.21,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "Here are three tips for writing readable Python:\n\n1. **Use Meaningful Variable Names**: Choose variable names that clearly describe the purpose of the variable. Avoid using single-letter variable names, as they can be confusing and make the code harder to understand. For example, instead of `i`, use `index` or `counter`.\n\n2. **Follow PEP 8 Conventions**: The Python Enhancement Proposal (PEP) 8 is a style guide that provides guidelines for writing readable Python code. Follow PEP 8 conventions for indentation, spacing, and naming conventions. For example, use four spaces for indentation, and use lowercase with"
+      }
+    ],
+    "prompt_lookup": [
+      {
+        "kind": "grounded",
+        "decode_tok_s": 3.43,
+        "wall_s": 40.51,
+        "tokens": 128,
+        "acceptance_rate": 0.128,
+        "ran": "prompt_lookup",
+        "text": "```python\ndef merge_sorted(a: list, b: list) -> list:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Args:\n        a (list): The first sorted list.\n        b (list): The second sorted list.\n\n    Returns:\n        list: A new sorted list containing all elements from a and b.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j"
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 2.653,
+        "wall_s": 47.04,
+        "tokens": 117,
+        "acceptance_rate": 0.089,
+        "ran": "prompt_lookup",
+        "text": "```python\ndef merge_sorted_arrays(left_array, right_array):\n    left_index, right_index, merged_array = 0, 0, []\n    while left_index < len(left_array) and right_index < len(right_array):\n        if left_array[left_index] <= right_array[right_index]:\n            merged_array.append(left_array[left_index]); left_index += 1\n        else:\n            merged_array.append(right_array[right_index]); right_index += 1\n    merged_array.extend(left_array[left_index:]); merged_array.extend(right_array[right_index:])\n    return merged_array\n```"
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 7.97,
+        "wall_s": 11.83,
+        "tokens": 69,
+        "acceptance_rate": 0.633,
+        "ran": "prompt_lookup",
+        "text": "Here's the paragraph with British spelling:\n\nCascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere."
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 2.751,
+        "wall_s": 45.37,
+        "tokens": 123,
+        "acceptance_rate": 0.009,
+        "ran": "prompt_lookup",
+        "text": "A hash table is a data structure that stores key-value pairs in an array using a hash function to map keys to specific indices. When a key-value pair is inserted, the hash function generates a unique index based on the key, and the corresponding value is stored at that index. Hash tables allow for efficient lookup, insertion, and deletion of elements, with an average time complexity of O(1), making them a fundamental data structure in computer science. The hash function must be carefully chosen to minimize collisions, which occur when two different keys produce the same index, and to ensure that the table remains balanced and efficient."
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 3.429,
+        "wall_s": 5.16,
+        "tokens": 16,
+        "acceptance_rate": 0.0,
+        "ran": "prompt_lookup",
+        "text": "Crashing waves abide\nMoonlight dances on the tide\nPeaceful ocean night"
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 3.438,
+        "wall_s": 37.61,
+        "tokens": 128,
+        "acceptance_rate": 0.032,
+        "ran": "prompt_lookup",
+        "text": "Here are three tips for writing readable Python:\n\n1. **Use Meaningful Variable Names**: Choose variable names that clearly describe the purpose of the variable. Avoid using single-letter variable names, as they can be confusing and difficult to understand. Instead, use descriptive names like `user_name`, `product_price`, or `average_score`.\n\n2. **Follow PEP 8 Conventions**: The Python Enhancement Proposal (PEP) 8 is a style guide that provides guidelines for writing readable and maintainable Python code. Some key conventions include:\n   - Indentation: Use 4 spaces for indentation.\n   - Line length: Limit lines"
+      }
+    ],
+    "draft_model": [
+      {
+        "kind": "grounded",
+        "decode_tok_s": 7.151,
+        "wall_s": 21.04,
+        "tokens": 128,
+        "acceptance_rate": 0.926,
+        "ran": "draft_model",
+        "text": "```python\ndef merge_sorted(a: list, b: list) -> list:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Args:\n        a (list): The first sorted list.\n        b (list): The second sorted list.\n\n    Returns:\n        list: A new sorted list containing all elements from a and b.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j"
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.219,
+        "wall_s": 22.34,
+        "tokens": 117,
+        "acceptance_rate": 0.786,
+        "ran": "draft_model",
+        "text": "```python\ndef merge_sorted_arrays(left_array, right_array):\n    left_index, right_index, merged_array = 0, 0, []\n    while left_index < len(left_array) and right_index < len(right_array):\n        if left_array[left_index] <= right_array[right_index]:\n            merged_array.append(left_array[left_index]); left_index += 1\n        else:\n            merged_array.append(right_array[right_index]); right_index += 1\n    merged_array.extend(left_array[left_index:]); merged_array.extend(right_array[right_index:])\n    return merged_array\n```"
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.288,
+        "wall_s": 14.22,
+        "tokens": 69,
+        "acceptance_rate": 0.883,
+        "ran": "draft_model",
+        "text": "Here's the paragraph with British spelling:\n\nCascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere."
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 5.542,
+        "wall_s": 22.38,
+        "tokens": 121,
+        "acceptance_rate": 0.632,
+        "ran": "draft_model",
+        "text": "A hash table is a data structure that stores key-value pairs in an array using a hash function to map keys to specific indices. When a key is inserted, the hash function generates a unique index based on the key's value, and the corresponding value is stored at that index. This allows for efficient lookup, insertion, and deletion of elements, as the hash function enables rapid access to the desired value. Hash tables are particularly useful for applications that require fast lookups, such as databases, caching systems, and set operations, as they provide an average time complexity of O(1) for these operations."
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 5.065,
+        "wall_s": 4.05,
+        "tokens": 16,
+        "acceptance_rate": 0.5,
+        "ran": "draft_model",
+        "text": "Crashing waves abide\nMoonlight dances on the tide\nPeaceful ocean night"
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 4.826,
+        "wall_s": 26.95,
+        "tokens": 128,
+        "acceptance_rate": 0.524,
+        "ran": "draft_model",
+        "text": "Here are three tips for writing readable Python:\n\n1. **Use Meaningful Variable Names**: Choose variable names that clearly describe the purpose of the variable. Avoid using single-letter variable names, as they can be confusing and difficult to understand. Instead, use descriptive names like `user_name` or `product_price`.\n\n2. **Follow PEP 8 Conventions**: The Python Enhancement Proposal (PEP) 8 is a widely accepted style guide for Python code. It provides guidelines for indentation, spacing, and naming conventions. Following PEP 8 conventions can make your code more readable and maintainable. For example, use four spaces for"
+      }
+    ]
+  }
+}

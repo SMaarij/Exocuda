@@ -1,8 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "cascade"
-version = "0.1.0"
+version = "0.2.0"
 description = "Adaptive LLM Optimization & Routing Platform"
 requires-python = ">=3.10"
+dependencies = [
+    "psutil>=5.9",
+    "numpy>=1.26",
+    "fastembed>=0.3",
+    "scikit-learn>=1.4",
+    "httpx>=0.27",
+    "typer>=0.12",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.6",
+    "stripe>=9.0",
+]
+
+[project.optional-dependencies]
+# Real speculative decoding (prompt lookup / draft model). CPU wheels:
+#   pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llamacpp = ["llama-cpp-python>=0.3"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1"]
+
+[project.scripts]
+cascade = "cli.main:app"
+
+[tool.setuptools.packages.find]
+include = ["engine*", "gateway*", "cli*", "shared*"]
+exclude = ["*.tests*"]
 
 [tool.pytest.ini_options]
 # Repo-wide so CI (Section 10.2) picks up every track's tests/

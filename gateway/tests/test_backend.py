@@ -86,6 +86,29 @@ def test_generate_stream_releases_reservation_on_failure() -> None:
     assert meter.spent_usd == 0.0
 
 
+def test_generate_passes_messages_through_unflattened() -> None:
+    provider = FakeCloudInferenceProvider()
+    messages = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}]
+    CascadeCloudBackend(provider=provider).generate(messages)
+    assert provider.last_messages == messages
+
+
+def test_generate_stream_reconciles_to_reported_usage() -> None:
+    provider = FakeCloudInferenceProvider(text="one two", prompt_tokens=30, completion_tokens=70)
+    meter = UsageMeter()
+    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=1.0, usage_meter=meter)
+    list(backend.generate_stream(_messages()))
+    assert meter.spent_usd == pytest.approx(0.1)  # 100 real tokens @ $1/1k, not the worst-case estimate
+
+
+def test_generate_stream_keeps_reservation_when_usage_unreported() -> None:
+    provider = FakeCloudInferenceProvider(report_stream_usage=False)
+    meter = UsageMeter()
+    backend = CascadeCloudBackend(provider=provider, price_per_1k_tokens=1.0, usage_meter=meter, max_tokens=500)
+    list(backend.generate_stream(_messages()))
+    assert meter.spent_usd > 0.5  # worst-case reservation (>= max_tokens) stands
+
+
 def test_default_construction_does_not_touch_network() -> None:
     """Constructing with all defaults (as the module-level isinstance assert does) must never make an HTTP call."""
     backend = CascadeCloudBackend()

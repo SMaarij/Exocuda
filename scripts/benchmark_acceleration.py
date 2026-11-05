@@ -1,145 +1,166 @@
-
 """
 scripts/benchmark_acceleration.py
 
-Phase 3, Task 12 -- Performance tuning pass (NFR-01, NFR-02).
+NFR-01 measurement: real decode speed of each acceleration layer on THIS
+machine, using LlamaCppRunner (the runner that can actually speculate).
 
-Runs a live benchmark comparing tok/s across all three AccelerationEngine
-layers on this machine. Requires a live Ollama instance with the target
-model already pulled.
+    none           plain autoregressive decoding (baseline)
+    prompt_lookup  Layer 1: n-gram drafts from the context
+    draft_model    Layer 3: a small same-family draft model
+
+Greedy decoding (temperature 0) so the lossless claim is checkable: each
+accelerated output is compared token-for-token with the baseline output.
 
 Usage:
-    python scripts/benchmark_acceleration.py \
-        [--model llama3.2] \
-        [--quant 3b-instruct-q4_K_M] \
-        [--prompts 5] \
-        [--pairs-file ~/.cascade/validated_pairs.json]
+    python scripts/benchmark_acceleration.py [--model llama3.2]
+        [--quant 3b-instruct-q4_K_M] [--draft llama3.2:1b-instruct-q4_K_M]
+        [--max-tokens 128] [--out docs/benchmark/acceleration_results.json]
 
-Outputs:
-    - Console table: Layer 1/2/3 tok/s and speedup vs Layer 1
-    - Pass/Fail verdict for NFR-01 (>= 1.5x on Layer 2/3)
-    - Pass/Fail verdict for NFR-02 (est_cost_usd == 0 regardless of layer)
-
-This is integration/manual-testing scope (NFR-09) -- it requires a live
-model. For automated CI, see engine/execution/tests/test_backend_real.py
-which uses FakeRunner and passes the same NFR assertions without any GPU.
+Integration scope (NFR-09): needs Ollama running and llama-cpp-python.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import platform
+import statistics
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 DEFAULT_MODEL = "llama3.2"
 DEFAULT_QUANT = "3b-instruct-q4_K_M"
-DEFAULT_PROMPTS = [
-    "What is the capital of Germany?",
-    "Explain recursion in one sentence.",
-    "Write a haiku about the ocean.",
-    "What is 17 * 23?",
-    "Name three programming languages.",
+
+_CODE = '''def merge_sorted(a, b):
+    i, j, out = 0, 0, []
+    while i < len(a) and j < len(b):
+        if a[i] <= b[j]:
+            out.append(a[i]); i += 1
+        else:
+            out.append(b[j]); j += 1
+    out.extend(a[i:]); out.extend(b[j:])
+    return out
+'''
+_TEXT = (
+    "Cascade routes each LLM request to the cheapest place that can answer it well: "
+    "a local model on the user's own machine, the user's own cloud API key, or a hosted "
+    "fallback. A semantic cache answers repeated questions instantly, and a context "
+    "compressor trims long conversations before they are sent anywhere."
+)
+
+# Context-grounded prompts (where copying from the input is natural) and
+# open-ended ones (where it isn't) -- prompt lookup should only help the first kind.
+PROMPTS = [
+    ("grounded", "Add type hints and a docstring to this function. Return only the code.\n\n" + _CODE),
+    ("grounded", "Rewrite this function with descriptive variable names. Return only the code.\n\n" + _CODE),
+    ("grounded", "Repeat the following paragraph, but in British spelling:\n\n" + _TEXT),
+    ("open", "Explain what a hash table is in one paragraph."),
+    ("open", "Write a haiku about the ocean."),
+    ("open", "Give three tips for writing readable Python."),
 ]
 
+MODES = ("none", "prompt_lookup", "draft_model")
 
-def _benchmark_layer(model_id: str, quant: str, prompts: list[str], layer_name: str,
-                     model_has_heads: bool, pairs_file: Path) -> dict:
-    from engine.execution.acceleration_engine import (
-        AccelerationEngine, AccelerationLayer, load_validated_pairs,
-    )
-    from engine.execution.model_runner import OllamaReferenceModelRunner
 
-    layer_map = {
-        "layer1": AccelerationLayer.LOOKAHEAD,
-        "layer2": AccelerationLayer.DRAFT_HEADS,
-        "layer3": AccelerationLayer.DRAFT_MODEL,
-    }
-    layer = layer_map[layer_name]
+def run(model: str, quant: str, draft: str, max_tokens: int) -> dict:
+    from engine.execution.llamacpp_runner import LlamaCppRunner
 
-    runner = OllamaReferenceModelRunner()
-    pairs  = load_validated_pairs(pairs_file)
-    engine = AccelerationEngine(
-        runner=runner,
-        preferred_layer=layer,
-        model_has_draft_heads=model_has_heads,
-        validated_pairs=pairs,
-    )
+    runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0)
+    results: dict[str, list[dict]] = {}
+    for mode in MODES:
+        if not runner.set_acceleration(mode):
+            print(f"  {mode}: not supported by runner, skipped")
+            continue
+        runner.load(model, quant)
+        runner.generate("Say OK.", 8)  # warm-up: first call pays one-off allocation costs
+        rows = []
+        for kind, prompt in PROMPTS:
+            t = time.perf_counter()
+            sample = runner.generate(prompt, max_tokens)
+            wall_s = time.perf_counter() - t
+            rows.append({
+                "kind": kind,
+                "decode_tok_s": round(sample.tok_s, 3),
+                "wall_s": round(wall_s, 2),
+                "tokens": sample.tokens_generated + 1,
+                "acceptance_rate": None if sample.acceptance_rate is None else round(sample.acceptance_rate, 3),
+                "ran": sample.acceleration,
+                "text": sample.output_text,
+            })
+            print(f"  {mode:<14} {kind:<9} {sample.tok_s:6.2f} tok/s  wall {wall_s:6.1f}s  "
+                  f"acc={rows[-1]['acceptance_rate']}", flush=True)
+        results[mode] = rows
+        runner.unload()
+    return results
 
-    tok_s_list: list[float] = []
-    cost_list:  list[float] = []
 
-    print(f"\n  Running {layer_name} ({engine._resolve_layer(model_id).name})...")
-    for i, prompt in enumerate(prompts, 1):
-        engine.load(model_id, quant)
-        sample = engine.generate_accelerated(prompt, max_tokens=64)
-        engine.unload()
-        tok_s_list.append(sample.tok_s)
-        cost_list.append(0.0)   # local is always free (NFR-02)
-        print(f"    prompt {i}: {sample.tok_s:.1f} tok/s  "
-              f"layer={sample.active_layer.name}  "
-              f"speculative={sample.speculative_active}")
-
-    return {
-        "layer":      layer_name,
-        "actual":     sample.active_layer.name,
-        "avg_tok_s":  sum(tok_s_list) / len(tok_s_list),
-        "est_cost":   sum(cost_list),
-    }
+def summarize(results: dict) -> dict:
+    base = results.get("none", [])
+    summary = {}
+    for mode, rows in results.items():
+        per_kind = {}
+        for kind in ("grounded", "open", "all"):
+            idx = [i for i, r in enumerate(rows) if kind == "all" or r["kind"] == kind]
+            if not idx:
+                continue
+            tok_s = statistics.mean(rows[i]["decode_tok_s"] for i in idx)
+            wall = sum(rows[i]["wall_s"] for i in idx)
+            base_tok_s = statistics.mean(base[i]["decode_tok_s"] for i in idx) if base else 0.0
+            base_wall = sum(base[i]["wall_s"] for i in idx) if base else 0.0
+            identical = sum(1 for i in idx if base and rows[i]["text"] == base[i]["text"])
+            accs = [rows[i]["acceptance_rate"] for i in idx if rows[i]["acceptance_rate"] is not None]
+            per_kind[kind] = {
+                "mean_decode_tok_s": round(tok_s, 3),
+                "decode_speedup_vs_plain": round(tok_s / base_tok_s, 3) if base_tok_s else None,
+                "total_wall_s": round(wall, 1),
+                "wall_speedup_vs_plain": round(base_wall / wall, 3) if wall else None,
+                "mean_acceptance_rate": round(statistics.mean(accs), 3) if accs else None,
+                "outputs_identical_to_plain": f"{identical}/{len(idx)}",
+            }
+        summary[mode] = per_kind
+    return summary
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Benchmark AccelerationEngine layers (NFR-01, NFR-02)")
-    parser.add_argument("--model",      default=DEFAULT_MODEL)
-    parser.add_argument("--quant",      default=DEFAULT_QUANT)
-    parser.add_argument("--prompts",    type=int, default=len(DEFAULT_PROMPTS))
-    parser.add_argument("--pairs-file", default=str(Path.home() / ".cascade" / "validated_pairs.json"))
-    parser.add_argument("--model-has-heads", action="store_true", default=False,
-                        help="Pass if the model has trained Medusa/EAGLE heads")
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--quant", default=DEFAULT_QUANT)
+    parser.add_argument("--draft", default="llama3.2:1b-instruct-q4_K_M")
+    parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument("--out", default="docs/benchmark/acceleration_results.json")
     args = parser.parse_args(argv)
 
-    prompts    = DEFAULT_PROMPTS[:args.prompts]
-    pairs_path = Path(args.pairs_file)
+    print(f"Benchmarking {args.model}:{args.quant} (draft {args.draft}), {len(PROMPTS)} prompts x {len(MODES)} modes")
+    results = run(args.model, args.quant, args.draft, args.max_tokens)
+    summary = summarize(results)
 
-    print(f"Benchmarking {args.model}:{args.quant} across 3 acceleration layers")
-    print(f"Prompts: {len(prompts)}")
+    print("\nmode            subset     decode tok/s  speedup  wall speedup  acceptance  identical")
+    for mode, kinds in summary.items():
+        for kind, s in kinds.items():
+            print(f"{mode:<15} {kind:<9} {s['mean_decode_tok_s']:>12.2f} {s['decode_speedup_vs_plain'] or 0:>8.2f}x"
+                  f" {s['wall_speedup_vs_plain'] or 0:>11.2f}x  {str(s['mean_acceptance_rate']):>10}  {s['outputs_identical_to_plain']:>9}")
 
-    results = {}
-    for layer in ("layer1", "layer2", "layer3"):
-        try:
-            results[layer] = _benchmark_layer(
-                args.model, args.quant, prompts, layer,
-                args.model_has_heads, pairs_path,
-            )
-        except Exception as exc:
-            print(f"  {layer} ERROR: {exc}")
-            results[layer] = {"avg_tok_s": 0.0, "est_cost": 0.0, "actual": "ERROR"}
+    best = max((s["all"]["decode_speedup_vs_plain"] or 0) for m, s in summary.items() if m != "none") if len(summary) > 1 else 0
+    print(f"\nNFR-01 (>= 1.5x): {'PASS' if best >= 1.5 else 'NOT MET'} on this machine (best decode speedup {best:.2f}x)")
 
-    print("\n" + "=" * 60)
-    print("RESULTS")
-    print("=" * 60)
-    l1 = results["layer1"]["avg_tok_s"]
-    header = f"{'Layer':<10} {'Actual':<15} {'avg tok/s':>10} {'vs Layer1':>10} {'NFR-01':>8}"
-    print(header)
-    print("-" * len(header))
-    all_pass = True
-    for key, label in [("layer1","Layer 1"), ("layer2","Layer 2"), ("layer3","Layer 3")]:
-        r     = results[key]
-        ratio = r["avg_tok_s"] / l1 if l1 > 0 else 0.0
-        nfr01 = "N/A" if key == "layer1" else ("PASS" if ratio >= 1.5 else "FAIL")
-        if nfr01 == "FAIL":
-            all_pass = False
-        print(f"{label:<10} {r['actual']:<15} {r['avg_tok_s']:>10.2f} {ratio:>10.2f}x {nfr01:>8}")
-
-    print()
-    nfr02_pass = all(r["est_cost"] == 0.0 for r in results.values())
-    print(f"NFR-02 (est_cost_usd == 0 for all layers): {'PASS' if nfr02_pass else 'FAIL'}")
-    if not nfr02_pass:
-        all_pass = False
-
-    print()
-    print("Overall:", "PASS" if all_pass else "FAIL")
-    return 0 if all_pass else 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({
+        "run_at": datetime.now(timezone.utc).isoformat(),
+        "machine": {"platform": platform.platform(), "processor": platform.processor()},
+        "model": f"{args.model}:{args.quant}",
+        "draft": args.draft,
+        "max_tokens": args.max_tokens,
+        "runner": "llama-cpp-python (CPU build)",
+        "summary": summary,
+        "per_prompt": results,
+    }, indent=2), encoding="utf-8")
+    print(f"Wrote {out}")
+    return 0
 
 
 if __name__ == "__main__":

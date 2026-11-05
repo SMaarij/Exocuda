@@ -208,10 +208,12 @@ That gap is the margin.
 200-query reference suite (TriviaQA/GSM8K/HumanEval/MT-Bench subsets).
 Key targets: speculative speedup ≥1.5x, router-vs-oracle agreement
 ≥85%, cache hit rate ≥20%, hardware ladder success rate ≥90% on 8GB+
-machines, cost reduction ≥50% vs pure-cloud baseline. **Not yet run**
-— the harness (`scripts/run_benchmark.py`) doesn't exist yet; this is
-explicitly flagged rather than reporting fabricated numbers (see
-Track A's and Track B's phase summaries).
+machines, cost reduction ≥50% vs pure-cloud baseline. **Partly run**
+(2026-11): router agreement, cache hit rate and the acceleration
+speedup have measured results in `docs/BENCHMARK_REPORT.md` (the
+speedup target is not met on CPU-only hardware); the full 200-query
+dataset suite and the multi-machine ladder test are still to do — see
+`docs/PROJECT_STATUS.md`.
 
 ## 12. Risk Register (selected)
 

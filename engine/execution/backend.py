@@ -131,11 +131,14 @@ class LocalExecutionBackend:
         runner: Optional[ReferenceModelRunner] = None,
         profiler: Optional[HardwareProfiler] = None,
         ladder: Optional[ModelLadder] = None,
-        preferred_layer: AccelerationLayer = AccelerationLayer.LOOKAHEAD,
+        # Off by default: measured slower than plain decoding on CPU-only
+        # hardware (docs/benchmark/acceleration_results.json). Opt in per machine.
+        preferred_layer: AccelerationLayer = AccelerationLayer.NONE,
         model_id: str = "llama3.2",
         model_has_draft_heads: bool = False,
         validated_pairs: Optional[list[DraftPair]] = None,
         simulated_latency_ms: float = 0.0,
+        max_tokens: int = 512,
     ) -> None:
         # Use OllamaReferenceModelRunner only as a real production default;
         # tests always inject a FakeReferenceModelRunner (NFR-09).
@@ -150,6 +153,8 @@ class LocalExecutionBackend:
             validated_pairs=validated_pairs or [],
         )
         self._simulated_latency_ms = simulated_latency_ms
+        self._max_tokens = max_tokens
+        self._loaded: Optional[tuple[str, str]] = None
 
     # ---- ExecutionBackend protocol implementation ----------------------
 
@@ -172,14 +177,7 @@ class LocalExecutionBackend:
         sample, used_rung = self._generate_with_stepdown(prompt, rung)
         wall_ms = (time.monotonic() - start) * 1000
 
-        # Real Ollama output now flows through (model_runner.py's
-        # OllamaReferenceModelRunner sets output_text from real stdout).
-        # The `or` fallback exists only for FakeReferenceModelRunner /
-        # _FakeRunner test doubles across the suite, none of which set
-        # output_text -- an empty string there would make
-        # generate_stream()'s word-by-word split yield zero tokens,
-        # breaking every "yields at least one token" test. Production
-        # always uses the real runner, so this branch is test-only.
+        # Fallback only matters for test doubles that never set output_text.
         text = sample.base.output_text or (sample.base.tokens_generated * "x")
 
         return {
@@ -225,21 +223,27 @@ class LocalExecutionBackend:
         Attempt generation at rung; on OOM step down and retry (FR-02.3).
         Raises LocalExecutionBackendError if all rungs are exhausted.
         """
+        last_error: Optional[Exception] = None
         while rung is not None:
+            real_tag = _resolve_real_tag(self._model_id, rung.label)
             try:
-                real_tag = _resolve_real_tag(self._model_id, rung.label)
-                self._engine.load(self._model_id, real_tag)
-                sample = self._engine.generate_accelerated(prompt, max_tokens=256)
-                self._engine.unload()
+                # Keep the model resident between requests; reloading per
+                # request costs seconds of cold-load each time.
+                if self._loaded != (self._model_id, real_tag):
+                    self._engine.load(self._model_id, real_tag)
+                    self._loaded = (self._model_id, real_tag)
+                sample = self._engine.generate_accelerated(prompt, max_tokens=self._max_tokens)
                 return sample, rung
-            except Exception:
+            except Exception as exc:
                 # OOM or any load failure: try the next lower rung (FR-02.3)
+                last_error = exc
                 self._engine.unload()
+                self._loaded = None
                 rung = self._ladder.step_down(rung)
 
+        detail = f" Last error: {last_error}" if last_error else " No rung is viable for this machine's HardwareProfile."
         raise LocalExecutionBackendError(
-            "All QuantRungs exhausted (OOM on every level). "
-            "Pipeline should route this request to CascadeCloud (FR-07)."
+            "Local execution failed on every QuantRung." + detail
         )
 
 

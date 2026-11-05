@@ -1,33 +1,28 @@
 """
 gateway/providers/http_provider.py
 
-Track C, Task 7 (FR-07.1, FR-07.6, FR-07.7).
+Production CloudInferenceProvider: any OpenAI-compatible chat-completions
+endpoint. `base_url` is the server root without `/v1` (e.g.
+https://api.openai.com, https://openrouter.ai/api, http://127.0.0.1:11434
+for Ollama, or a vLLM/SGLang deployment).
 
-Production CloudInferenceProvider: calls an OpenAI-compatible
-chat-completions endpoint over HTTP. Works unmodified against vLLM,
-SGLang, or any wholesale serverless GPU provider that serves that API
-shape (FR-07.4's provider-swap-by-config, see base.py's docstring).
-
-FR-07.6/07.7 (continuous batching, PagedAttention, prefix caching,
-FlashAttention) are properties of the SERVING ENGINE running behind
-this HTTP endpoint (vLLM/SGLang), not something this HTTP client
-implements itself -- this class's job is just to call that endpoint
-correctly and report real cost/timing back to BackendResult. Which
-serving engine is actually running is an infrastructure/deployment
-decision (which wholesale GPU provider is contracted, how their vLLM
-instance is configured), documented as a joint decision in
-shared/CHANGELOG.md the same way Track A flagged the reference model
-tag as one.
+FR-07.6/07.7 (continuous batching, PagedAttention, prefix caching) are
+properties of the serving engine behind the endpoint, not of this client.
 """
 
 from __future__ import annotations
 
+import json
 import time
-from typing import Iterator, Optional
+from typing import Generator, Optional
 
 import httpx
 
-from gateway.providers.base import CloudGenerationSample
+from gateway.providers.base import ChatMessages, CloudGenerationSample, CloudUsage
+
+
+class ProviderError(RuntimeError):
+    """The upstream endpoint rejected or failed a request."""
 
 
 class HTTPInferenceProvider:
@@ -36,7 +31,7 @@ class HTTPInferenceProvider:
         base_url: str,
         api_key: str,
         model_id: str,
-        timeout_s: float = 60.0,
+        timeout_s: float = 120.0,
         client: Optional[httpx.Client] = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
@@ -44,56 +39,73 @@ class HTTPInferenceProvider:
         self._model_id = model_id
         self._client = client or httpx.Client(timeout=timeout_s)
 
-    def generate(self, prompt: str, max_tokens: int) -> CloudGenerationSample:
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+
+    def _url(self) -> str:
+        return f"{self._base_url}/v1/chat/completions"
+
+    @staticmethod
+    def _raise_for_status(response: httpx.Response) -> None:
+        if response.status_code >= 400:
+            try:
+                body = response.read().decode("utf-8", errors="replace")
+            except httpx.HTTPError:
+                body = ""
+            raise ProviderError(f"upstream returned {response.status_code}: {body[:300]}")
+
+    def generate(self, messages: ChatMessages, max_tokens: int) -> CloudGenerationSample:
         start = time.monotonic()
         response = self._client.post(
-            f"{self._base_url}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            json={
-                "model": self._model_id,
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens,
-                "stream": False,
-            },
+            self._url(),
+            headers=self._headers(),
+            json={"model": self._model_id, "messages": messages, "max_tokens": max_tokens, "stream": False},
         )
-        response.raise_for_status()
+        self._raise_for_status(response)
         payload = response.json()
-        elapsed_s = time.monotonic() - start
-
-        text = payload["choices"][0]["message"]["content"]
-        usage = payload.get("usage", {})
+        usage = payload.get("usage") or {}
         return CloudGenerationSample(
-            text=text,
+            text=payload["choices"][0]["message"]["content"] or "",
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
-            elapsed_s=elapsed_s,
+            elapsed_s=time.monotonic() - start,
         )
 
-    def generate_stream(self, prompt: str, max_tokens: int) -> Iterator[str]:
+    def generate_stream(self, messages: ChatMessages, max_tokens: int) -> Generator[str, None, Optional[CloudUsage]]:
+        usage: Optional[CloudUsage] = None
         with self._client.stream(
             "POST",
-            f"{self._base_url}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {self._api_key}"},
+            self._url(),
+            headers=self._headers(),
             json={
                 "model": self._model_id,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages,
                 "max_tokens": max_tokens,
                 "stream": True,
+                # Asks the server for a final chunk carrying real token
+                # usage, so streamed requests can be billed exactly.
+                "stream_options": {"include_usage": True},
             },
         ) as response:
-            response.raise_for_status()
+            self._raise_for_status(response)
             for line in response.iter_lines():
-                if not line or not line.startswith("data: "):
+                if not line.startswith("data: "):
                     continue
-                data = line[len("data: "):]
-                if data.strip() == "[DONE]":
+                data = line[len("data: "):].strip()
+                if data == "[DONE]":
                     break
-                import json
-
                 chunk = json.loads(data)
-                delta = chunk["choices"][0].get("delta", {}).get("content")
-                if delta:
-                    yield delta
+                if chunk.get("usage"):
+                    usage = CloudUsage(chunk["usage"].get("prompt_tokens", 0), chunk["usage"].get("completion_tokens", 0))
+                for choice in chunk.get("choices") or []:
+                    delta = (choice.get("delta") or {}).get("content")
+                    if delta:
+                        yield delta
+        return usage
 
     def close(self) -> None:
         self._client.close()

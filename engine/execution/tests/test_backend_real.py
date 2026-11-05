@@ -241,64 +241,78 @@ def test_speculative_active_false_with_layer1(tmp_path) -> None:
     assert result["speculative_active"] is False
 
 
-def test_speculative_active_true_with_layer2(tmp_path) -> None:
-    backend = _backend(
-        tmp_path,
-        preferred_layer=AccelerationLayer.DRAFT_HEADS,
-        model_has_draft_heads=True,
-    )
-    result = backend.generate(SAMPLE_MESSAGES)
-    assert result["speculative_active"] is True
+class _FakeDraftCapableRunner(FakeRunner):
+    """Simulates a runner that really runs a draft model (like LlamaCppRunner)."""
+
+    def __init__(self, tok_s: float = 20.0) -> None:
+        super().__init__(tok_s=tok_s)
+        self.mode = "none"
+
+    def set_acceleration(self, mode: str) -> bool:
+        if mode not in ("none", "prompt_lookup", "draft_model"):
+            return False
+        self.mode = mode
+        return True
+
+    def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
+        base = super().generate(prompt, max_tokens)
+        return GenerationSample(
+            tokens_generated=base.tokens_generated,
+            elapsed_s=base.elapsed_s,
+            peak_memory_gb=base.peak_memory_gb,
+            acceleration=self.mode,
+            acceptance_rate=0.8 if self.mode != "none" else None,
+        )
 
 
-def test_speculative_active_true_with_layer3(tmp_path) -> None:
-    backend = _backend(
-        tmp_path,
-        preferred_layer=AccelerationLayer.DRAFT_MODEL,
-        validated_pairs=[DraftPair("llama3.2", "draft", True)],
-    )
-    result = backend.generate(SAMPLE_MESSAGES)
-    assert result["speculative_active"] is True
+def _accelerated_backend(tmp_path: Path, layer: AccelerationLayer, pairs: list | None = None) -> LocalExecutionBackend:
+    runner = _FakeDraftCapableRunner(tok_s=20.0)
+    profiler = HardwareProfiler(runner=runner, profile_path=_write_profile(tmp_path))
+    return LocalExecutionBackend(runner=runner, profiler=profiler, preferred_layer=layer, validated_pairs=pairs or [])
 
 
-# --------------------------------------------------------------------------
-# Phase 3 Task 12 -- NFR-01: Layer 2/3 >= 1.5x tok/s over Layer 1 baseline
-# --------------------------------------------------------------------------
+def test_plain_runner_never_reports_speculation(tmp_path) -> None:
+    """Ollama-style runner: no speculative decoding happens, so none is claimed."""
+    backend = _backend(tmp_path, preferred_layer=AccelerationLayer.DRAFT_MODEL, validated_pairs=[DraftPair("llama3.2", "draft", True)])
+    assert backend.generate(SAMPLE_MESSAGES)["speculative_active"] is False
 
 
-def _tok_s_for_layer(tmp_path: Path, layer: AccelerationLayer) -> float:
-    heads = layer == AccelerationLayer.DRAFT_HEADS
-    pair  = (
-        [DraftPair("llama3.2", "draft", True)]
-        if layer == AccelerationLayer.DRAFT_MODEL
-        else []
-    )
-    backend = _backend(
-        tmp_path,
-        tok_s=20.0,
-        preferred_layer=layer,
-        model_has_draft_heads=heads,
-        validated_pairs=pair,
-    )
-    return backend.generate(SAMPLE_MESSAGES)["tok_s"]
+def test_speculative_active_true_with_layer3_on_capable_runner(tmp_path) -> None:
+    backend = _accelerated_backend(tmp_path, AccelerationLayer.DRAFT_MODEL, [DraftPair("llama3.2", "draft", True)])
+    assert backend.generate(SAMPLE_MESSAGES)["speculative_active"] is True
 
 
-def test_nfr01_layer2_achieves_1_5x_over_layer1(tmp_path) -> None:
-    """NFR-01: Layer 2 (draft heads) must be >= 1.5x Layer 1 tok/s."""  # NFR-01
-    layer1 = _tok_s_for_layer(tmp_path / "l1", AccelerationLayer.LOOKAHEAD)
-    layer2 = _tok_s_for_layer(tmp_path / "l2", AccelerationLayer.DRAFT_HEADS)
-    assert layer2 >= layer1 * 1.5, (
-        f"NFR-01 FAIL: Layer 2 tok/s ({layer2:.1f}) < 1.5x Layer 1 ({layer1:.1f})"
-    )
+def test_layer2_without_heads_falls_back_to_layer1_on_capable_runner(tmp_path) -> None:
+    backend = _accelerated_backend(tmp_path, AccelerationLayer.DRAFT_HEADS)
+    assert backend.generate(SAMPLE_MESSAGES)["speculative_active"] is True
 
 
-def test_nfr01_layer3_achieves_1_5x_over_layer1(tmp_path) -> None:
-    """NFR-01: Layer 3 (draft model) must be >= 1.5x Layer 1 tok/s."""  # NFR-01
-    layer1 = _tok_s_for_layer(tmp_path / "l1", AccelerationLayer.LOOKAHEAD)
-    layer3 = _tok_s_for_layer(tmp_path / "l3", AccelerationLayer.DRAFT_MODEL)
-    assert layer3 >= layer1 * 1.5, (
-        f"NFR-01 FAIL: Layer 3 tok/s ({layer3:.1f}) < 1.5x Layer 1 ({layer1:.1f})"
-    )
+# NFR-01's speedup can't be asserted in a unit test -- any number here
+# would come from the fake. What CAN be asserted is that the backend
+# never inflates the runner's measurement; the real speedup is measured
+# by scripts/benchmark_acceleration.py (docs/BENCHMARK_REPORT.md).
+@pytest.mark.parametrize("layer", [AccelerationLayer.NONE, AccelerationLayer.LOOKAHEAD, AccelerationLayer.DRAFT_MODEL])
+def test_reported_tok_s_is_the_runners_measurement(tmp_path, layer) -> None:
+    backend = _accelerated_backend(tmp_path, layer, [DraftPair("llama3.2", "draft", True)])
+    assert backend.generate(SAMPLE_MESSAGES)["tok_s"] == pytest.approx(20.0)
+
+
+def test_model_stays_loaded_between_requests(tmp_path) -> None:
+    runner = FakeRunner(tok_s=20.0)
+    profiler = HardwareProfiler(runner=runner, profile_path=_write_profile(tmp_path))
+    backend = LocalExecutionBackend(runner=runner, profiler=profiler)
+    backend.generate(SAMPLE_MESSAGES)
+    backend.generate(SAMPLE_MESSAGES)
+    assert len(runner.load_calls) == 1
+    assert runner.unload_calls == 0
+
+
+def test_error_message_names_the_underlying_failure(tmp_path) -> None:
+    runner = FakeRunner(tok_s=20.0, fail_quants=frozenset({"3b-instruct-q4_K_M", "3b-instruct-q5_K_M", "3b-instruct-q8_0"}))
+    profiler = HardwareProfiler(runner=runner, profile_path=_write_profile(tmp_path))
+    backend = LocalExecutionBackend(runner=runner, profiler=profiler)
+    with pytest.raises(LocalExecutionBackendError, match="simulated OOM"):
+        backend.generate(SAMPLE_MESSAGES)
 
 
 # --------------------------------------------------------------------------

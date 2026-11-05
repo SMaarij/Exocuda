@@ -1,153 +1,95 @@
-
 """
 scripts/validate_draft_pairs.py
 
-Track A, Phase 2, Task 9.
-
-Offline validation script for AccelerationEngine Layer 3 draft-model pairs.
-Runs a short benchmark against both the target and draft model to confirm:
-  1. The draft model produces a measurable tok/s speedup over raw target.
-  2. The acceptance rate over a fixed prompt set meets the 60% threshold
-     required by FR-03.3 before the pair is ever used in production.
-
-Output: ~/.cascade/validated_pairs.json
-This file is consumed by AccelerationEngine.load_validated_pairs().
+Validates a Layer 3 (target, draft) pair on THIS machine by actually
+running speculative decoding with LlamaCppRunner, and records it in
+~/.cascade/validated_pairs.json (read by AccelerationEngine) only if:
+  1. the measured draft acceptance rate is >= --min-acceptance (FR-03.3), and
+  2. decoding with the draft is genuinely faster than without it.
 
 Usage:
-    python scripts/validate_draft_pairs.py \
-        --target llama3-8b:q8_0 \
-        --draft  llama3-1b:q4_K_M \
-        [--pairs-file path/to/validated_pairs.json]
-        [--min-acceptance 0.60]
-        [--prompt-file path/to/prompts.txt]
+    python scripts/validate_draft_pairs.py --model llama3.2 \
+        --quant 3b-instruct-q4_K_M --draft llama3.2:1b-instruct-q4_K_M
 
-Running this script requires a live Ollama instance with both models
-already pulled (not needed for Track A's unit tests -- this script is
-integration/manual-testing scope per NFR-09).
+The draft must share the target's tokenizer (same model family).
+Integration scope (NFR-09): needs Ollama running and llama-cpp-python.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
-import time
 from pathlib import Path
 
-DEFAULT_PAIRS_FILE   = Path.home() / ".cascade" / "validated_pairs.json"
-DEFAULT_MIN_ACCEPT   = 0.60
-DEFAULT_TEST_PROMPTS = [
-    "What is the capital of France?",
-    "Explain Newton's first law in one sentence.",
-    "Write a haiku about mountains.",
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+DEFAULT_PAIRS_FILE = Path.home() / ".cascade" / "validated_pairs.json"
+DEFAULT_MIN_ACCEPT = 0.60
+DEFAULT_PROMPTS = [
+    "What is the capital of France? Answer in two sentences.",
+    "Explain Newton's first law in one paragraph.",
+    "List five common uses of the Python dict type.",
 ]
 
 
-def _run_ollama(model_tag: str, prompt: str, timeout: int = 60) -> tuple[str, float]:
-    """Run ollama and return (output_text, elapsed_s). Raises on failure."""
-    import subprocess
-    start = time.monotonic()
-    result = subprocess.run(
-        ["ollama", "run", model_tag, prompt],
-        capture_output=True, text=True, timeout=timeout,
-    )
-    elapsed = time.monotonic() - start
-    if result.returncode != 0:
-        raise RuntimeError(f"ollama run failed: {result.stderr.strip()}")
-    return result.stdout.strip(), elapsed
+def measure(model: str, quant: str, draft: str, prompts: list[str], max_tokens: int) -> dict:
+    from engine.execution.llamacpp_runner import LlamaCppRunner
+    from engine.execution.model_runner import ACCEL_DRAFT_MODEL, ACCEL_NONE
 
-
-def validate_pair(
-    target_tag: str,
-    draft_tag: str,
-    prompts: list[str],
-    min_acceptance: float,
-) -> dict:
-    """
-    Returns a result dict:
-      { target_model_id, draft_model_id, validated, acceptance_rate, speedup_factor }
-    """
-    print(f"\nValidating pair: {target_tag} <- {draft_tag}")
-    target_times: list[float] = []
-    draft_accepted = 0
-    total_tokens   = 0
-
-    for i, prompt in enumerate(prompts, 1):
-        print(f"  Prompt {i}/{len(prompts)}: {prompt[:50]}...")
-
-        target_out, target_elapsed = _run_ollama(target_tag, prompt)
-        target_tokens = max(1, len(target_out.split()))
-        target_times.append(target_elapsed)
-
-        draft_out, draft_elapsed = _run_ollama(draft_tag, prompt)
-        draft_tokens = max(1, len(draft_out.split()))
-
-        # Acceptance heuristic: how many draft tokens match target output.
-        target_words = target_out.split()
-        draft_words  = draft_out.split()
-        accepted = sum(
-            1 for t, d in zip(target_words, draft_words) if t == d
-        )
-        draft_accepted += accepted
-        total_tokens   += max(len(target_words), 1)
-
-        print(f"    target tok/s: {target_tokens/target_elapsed:.1f}  "
-              f"draft tok/s: {draft_tokens/draft_elapsed:.1f}  "
-              f"acceptance: {accepted/max(len(target_words),1):.0%}")
-
-    avg_target_tok_s   = sum(len(p.split()) for p in prompts) / sum(target_times)
-    acceptance_rate    = draft_accepted / max(total_tokens, 1)
-    validated          = acceptance_rate >= min_acceptance
-
-    print(f"\n  Overall acceptance rate: {acceptance_rate:.1%} "
-          f"({'PASS' if validated else 'FAIL -- below ' + str(min_acceptance)})")
-
+    runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0)
+    speeds: dict[str, list[float]] = {}
+    acceptance: list[float] = []
+    for mode in (ACCEL_NONE, ACCEL_DRAFT_MODEL):
+        runner.set_acceleration(mode)
+        runner.load(model, quant)
+        runner.generate("Say OK.", 8)
+        speeds[mode] = []
+        for prompt in prompts:
+            sample = runner.generate(prompt, max_tokens)
+            speeds[mode].append(sample.tok_s)
+            if sample.acceptance_rate is not None:
+                acceptance.append(sample.acceptance_rate)
+            print(f"  {mode:<12} {sample.tok_s:6.2f} tok/s  acceptance={sample.acceptance_rate}", flush=True)
+        runner.unload()
+    plain, drafted = statistics.mean(speeds[ACCEL_NONE]), statistics.mean(speeds[ACCEL_DRAFT_MODEL])
     return {
-        "target_model_id": target_tag,
-        "draft_model_id":  draft_tag,
-        "validated":       validated,
-        "acceptance_rate": round(acceptance_rate, 4),
-        "avg_target_tok_s": round(avg_target_tok_s, 2),
+        "acceptance_rate": round(statistics.mean(acceptance), 4) if acceptance else 0.0,
+        "plain_tok_s": round(plain, 3),
+        "draft_tok_s": round(drafted, 3),
+        "speedup": round(drafted / plain, 3) if plain else 0.0,
     }
 
 
+def save(pairs_path: Path, entry: dict) -> None:
+    pairs_path.parent.mkdir(parents=True, exist_ok=True)
+    existing = json.loads(pairs_path.read_text(encoding="utf-8")).get("pairs", []) if pairs_path.exists() else []
+    existing = [p for p in existing if (p["target_model_id"], p["draft_model_id"]) != (entry["target_model_id"], entry["draft_model_id"])]
+    existing.append(entry)
+    pairs_path.write_text(json.dumps({"pairs": existing}, indent=2), encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate a draft-model pair for AccelerationEngine Layer 3")
-    parser.add_argument("--target",       required=True, help="Target model tag, e.g. llama3-8b:q8_0")
-    parser.add_argument("--draft",        required=True, help="Draft model tag, e.g. llama3-1b:q4_K_M")
-    parser.add_argument("--pairs-file",   default=str(DEFAULT_PAIRS_FILE))
+    parser = argparse.ArgumentParser(description="Validate a Layer 3 draft-model pair")
+    parser.add_argument("--model", default="llama3.2", help="target model family (what LocalExecutionBackend's model_id is)")
+    parser.add_argument("--quant", default="3b-instruct-q4_K_M")
+    parser.add_argument("--draft", default="llama3.2:1b-instruct-q4_K_M")
+    parser.add_argument("--pairs-file", default=str(DEFAULT_PAIRS_FILE))
     parser.add_argument("--min-acceptance", type=float, default=DEFAULT_MIN_ACCEPT)
-    parser.add_argument("--prompt-file",  default=None,
-                        help="Newline-separated prompts; uses built-in set if omitted")
+    parser.add_argument("--max-tokens", type=int, default=96)
     args = parser.parse_args(argv)
 
-    prompts = DEFAULT_TEST_PROMPTS
-    if args.prompt_file:
-        prompts = Path(args.prompt_file).read_text(encoding="utf-8").splitlines()
-        prompts = [p.strip() for p in prompts if p.strip()]
+    print(f"Validating {args.model}:{args.quant} <- {args.draft}")
+    result = measure(args.model, args.quant, args.draft, DEFAULT_PROMPTS, args.max_tokens)
+    validated = result["acceptance_rate"] >= args.min_acceptance and result["speedup"] > 1.0
+    entry = {"target_model_id": args.model, "draft_model_id": args.draft, "validated": validated, **result}
+    save(Path(args.pairs_file), entry)
 
-    try:
-        result = validate_pair(args.target, args.draft, prompts, args.min_acceptance)
-    except Exception as exc:
-        print(f"\nERROR: {exc}", file=sys.stderr)
-        return 1
-
-    pairs_path = Path(args.pairs_file)
-    pairs_path.parent.mkdir(parents=True, exist_ok=True)
-    existing: list[dict] = []
-    if pairs_path.exists():
-        existing = json.loads(pairs_path.read_text(encoding="utf-8")).get("pairs", [])
-
-    # Replace or append
-    existing = [
-        p for p in existing
-        if not (p["target_model_id"] == result["target_model_id"]
-                and p["draft_model_id"] == result["draft_model_id"])
-    ]
-    existing.append(result)
-    pairs_path.write_text(json.dumps({"pairs": existing}, indent=2), encoding="utf-8")
-    print(f"\nSaved to {pairs_path}")
-    return 0 if result["validated"] else 1
+    print(f"\nacceptance {result['acceptance_rate']:.1%}, speedup {result['speedup']:.2f}x -> "
+          f"{'VALIDATED' if validated else 'NOT validated (Layer 3 stays off for this model on this machine)'}")
+    print(f"Saved to {args.pairs_file}")
+    return 0 if validated else 1
 
 
 if __name__ == "__main__":

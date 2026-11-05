@@ -179,3 +179,48 @@ def test_pipeline_constructs_with_single_positional_backend_argument(
     pipeline = Pipeline(FakeBackend())
     result = pipeline.run(messages)
     assert result["text"]
+
+
+# ---- NFR-03: a failing remote tier degrades to local ---------------------------
+
+
+class _FixedRouter:
+    def __init__(self, tier: str) -> None:
+        self._tier = tier
+
+    def classify(self, query: str):
+        class _Decision:
+            tier = self._tier
+        return _Decision()
+
+
+class _FailingRemote(FakeBackend):
+    def generate(self, messages: list[Message]) -> BackendResult:
+        raise RuntimeError("simulated: network down / bad key")
+
+
+@pytest.mark.parametrize("tier", ["cloud_byok", "cascade_cloud"])
+def test_failing_remote_tier_falls_back_to_local(messages: list[Message], tier: str) -> None:
+    remote = {"cloud_byok_backend": _FailingRemote()} if tier == "cloud_byok" else {"cascade_backend": _FailingRemote()}
+    pipeline = Pipeline(FakeBackend(text="local answer"), router=_FixedRouter(tier), confidence_floor=None, **remote)
+    result = pipeline.run(messages)
+    assert result["text"] == "local answer"
+    assert result["tier"] == "local"
+
+
+def test_byok_tier_is_used_when_configured(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="local"), cloud_byok_backend=FakeBackend(text="byok answer", est_cost_usd=0.01), router=_FixedRouter("cloud_byok"))
+    result = pipeline.run(messages)
+    assert (result["text"], result["tier"]) == ("byok answer", "cloud_byok")
+
+
+def test_failed_cascade_is_not_retried_when_local_also_fails(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(raise_error=True), cascade_backend=_FailingRemote(), router=_FixedRouter("cascade_cloud"))
+    with pytest.raises(LocalExecutionBackendError):
+        pipeline.run(messages)
+
+
+def test_failed_escalation_keeps_the_local_answer(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="?"), cascade_backend=_FailingRemote(), confidence_floor=0.99)
+    result = pipeline.run(messages)
+    assert (result["text"], result["tier"], result["escalated"]) == ("?", "local", False)

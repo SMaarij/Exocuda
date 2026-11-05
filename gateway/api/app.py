@@ -1,127 +1,199 @@
 """
 gateway/api/app.py
 
-Track C, Tasks 5 & 10 (FR-07.1, FR-07.2, FR-07.5).
+CascadeCloud's server (FR-07.1, FR-07.2, FR-07.5). OpenAI-compatible, so
+CascadeCloudBackend -- or any OpenAI client -- can call it unchanged.
 
-ARCHITECTURE NOTE -- where billing actually has to live:
-    `gateway/backend.py`'s CascadeCloudBackend is what a user's own
-    Pipeline (running on their machine, per docs/TRACK_B_HANDOFF_FOR_C.md)
-    calls when it needs the cloud tier. But its `check_and_reserve()`
-    spend-cap check running on the USER's own machine is not something
-    a hostile or careless client can be trusted to actually enforce --
-    a modified client could just skip the check. The real enforcement
-    has to happen server-side, on infrastructure Cascade controls.
-
-    This FastAPI app IS that server. It's what CascadeCloudBackend's
-    HTTPInferenceProvider actually points `base_url` at in production
-    (not directly at a wholesale GPU provider's raw endpoint) -- this
-    app holds the wholesale provider's real API key server-side, checks
-    the spend cap per authenticated user here (where it can't be
-    bypassed), calls the wholesale provider, records billing via
-    Stripe, and returns an OpenAI-compatible response back to the
-    client's CascadeCloudBackend.
-
-`create_app()` is a factory, not a module-level singleton -- every
-dependency (the wholesale provider, the billing client, pricing) is
-injected, matching the pattern every other Track C component uses so
-this is fully testable without any real network/Stripe call (NFR-09).
+Billing enforcement lives here, server-side, because a client-side cap is
+trivially bypassable. Every request is authenticated by an API key
+(`Authorization: Bearer csk_...`), checked against the account's spend
+cap before the billable upstream call, reconciled to the upstream's real
+token usage afterwards, and reported to Stripe when a billing client is
+configured. The upstream (a vLLM/SGLang deployment or any wholesale
+provider) is reached through the injected CloudInferenceProvider; its key
+never leaves this server.
 """
 
 from __future__ import annotations
 
-from typing import Optional
+import json
+import time
+import uuid
+from typing import Iterator, Literal, Optional
 
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
-from gateway.billing.meter import SpendCapExceededError, UsageMeter
+from gateway.billing.meter import SpendCapExceededError
 from gateway.billing.stripe_client import BillingClient
-from gateway.providers.base import CloudInferenceProvider
+from gateway.providers.base import CloudInferenceProvider, CloudUsage
+from gateway.store import Account, GatewayStore
 
-DEFAULT_PRICE_PER_1K_TOKENS_USD = 0.50  # see gateway/backend.py's identical, identically-flagged placeholder
+DEFAULT_PRICE_PER_1K_TOKENS_USD = 0.50  # placeholder, see gateway/backend.py
+DEFAULT_MAX_TOKENS_LIMIT = 4096
+USAGE_METER_EVENT = "cascade_tokens"
 
 
 class ChatMessage(BaseModel):
-    role: str
+    role: Literal["system", "user", "assistant"]
     content: str
 
 
-class GenerateRequest(BaseModel):
-    messages: list[ChatMessage]
-    max_tokens: int = 256
+class StreamOptions(BaseModel):
+    include_usage: bool = False
 
 
-class GenerateResponse(BaseModel):
-    text: str
-    tok_s: float
-    latency_ms: float
-    est_cost_usd: float
+class ChatCompletionRequest(BaseModel):
+    model: Optional[str] = None
+    messages: list[ChatMessage] = Field(min_length=1)
+    max_tokens: int = Field(default=512, ge=1)
+    stream: bool = False
+    stream_options: Optional[StreamOptions] = None
 
 
-def _messages_to_prompt(messages: list[ChatMessage]) -> str:
-    return "\n".join(f"{m.role.upper()}: {m.content}" for m in messages)
+def _cost(tokens: int, price_per_1k: float) -> float:
+    return (tokens / 1000.0) * price_per_1k
 
 
-def _cost_for_tokens(total_tokens: int, price_per_1k_tokens: float) -> float:
-    return (total_tokens / 1000.0) * price_per_1k_tokens
+def _estimate_tokens(messages: list[ChatMessage], max_tokens: int) -> int:
+    return int(sum(len(m.content.split()) for m in messages) * 1.3) + 4 * len(messages) + max_tokens
 
 
 def create_app(
     provider: CloudInferenceProvider,
+    store: GatewayStore,
     billing_client: Optional[BillingClient] = None,
     price_per_1k_tokens: float = DEFAULT_PRICE_PER_1K_TOKENS_USD,
-    default_cap_usd: Optional[float] = None,
+    public_model_name: str = "cascade",
+    max_tokens_limit: int = DEFAULT_MAX_TOKENS_LIMIT,
 ) -> FastAPI:
     app = FastAPI(title="CascadeCloud Gateway")
 
-    # One UsageMeter per authenticated user. A real deployment would
-    # back this with a database (so caps survive a restart and work
-    # across multiple gateway instances) -- this in-memory registry is
-    # correct for a single-process deployment and is the seam a future
-    # persistent-store swap plugs into without changing any route below.
-    meters: dict[str, UsageMeter] = {}
+    def _authenticate(authorization: Optional[str]) -> Account:
+        key = (authorization or "").removeprefix("Bearer ").strip()
+        account = store.authenticate(key)
+        if account is None:
+            raise HTTPException(status_code=401, detail="invalid or missing API key")
+        return account
 
-    def _meter_for(user_id: str) -> UsageMeter:
-        if user_id not in meters:
-            meters[user_id] = UsageMeter(cap_usd=default_cap_usd)
-        return meters[user_id]
+    def _bill(account: Account, estimated_cost: float, usage: Optional[CloudUsage]) -> float:
+        """Reconcile the reservation to real usage; returns the charged cost."""
+        if usage is None:
+            return estimated_cost  # no usage reported: the worst-case reservation stands
+        actual = _cost(usage.total_tokens, price_per_1k_tokens)
+        store.adjust(account.user_id, estimated_cost, actual)
+        if billing_client is not None:
+            billing_client.record_usage(account.stripe_customer_id or account.user_id, USAGE_METER_EVENT, usage.total_tokens)
+        return actual
 
     @app.get("/health")
     def health() -> dict:
         return {"status": "ok"}
 
-    @app.post("/v1/chat/completions", response_model=GenerateResponse)
-    def generate(request: GenerateRequest, x_cascade_user: str = Header(...)) -> GenerateResponse:
-        meter = _meter_for(x_cascade_user)
-        prompt = _messages_to_prompt(request.messages)
+    @app.get("/v1/models")
+    def models() -> dict:
+        return {"object": "list", "data": [{"id": public_model_name, "object": "model", "owned_by": "cascade"}]}
 
-        estimated_tokens = int(len(prompt.split()) * 1.3) + request.max_tokens
-        estimated_cost = _cost_for_tokens(estimated_tokens, price_per_1k_tokens)
+    @app.get("/v1/usage")
+    def usage(authorization: Optional[str] = Header(default=None)) -> dict:
+        account = _authenticate(authorization)
+        current = store.account(account.user_id)
+        return {"user_id": current.user_id, "spent_usd": round(current.spent_usd, 6), "cap_usd": current.cap_usd}
 
+    @app.post("/v1/chat/completions")
+    def chat_completions(request: ChatCompletionRequest, authorization: Optional[str] = Header(default=None)):
+        account = _authenticate(authorization)
+        if request.max_tokens > max_tokens_limit:
+            raise HTTPException(status_code=400, detail=f"max_tokens exceeds limit of {max_tokens_limit}")
+
+        messages = [m.model_dump() for m in request.messages]
+        estimated_cost = _cost(_estimate_tokens(request.messages, request.max_tokens), price_per_1k_tokens)
         try:
-            meter.check_and_reserve(estimated_cost)  # FR-07.2 -- the real, server-side enforcement
+            store.check_and_reserve(account.user_id, estimated_cost)  # FR-07.2, before the billable call
         except SpendCapExceededError as exc:
             raise HTTPException(status_code=402, detail=str(exc)) from exc
 
+        completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+        created = int(time.time())
+
+        if request.stream:
+            include_usage = bool(request.stream_options and request.stream_options.include_usage)
+            return StreamingResponse(
+                _stream(account, messages, request.max_tokens, estimated_cost, completion_id, created, include_usage),
+                media_type="text/event-stream",
+            )
+
         try:
-            sample = provider.generate(prompt, max_tokens=request.max_tokens)
+            sample = provider.generate(messages, max_tokens=request.max_tokens)
         except Exception as exc:
-            meter.adjust(estimated_cost, 0.0)
-            raise HTTPException(status_code=502, detail=f"provider error: {exc}") from exc
+            store.adjust(account.user_id, estimated_cost, 0.0)
+            raise HTTPException(status_code=502, detail=f"upstream error: {exc}") from exc
 
-        actual_tokens = sample.prompt_tokens + sample.completion_tokens
-        actual_cost = _cost_for_tokens(actual_tokens, price_per_1k_tokens)
-        meter.adjust(estimated_cost, actual_cost)
+        usage_obj = CloudUsage(sample.prompt_tokens, sample.completion_tokens)
+        charged = _bill(account, estimated_cost, usage_obj)
+        return {
+            "id": completion_id,
+            "object": "chat.completion",
+            "created": created,
+            "model": public_model_name,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": sample.text}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": usage_obj.prompt_tokens,
+                "completion_tokens": usage_obj.completion_tokens,
+                "total_tokens": usage_obj.total_tokens,
+            },
+            "cascade": {"cost_usd": round(charged, 6)},
+        }
 
-        if billing_client is not None:
-            billing_client.record_usage(x_cascade_user, "cascade_tokens", actual_tokens)
+    def _stream(
+        account: Account,
+        messages: list[dict],
+        max_tokens: int,
+        estimated_cost: float,
+        completion_id: str,
+        created: int,
+        include_usage: bool,
+    ) -> Iterator[str]:
+        def event(payload: dict) -> str:
+            return f"data: {json.dumps(payload)}\n\n"
 
-        tok_s = sample.completion_tokens / sample.elapsed_s if sample.elapsed_s > 0 else 0.0
-        return GenerateResponse(
-            text=sample.text,
-            tok_s=round(tok_s, 3),
-            latency_ms=round(sample.elapsed_s * 1000, 2),
-            est_cost_usd=round(actual_cost, 6),
-        )
+        def chunk(delta: dict, finish_reason: Optional[str] = None) -> dict:
+            return {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": public_model_name,
+                "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+            }
+
+        usage: Optional[CloudUsage] = None
+        try:
+            gen = provider.generate_stream(messages, max_tokens=max_tokens)
+            while True:
+                try:
+                    piece = next(gen)
+                except StopIteration as stop:
+                    usage = stop.value
+                    break
+                yield event(chunk({"content": piece}))
+        except Exception as exc:
+            store.adjust(account.user_id, estimated_cost, 0.0)
+            yield event({"error": {"message": f"upstream error: {exc}", "type": "upstream_error"}})
+            yield "data: [DONE]\n\n"
+            return
+
+        charged = _bill(account, estimated_cost, usage)
+        yield event(chunk({}, finish_reason="stop"))
+        if include_usage:
+            final = chunk({})
+            final["choices"] = []
+            final["usage"] = (
+                {"prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens, "total_tokens": usage.total_tokens}
+                if usage else None
+            )
+            final["cascade"] = {"cost_usd": round(charged, 6)}
+            yield event(final)
+        yield "data: [DONE]\n\n"
 
     return app

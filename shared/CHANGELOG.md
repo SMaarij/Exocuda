@@ -319,3 +319,45 @@ locally from the earlier verification run) and returned real generated
 text (`"Hello there friend."`, `1.685 tok/s`). 257 tests passing
 (3 test-fallout fixes, no new tests needed -- this is a resolution
 layer over existing, already-tested load-call plumbing).
+
+## [0.2.0] -- 2026-11-05 -- completion pass (solo; `shared/types.py` unchanged)
+
+No change to either seam or to any `shared/types.py` type. Changes behind them:
+
+### Changed -- Track A (`engine/execution/`)
+- **Removed fabricated speedups.** `AccelerationEngine` no longer divides measured time by
+  `LAYER*_SPEEDUP_FACTOR` constants (deleted). A layer is active only if the runner accepted it
+  (`AcceleratedRunner.set_acceleration`) and reports in its `GenerationSample.acceleration` that
+  it ran; acceptance rates are measured, not constants. `GenerationSample` gained
+  `acceleration` and `acceptance_rate` fields (defaults keep every existing fake valid).
+- **New `llamacpp_runner.py`**: real prompt-lookup (Layer 1) and draft-model (Layer 3)
+  speculative decoding via llama-cpp-python, reusing Ollama's GGUF files. Optional dependency.
+- **`OllamaReferenceModelRunner` rewritten on Ollama's HTTP API**: real `eval_count`/`eval_duration`,
+  model kept resident, pull only when missing, unload via `keep_alive: 0`, `127.0.0.1` default.
+- `LocalExecutionBackend` keeps the model loaded between requests, names the underlying error
+  when every rung fails, and defaults to **no acceleration** -- measured slower on CPU
+  (docs/BENCHMARK_REPORT.md Addendum 3: prompt lookup 0.60x, 1B draft 0.89x; NFR-01 not met).
+- `scripts/validate_draft_pairs.py` and `scripts/benchmark_acceleration.py` now measure real
+  acceptance and speed with LlamaCppRunner.
+
+### Changed -- Track B (`engine/intelligence/pipeline.py`)
+- A failing remote tier (BYOK or CascadeCloud: network, bad key, spend cap) now degrades to
+  local instead of failing the request; a failed confidence escalation keeps the local answer
+  (NFR-03).
+
+### Changed -- Track C (`gateway/`, `cli/`)
+- `CloudInferenceProvider` takes real chat messages (no `USER:` flattening) and streaming
+  returns real usage (`stream_options.include_usage`).
+- **Gateway is OpenAI-compatible** -- the old response shape could not be parsed by
+  `CascadeCloudBackend`, so client and server could never talk. Now tested together.
+- **API-key authentication** replaces the self-asserted `x-cascade-user` header. Keys stored as
+  SHA-256 hashes in a new SQLite `GatewayStore`, which also persists spend and caps atomically.
+- `gateway/serve.py`: `create-account`, `create-key`, `run`, configured by environment variables.
+- New `gateway/byok.py`: `CloudBYOKBackend`, the missing `cloud_byok` tier.
+- CLI: cloud tiers exist only when configured (no default `api.cascade.dev` endpoint); keys
+  come from environment variables and `config set` refuses to store them; new `doctor` and
+  `config` commands, `ask --stream`; `cascade` console script in `pyproject.toml`.
+
+### Decisions recorded
+- LiteLLM was not added: one OpenAI-compatible client covers the same providers with no extra dependency.
+- BYOK lives in `gateway/` alongside the other OpenAI-compatible client code.
