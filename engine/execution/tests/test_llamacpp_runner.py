@@ -32,30 +32,50 @@ class FakeOllama:
 
 
 class FakeLlama:
-    """Streams `text` word by word; calls the installed draft model `draft_calls` times."""
+    """Emits `text` word by word as token ids, then end-of-generation; calls the
+    installed draft model `draft_calls` times per generation."""
+
+    EOS, BOS = 0, 1
 
     def __init__(self, path: str, all_logits: bool, text: str = "one two three four five", draft_calls: int = 2) -> None:
         self.path = path
         self.all_logits = all_logits
         self.draft_model = None
+        self.metadata: dict = {}
         self._text = text
         self._draft_calls = draft_calls
+        self._vocab: dict[str, int] = {}
         self.last_kwargs: dict = {}
+        self.resets = 0
 
-    def create_chat_completion(self, **kwargs):
+    def _id(self, word: str) -> int:
+        return self._vocab.setdefault(word, len(self._vocab) + 2)
+
+    def tokenize(self, data: bytes, add_bos: bool = True, special: bool = False) -> list[int]:
+        ids = [self._id(w) for w in data.decode().split()]
+        return ([self.BOS] if add_bos else []) + ids
+
+    def detokenize(self, ids, special: bool = False) -> bytes:
+        words = {v: k for k, v in self._vocab.items()}
+        return " ".join(words[i] for i in ids if i in words).encode()
+
+    def token_eos(self) -> int:
+        return self.EOS
+
+    def token_bos(self) -> int:
+        return self.BOS
+
+    def reset(self) -> None:
+        self.resets += 1
+
+    def generate(self, tokens, reset=True, **kwargs):
         self.last_kwargs = kwargs
         if self.draft_model is not None:
             for _ in range(self._draft_calls):
                 self.draft_model(np.array([1, 2, 3], dtype=np.intc))
-        yield {"choices": [{"delta": {"role": "assistant"}}]}
         for word in self._text.split(" "):
-            yield {"choices": [{"delta": {"content": word + " "}}]}
-
-    def generate(self, tokens, top_k, temp, reset):
-        yield from range(10, 20)
-
-    def tokenize(self, data: bytes, add_bos: bool = True):
-        return data.decode().split()
+            yield self._id(word)
+        yield self.EOS
 
 
 class FakePromptLookup:
@@ -87,7 +107,8 @@ def _runner(**kwargs):
         built.append(FakeLlama(path, all_logits))
         return built[-1]
 
-    runner = LlamaCppRunner(ollama=FakeOllama(), llama_factory=factory, **kwargs)
+    kwargs.setdefault("llama_factory", factory)
+    runner = LlamaCppRunner(ollama=FakeOllama(), **kwargs)
     return runner, built
 
 
@@ -130,15 +151,34 @@ def test_draft_model_mode_unavailable_without_a_draft() -> None:
     assert runner.set_acceleration("draft_heads") is False
 
 
-def test_temperature_is_forwarded_only_when_set() -> None:
+def test_temperature_overrides_only_temperature() -> None:
     runner, built = _runner(temperature=0.0)
     runner.load("llama3.2", "3b-instruct-q4_K_M")
     runner.generate("hi", 8)
-    assert built[0].last_kwargs["temperature"] == 0.0
+    assert built[0].last_kwargs["temp"] == 0.0
     runner2, built2 = _runner()
     runner2.load("llama3.2", "3b-instruct-q4_K_M")
     runner2.generate("hi", 8)
-    assert "temperature" not in built2[0].last_kwargs
+    # Otherwise exactly llama-cpp-python's create_chat_completion defaults.
+    assert built2[0].last_kwargs == llamacpp_runner._chat_sampling_defaults()
+
+
+def test_every_generation_starts_from_a_clean_state() -> None:
+    # The same prompt must not depend on what was asked before it.
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    runner.generate("first question", 8)
+    runner.generate("second question", 8)
+    assert built[0].resets == 2
+
+
+def test_generation_stops_at_max_tokens_and_records_ids() -> None:
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    sample = runner.generate("hi", 3)
+    assert sample.output_text == "one two three"
+    assert len(runner.last_output_ids) == 3
+    assert runner.last_prompt_ids[0] == FakeLlama.BOS
 
 
 def test_generate_before_load_raises() -> None:
@@ -192,3 +232,96 @@ def test_model_draft_takes_k_greedy_tokens_and_closes_generator() -> None:
     out = ModelDraft(DraftLlm(), k=3)(np.array([1, 2], dtype=np.intc))
     assert out.tolist() == [100, 101, 102]
     assert DraftLlm.closed is True
+
+
+# ---- prompt formatting --------------------------------------------------------
+
+
+def test_prompt_uses_the_models_chat_template(monkeypatch) -> None:
+    class Formatter:
+        def __init__(self, template, eos_token, bos_token):
+            self.template = template
+
+        def __call__(self, messages):
+            class Result:
+                prompt = f"<turn> {messages[0]['content']} </turn>"
+                added_special = False
+            return Result()
+
+    monkeypatch.setattr(llamacpp_runner, "Jinja2ChatFormatter", Formatter)
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    built[0].metadata["tokenizer.chat_template"] = "{{ messages }}"
+    runner.generate("hi", 4)
+    assert built[0].detokenize(runner.last_prompt_ids[1:]) == b"<turn> hi </turn>"
+
+
+# ---- verify_greedy --------------------------------------------------------------
+
+
+class ToyModel:
+    """A 4-token vocabulary. The logits after any history favour token
+    (last + 1) % 4 by `gap` over the runner-up (last + 2) % 4. Computing
+    several tokens in one eval() call shifts every logit by `batch_noise`
+    in a position-dependent way -- the effect verify_greedy has to measure."""
+
+    def __init__(self, gap: float = 1.0, batch_noise: float = 0.0) -> None:
+        self.gap, self.batch_noise = gap, batch_noise
+        self.draft_model = None
+        self.metadata: dict = {}
+        self._history: list[int] = []
+        self._scores: list[np.ndarray] = []
+
+    def reset(self) -> None:
+        self._history, self._scores = [], []
+
+    def eval(self, tokens) -> None:
+        for token in tokens:
+            self._history.append(token)
+            row = np.zeros(4)
+            row[(token + 1) % 4] = 2.0
+            row[(token + 2) % 4] = 2.0 - self.gap
+            if len(tokens) > 1:
+                row = row + self.batch_noise * np.sin(np.arange(4) + len(self._history))
+            self._scores.append(row)
+
+    @property
+    def scores(self) -> np.ndarray:
+        return np.array(self._scores)
+
+
+def _verify(model: ToyModel, output: list[int]):
+    runner, _ = _runner(llama_factory=lambda path, all_logits: model)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    return runner.verify_greedy([3], output)
+
+
+def test_greedy_output_verifies_exactly() -> None:
+    check = _verify(ToyModel(), [0, 1, 2, 3])
+    assert (check.exact, check.within_noise, check.violations) == (4, 0, 0)
+    assert check.lossless and check.noise_tolerance == 0.0
+
+
+def test_runner_up_within_measured_noise_is_not_a_violation() -> None:
+    # After 1 the top token is 2 and the runner-up 3 is behind by 0.01; computing
+    # the earlier tokens in a batch moves that gap by more than 0.01.
+    check = _verify(ToyModel(gap=0.01, batch_noise=0.05), [0, 1, 3])
+    assert (check.exact, check.within_noise, check.violations) == (2, 1, 0)
+    assert check.lossless and 0.01 < check.noise_tolerance < 1.0
+
+
+def test_runner_up_beyond_the_noise_is_a_violation() -> None:
+    check = _verify(ToyModel(gap=1.0, batch_noise=0.05), [0, 1, 3])
+    assert check.violations == 1 and not check.lossless
+
+
+def test_verify_restores_the_draft_and_handles_empty_output() -> None:
+    model = ToyModel()
+    runner, _ = _runner(llama_factory=lambda path, all_logits: model)
+    runner.set_acceleration(ACCEL_PROMPT_LOOKUP)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    installed = model.draft_model
+    assert isinstance(installed, DraftCounter)
+    runner.verify_greedy([3], [0])
+    assert model.draft_model is installed  # speculation still on after verifying
+    assert runner.verify_greedy([3], []).tokens == 0

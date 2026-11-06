@@ -8,8 +8,14 @@ machine, using LlamaCppRunner (the runner that can actually speculate).
     prompt_lookup  Layer 1: n-gram drafts from the context
     draft_model    Layer 3: a small same-family draft model
 
-Greedy decoding (temperature 0) so the lossless claim is checkable: each
-accelerated output is compared token-for-token with the baseline output.
+Greedy decoding (temperature 0) so the lossless claim is checkable, two ways:
+  - identical: the accelerated text equals the plain text;
+  - greedy check (LlamaCppRunner.verify_greedy): every output token is the
+    target model's top choice when recomputed one token at a time, or within
+    the floating-point noise measured between batched and one-at-a-time
+    evaluation of that same sequence. Verifying drafts evaluates tokens in
+    batches, so at a near-tie the accelerated text can take the other branch
+    while still being a correct greedy decode; a violation would be a real bug.
 
 Usage:
     python scripts/benchmark_acceleration.py [--model llama3.2]
@@ -82,7 +88,9 @@ def run(model: str, quant: str, draft: str, max_tokens: int) -> dict:
             t = time.perf_counter()
             sample = runner.generate(prompt, max_tokens)
             wall_s = time.perf_counter() - t
+            ids = (list(runner.last_prompt_ids), list(runner.last_output_ids))
             rows.append({
+                "_ids": ids,
                 "kind": kind,
                 "decode_tok_s": round(sample.tok_s, 3),
                 "wall_s": round(wall_s, 2),
@@ -93,6 +101,13 @@ def run(model: str, quant: str, draft: str, max_tokens: int) -> dict:
             })
             print(f"  {mode:<14} {kind:<9} {sample.tok_s:6.2f} tok/s  wall {wall_s:6.1f}s  "
                   f"acc={rows[-1]['acceptance_rate']}", flush=True)
+        # Verified after the timed runs so verification never affects speed.
+        for row in rows:
+            check = runner.verify_greedy(*row.pop("_ids"))
+            row["greedy_check"] = {
+                "tokens": check.tokens, "exact": check.exact, "within_noise": check.within_noise,
+                "violations": check.violations, "noise_tolerance": round(check.noise_tolerance, 4),
+            }
         results[mode] = rows
         runner.unload()
     return results
@@ -113,6 +128,7 @@ def summarize(results: dict) -> dict:
             base_wall = sum(base[i]["wall_s"] for i in idx) if base else 0.0
             identical = sum(1 for i in idx if base and rows[i]["text"] == base[i]["text"])
             accs = [rows[i]["acceptance_rate"] for i in idx if rows[i]["acceptance_rate"] is not None]
+            checks = [rows[i].get("greedy_check") for i in idx if rows[i].get("greedy_check")]
             per_kind[kind] = {
                 "mean_decode_tok_s": round(tok_s, 3),
                 "decode_speedup_vs_plain": round(tok_s / base_tok_s, 3) if base_tok_s else None,
@@ -120,6 +136,9 @@ def summarize(results: dict) -> dict:
                 "wall_speedup_vs_plain": round(base_wall / wall, 3) if wall else None,
                 "mean_acceptance_rate": round(statistics.mean(accs), 3) if accs else None,
                 "outputs_identical_to_plain": f"{identical}/{len(idx)}",
+                "greedy_check_violations": sum(c["violations"] for c in checks),
+                "greedy_check_near_ties": sum(c["within_noise"] for c in checks),
+                "greedy_check_tokens": sum(c["tokens"] for c in checks),
             }
         summary[mode] = per_kind
     return summary
@@ -138,11 +157,15 @@ def main(argv: list[str] | None = None) -> int:
     results = run(args.model, args.quant, args.draft, args.max_tokens)
     summary = summarize(results)
 
-    print("\nmode            subset     decode tok/s  speedup  wall speedup  acceptance  identical")
+    print("\nmode            subset     decode tok/s  speedup  wall speedup  acceptance  identical  greedy check")
     for mode, kinds in summary.items():
         for kind, s in kinds.items():
             print(f"{mode:<15} {kind:<9} {s['mean_decode_tok_s']:>12.2f} {s['decode_speedup_vs_plain'] or 0:>8.2f}x"
-                  f" {s['wall_speedup_vs_plain'] or 0:>11.2f}x  {str(s['mean_acceptance_rate']):>10}  {s['outputs_identical_to_plain']:>9}")
+                  f" {s['wall_speedup_vs_plain'] or 0:>11.2f}x  {str(s['mean_acceptance_rate']):>10}  {s['outputs_identical_to_plain']:>9}"
+                  f"  {s['greedy_check_violations']} violations, {s['greedy_check_near_ties']} near-ties"
+                  f" / {s['greedy_check_tokens']} tokens")
+    violations = sum(k["all"]["greedy_check_violations"] for k in summary.values())
+    print(f"\nLossless (greedy check): {'PASS' if violations == 0 else 'FAIL'} -- {violations} tokens outside measured noise")
 
     best = max((s["all"]["decode_speedup_vs_plain"] or 0) for m, s in summary.items() if m != "none") if len(summary) > 1 else 0
     print(f"\nNFR-01 (>= 1.5x): {'PASS' if best >= 1.5 else 'NOT MET'} on this machine (best decode speedup {best:.2f}x)")
