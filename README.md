@@ -51,6 +51,34 @@ Each answer ends with a status footer, e.g. `[local | 9.8 tok/s | 2140ms | $0.00
 The dollar figure is only ever non-zero for your own BYOK provider, and only if you
 tell Cascade its prices.
 
+If you skip `cascade init`, the first `ask` runs the same one-time hardware check first
+(several minutes on a CPU) and says so.
+
+### Answer length and the cache
+
+Every setting has a default you can change; nothing below is fixed in code.
+
+```bash
+cascade config set system_prompt "Answer in one sentence."   # sent with every request
+cascade config set system_prompt '""'                         # send none
+cascade config set local.max_tokens 256                       # longest local answer (default 512)
+cascade config set cache.similarity_threshold 0.94            # stricter matching (default 0.92)
+cascade config set cache.term_swap_guard lenient              # strict (default) | lenient | off
+cascade config set cache.uncached_tiers '["self_hosted"]'     # never cache these tiers (default)
+```
+
+The default `system_prompt` asks for a direct answer sized to the question. Without one, a
+3B model on a CPU spent 66 s writing 256 tokens to explain what an API is, versus 8 s and
+33 tokens with it.
+
+The cache matches questions by meaning, which on its own can't tell "boiling point in
+Fahrenheit" from "boiling point in Celsius". So it also rejects a match when the new
+question swaps in a term the stored answer never mentions, or has the same key words in a
+different order ("5 kg to pounds" / "5 pounds to kg"). Questions the router sends to the
+live-data tier, or that mention things like "today" or "current", are never cached.
+`python -m scripts.run_benchmark` shows the trade-off of each cache setting on the
+benchmark fixtures.
+
 ### Optional: hard queries to your own API key (`cloud_byok`)
 
 Any OpenAI-compatible provider works (OpenAI, OpenRouter, Groq, Together, DeepSeek, a vLLM box...).
@@ -147,12 +175,14 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Metric | Target | Measured | |
 |---|---|---|---|
 | Router agreement on held-out queries | ≥85% | 89.2% (37 hand-labelled queries) | met |
-| Paraphrase cache hit rate vs exact | ≥90% | 93.3% | met |
-| Warm cache-hit lookup latency | <150 ms | 22–55 ms | met |
+| Wrong answers served from cache (19 near-miss pairs) | 0 | 0/19 (4/19 before the 0.3.1 guard) | met |
+| Reworded questions answered from cache | ≥90% of exact | 42.9% (strict guard, threshold 0.92) | **not met** — traded for zero wrong answers |
+| Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
+| Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
 | Speculative decoding speedup, CPU-only laptop | ≥1.5x | prompt lookup 0.60x, 1B draft model 0.89x | **not met** — acceleration is off by default |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 
-The 37-query router set and 15 paraphrase pairs are small hand-made fixtures. Results from other
+The 37-query router set, 15 paraphrase pairs and 19 near-miss pairs are small hand-made fixtures. Results from other
 hardware — especially GPUs — are very welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status and roadmap

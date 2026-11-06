@@ -17,6 +17,13 @@ Config keys (set with `cascade config set KEY VALUE`):
     byok.input_price_per_1k / byok.output_price_per_1k  (optional, for cost estimates)
     self_hosted.url       a Cascade server you or your team run, e.g. http://gpu-box:8000
     self_hosted.api_key_env  env var holding its csk_ key (default CASCADE_SERVER_KEY)
+    system_prompt         instruction sent with every request (default DEFAULT_SYSTEM_PROMPT;
+                          set to "" to send none)
+    local.max_tokens      longest local answer, in tokens (default 512)
+    cache.uncached_tiers  tiers never served from the cache (default ["self_hosted"]: live data)
+    cache.<field>         any CacheConfig field (engine/intelligence/cache.py), e.g.
+                          cache.similarity_threshold 0.94, cache.term_swap_guard lenient,
+                          cache.time_sensitive_patterns '["\\btoday\\b"]'
 """
 
 from __future__ import annotations
@@ -40,6 +47,15 @@ for _stream in (sys.stdout, sys.stderr):
 app = typer.Typer(name="cascade", help="Cascade -- adaptive local/cloud LLM routing.", no_args_is_help=True)
 config_app = typer.Typer(help="Show or change ~/.cascade/config.json.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
+
+# Without an instruction, small local models answer "who wrote X" with an
+# essay: measured 256 tokens / 66 s for "explain what an api is" vs 33 tokens
+# / 8 s with this one (llama3.2:3b on CPU). Override with `config set system_prompt`.
+DEFAULT_SYSTEM_PROMPT = (
+    "Answer directly and concisely. Start with the answer itself. Match the length of your answer "
+    "to the question: a short factual question gets one or two sentences; give detail or steps "
+    "only when the question asks for them."
+)
 
 _ACCELERATION_LAYERS = {"none": "NONE", "prompt_lookup": "LOOKAHEAD", "draft_model": "DRAFT_MODEL"}
 
@@ -114,8 +130,14 @@ def build_local_backend(config: dict):
             model_id=model,
             preferred_layer=layer,
             validated_pairs=[DraftPair(model, draft, True)],
+            **_local_limits(config),
         )
-    return LocalExecutionBackend(model_id=model)
+    return LocalExecutionBackend(model_id=model, **_local_limits(config))
+
+
+def _local_limits(config: dict) -> dict:
+    max_tokens = _get(config, "local.max_tokens")
+    return {"max_tokens": int(max_tokens)} if max_tokens else {}
 
 
 def build_pipeline(decision_logging: bool = True):
@@ -139,10 +161,41 @@ def build_pipeline(decision_logging: bool = True):
         self_hosted_backend=SelfHostedBackend(**self_hosted) if self_hosted else None,
         cloud_byok_backend=CloudBYOKBackend(**byok) if byok and byok["api_key"] else None,
         compressor=ContextCompressor(embedder),
-        cache=SemanticCache(embedder),
+        cache=SemanticCache(embedder, config=_cache_config(config)),
         router=SemanticRouterClassifier(embedder),
         decision_log_path=DEFAULT_DECISION_LOG_PATH if decision_logging else None,
+        system_prompt=_get(config, "system_prompt", DEFAULT_SYSTEM_PROMPT),
+        **({"uncached_tiers": tuple(_get(config, "cache.uncached_tiers"))} if _get(config, "cache.uncached_tiers") is not None else {}),
     )
+
+
+def _cache_config(config: dict):
+    from engine.intelligence.cache import CacheConfig
+
+    """Any CacheConfig field set under `cache.` in the config file overrides its default."""
+    from dataclasses import fields
+
+    settings = _get(config, "cache", {}) or {}
+    overrides = {}
+    for field in fields(CacheConfig):
+        if field.name in settings:
+            value = settings[field.name]
+            overrides[field.name] = tuple(value) if isinstance(value, list) else value
+    return CacheConfig(**overrides)
+
+
+def warn_if_unprofiled() -> None:
+    """The first local answer on a new machine runs the hardware check first; say so instead of hanging silently."""
+    from engine.execution.hardware_profiler import HardwareProfiler
+    from engine.execution.model_runner import OllamaReferenceModelRunner
+
+    if HardwareProfiler(OllamaReferenceModelRunner()).load_cached_profile() is None:
+        typer.secho(
+            "No hardware profile yet: running the one-time hardware check before answering "
+            "(several minutes on CPU). Run `cascade init` to do this ahead of time.",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
 
 
 # ---- Output -----------------------------------------------------------------------
@@ -199,6 +252,7 @@ def ask(
     stream: bool = typer.Option(False, help="Print the answer as it's generated."),
 ) -> None:
     """FR-08.2: one-shot, scriptable use."""
+    warn_if_unprofiled()
     pipeline = build_pipeline(decision_logging=not no_log)
     messages = [{"role": "user", "content": query}]
     if stream:
@@ -214,6 +268,7 @@ def ask(
 @app.command()
 def chat(no_log: bool = typer.Option(False, help="Disable decision logging for this session.")) -> None:
     """FR-08.2: interactive, multi-turn session."""
+    warn_if_unprofiled()
     pipeline = build_pipeline(decision_logging=not no_log)
     messages: list[dict] = []
     typer.echo("Cascade chat -- type 'exit' to quit.")

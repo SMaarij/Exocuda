@@ -229,3 +229,81 @@ def test_doctor_reports_missing_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 1
     assert "Ollama server reachable" in result.output
+
+
+# ---- Settings added after the 2026-11-06 live benchmark ---------------------
+
+
+@pytest.fixture
+def captured_pipeline(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """build_pipeline() with every heavy part faked; returns the kwargs it passed."""
+    import engine.intelligence.cache as cache_module
+    import engine.intelligence.embeddings as emb_module
+    import engine.intelligence.pipeline as pipeline_module
+    from engine.intelligence.tests.fakes import FakeEmbedder
+
+    captured: dict = {}
+    monkeypatch.setattr(emb_module, "FastEmbedEmbedder", FakeEmbedder)
+    monkeypatch.setattr(cache_module, "SemanticCache", lambda embedder, config=None: ("cache", config))
+    monkeypatch.setattr(pipeline_module, "Pipeline", lambda **kw: captured.update(kw) or "pipeline")
+    monkeypatch.setattr(cli_main, "build_local_backend", lambda config: "local")
+    return captured
+
+
+def test_default_system_prompt_is_sent(captured_pipeline: dict) -> None:
+    cli_main.build_pipeline(decision_logging=False)
+    assert captured_pipeline["system_prompt"] == cli_main.DEFAULT_SYSTEM_PROMPT
+    assert "uncached_tiers" not in captured_pipeline  # Pipeline's own default applies
+
+
+def test_system_prompt_can_be_replaced_or_disabled(captured_pipeline: dict) -> None:
+    runner.invoke(app, ["config", "set", "system_prompt", "Talk like a pirate."])
+    cli_main.build_pipeline(decision_logging=False)
+    assert captured_pipeline["system_prompt"] == "Talk like a pirate."
+
+    runner.invoke(app, ["config", "set", "system_prompt", '""'])
+    cli_main.build_pipeline(decision_logging=False)
+    assert captured_pipeline["system_prompt"] == ""
+
+
+def test_cache_settings_come_from_config(captured_pipeline: dict) -> None:
+    runner.invoke(app, ["config", "set", "cache.similarity_threshold", "0.95"])
+    runner.invoke(app, ["config", "set", "cache.uncached_tiers", '["self_hosted", "cloud_byok"]'])
+    cli_main.build_pipeline(decision_logging=False)
+    _, cache_config = captured_pipeline["cache"]
+    assert cache_config.similarity_threshold == 0.95
+    assert captured_pipeline["uncached_tiers"] == ("self_hosted", "cloud_byok")
+
+
+def test_local_max_tokens_comes_from_config() -> None:
+    assert cli_main.build_local_backend({"local": {"max_tokens": 128}})._max_tokens == 128
+    assert cli_main.build_local_backend({})._max_tokens == 512
+
+
+def test_ask_warns_before_the_first_run_hardware_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_main, "build_pipeline", lambda decision_logging=True: _FakePipeline())
+    result = runner.invoke(app, ["ask", "hi"])
+    assert "one-time hardware check" in result.output
+
+
+def test_ask_is_quiet_once_profiled(monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.execution.hardware_profiler as hp_module
+
+    class _Profiled(_FakeHardwareProfiler):
+        def load_cached_profile(self):
+            return self.profile()
+
+    monkeypatch.setattr(hp_module, "HardwareProfiler", _Profiled)
+    monkeypatch.setattr(cli_main, "build_pipeline", lambda decision_logging=True: _FakePipeline())
+    assert "hardware check" not in runner.invoke(app, ["ask", "hi"]).output
+
+
+def test_every_cache_setting_is_configurable(captured_pipeline: dict) -> None:
+    runner.invoke(app, ["config", "set", "cache.term_swap_guard", "lenient"])
+    runner.invoke(app, ["config", "set", "cache.min_shared_prefix", "5"])
+    runner.invoke(app, ["config", "set", "cache.time_sensitive_patterns", '["\\bstock\\b"]'])
+    cli_main.build_pipeline(decision_logging=False)
+    _, cache_config = captured_pipeline["cache"]
+    assert cache_config.term_swap_guard == "lenient"
+    assert cache_config.min_shared_prefix == 5
+    assert cache_config.time_sensitive_patterns == ("\bstock\b",)

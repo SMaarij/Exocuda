@@ -320,6 +320,47 @@ text (`"Hello there friend."`, `1.685 tok/s`). 257 tests passing
 (3 test-fallout fixes, no new tests needed -- this is a resolution
 layer over existing, already-tested load-call plumbing).
 
+## [0.3.1] -- 2026-11-06 -- fixes from the first live end-to-end benchmark
+
+A 67-request run through the real pipeline (llama3.2:3b on CPU) found wrong
+and stale cache answers, essay-length answers to one-line questions, and a
+benchmark that measured looser settings than the CLI uses.
+
+### Changed (Pipeline seam)
+
+- `Pipeline.__init__` gains `system_prompt: Optional[str] = None` (prepended
+  as a system message when the conversation has none) and
+  `uncached_tiers: tuple[str, ...] = ("self_hosted",)`.
+- The router now runs **before** the cache. Queries it sends to an
+  uncached tier are neither served from nor written to the cache. Rationale:
+  the self_hosted label means "needs live data or tools", so a cached answer
+  is stale by definition ("who is the current prime minister" was cached
+  and replayed). Costs one embedding per cache hit.
+
+### Fixed
+
+- **Wrong cache answers.** "...boiling point of water in celsius" was
+  served the stored Fahrenheit answer: the embeddings score the two at 0.925.
+  `SemanticCache` now applies a term-swap guard (`CacheConfig.term_swap_guard`,
+  `"strict"` by default): a match is rejected when the new question swaps in a
+  term the stored answer never mentions, or has the same key terms reordered.
+  Stop words come from scikit-learn; no hand-written word lists. On the new
+  19-pair near-miss fixture: 4/19 wrong answers before, 0/19 after (9 of the
+  pairs were written after the guard). Cost: reworded questions answered
+  from the cache fell from 71% to 43% on the paraphrase fixture, because
+  rewordings that swap a verb ("wrote" -> "author") now get a fresh answer.
+- Time-sensitive and personal patterns are now `CacheConfig` fields, and the
+  defaults catch "current"/"today" on their own.
+- **Long answers.** The CLI sends `DEFAULT_SYSTEM_PROMPT` (configurable,
+  `""` disables); `local.max_tokens` is configurable.
+- `cascade ask`/`chat` say when the one-time hardware check is about to run.
+- `scripts/run_benchmark.py` used a 0.85 threshold while the CLI uses 0.92,
+  overstating the paraphrase hit rate (93% vs 71% live). It now uses
+  `CacheConfig()`, real recorded answers
+  (`scripts/record_benchmark_answers.py`), reports wrong answers, sweeps
+  threshold x guard mode, and rewrites only its own section of
+  `docs/BENCHMARK_REPORT.md` instead of the whole file.
+
 ## [0.3.0] -- 2026-11-05 -- open-source release
 
 Cascade is now an MIT-licensed open-source project with no paid hosted tier.

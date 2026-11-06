@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 from engine.intelligence.embeddings import Embedder
 from shared.types import Message
@@ -44,37 +45,114 @@ DEFAULT_DB_PATH = Path.home() / ".cascade" / "cache.sqlite3"
 # FR-06.2: rule-based by design, unlike SemanticRouter. Cacheability is
 # a safety filter -- never serve a stale answer to "what's today's
 # date" -- and that is exactly the kind of decision you want
-# deterministic, auditable rules for, not a learned model that could
-# silently drift.
-_TIME_SENSITIVE_PATTERNS = (
-    r"\btoday'?s? date\b",
-    r"\bcurrent (time|date|weather|price)\b",
+# deterministic, auditable rules for. These are only the defaults: pass
+# your own via CacheConfig. The pipeline additionally skips the cache for
+# queries the router sends to a live-data tier (Pipeline.uncached_tiers),
+# which catches phrasings these patterns don't.
+DEFAULT_TIME_SENSITIVE_PATTERNS: tuple[str, ...] = (
+    r"\btoday'?s?\b",
+    r"\bcurrent(ly)?\b",
     r"\bright now\b",
     r"\blatest\b",
-    r"\bcurrently\b",
-    r"\bthis week\b",
+    r"\bthis (week|month|year)\b",
     r"\bwhat time is it\b",
     r"\bnow\b",
 )
-_PERSONALIZED_PATTERNS = (
+DEFAULT_PERSONALIZED_PATTERNS: tuple[str, ...] = (
     r"\bmy (account|balance|order|password|email|name)\b",
     r"\byour account\b",
 )
 
 
-def is_cacheable(query: str) -> bool:
+GUARD_MODES = ("strict", "lenient", "off")
+
+
+@dataclass(frozen=True)
+class CacheConfig:
+    # Cosine similarity a stored query needs to count as "the same question".
+    # scripts/run_benchmark.py sweeps this against the paraphrase and
+    # near-miss fixtures and reports hit rate and wrong-answer rate per value.
+    similarity_threshold: float = 0.92
+    default_ttl_seconds: Optional[int] = 7 * 24 * 3600  # None = never expires
+    time_sensitive_patterns: tuple[str, ...] = DEFAULT_TIME_SENSITIVE_PATTERNS
+    personalized_patterns: tuple[str, ...] = DEFAULT_PERSONALIZED_PATTERNS
+    # Embeddings score "...in fahrenheit" / "...in celsius" and "5 kg to lb" /
+    # "5 lb to kg" as near-identical. The guard rejects such matches:
+    #   "strict"  -- the new question swapped in a term the stored answer never
+    #                mentions. Safest; also turns away some rewordings that swap
+    #                a verb ("wrote" -> "author"), which then cost a fresh answer.
+    #   "lenient" -- only when the answer also mentions the term that was
+    #                swapped out. Misses swaps behind terse answers ("212°F").
+    #   "off"     -- similarity alone.
+    # Both modes also reject the same key terms in a different order.
+    term_swap_guard: str = "strict"
+
+    def __post_init__(self) -> None:
+        if self.term_swap_guard not in GUARD_MODES:
+            raise ValueError(f"term_swap_guard must be one of {GUARD_MODES}, got {self.term_swap_guard!r}")
+    # Two words count as the same term if they share at least this many
+    # leading letters and one is a prefix of the other ("current"/"currently").
+    min_shared_prefix: int = 4
+
+
+def is_cacheable(query: str, config: Optional[CacheConfig] = None) -> bool:
     """FR-06.2."""
+    config = config or CacheConfig()
     text = query.lower()
-    for pattern in _TIME_SENSITIVE_PATTERNS + _PERSONALIZED_PATTERNS:
+    for pattern in config.time_sensitive_patterns + config.personalized_patterns:
         if re.search(pattern, text):
             return False
     return True
 
 
-@dataclass(frozen=True)
-class CacheConfig:
-    similarity_threshold: float = 0.92
-    default_ttl_seconds: Optional[int] = 7 * 24 * 3600  # None = never expires
+def _terms(text: str) -> list[str]:
+    """Content terms in order: lowercase words and numbers minus scikit-learn's English stop words."""
+    return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w.isdigit() or (len(w) > 1 and w not in ENGLISH_STOP_WORDS)]
+
+
+def _same_term(a: str, b: str, min_prefix: int) -> bool:
+    if a == b:
+        return True
+    if a.isdigit() or b.isdigit():
+        return False
+    short, long_ = sorted((a, b), key=len)
+    return len(short) >= min_prefix and long_.startswith(short)
+
+
+def _unmatched(terms: list[str], others: list[str], min_prefix: int) -> list[str]:
+    return [t for t in terms if not any(_same_term(t, o, min_prefix) for o in others)]
+
+
+def term_swap_conflict(
+    new_query: str, cached_query: str, cached_answer: str, min_prefix: int = 4, mode: str = "strict"
+) -> bool:
+    """
+    True if serving `cached_answer` (written for `cached_query`) to
+    `new_query` would likely be wrong even though the two embed as
+    near-identical:
+      - a swap: the cached query has a term the new one lacks, and the new
+        query has a term the answer never mentions (fahrenheit -> celsius,
+        4 -> 5, japan -> china). In "lenient" mode the answer must also
+        mention the term that was swapped out.
+      - a reorder: exactly the same terms in a different order (a reversed
+        conversion or comparison).
+    Adding or dropping words, without swapping one for another, passes.
+    """
+    if mode not in GUARD_MODES:
+        raise ValueError(f"term_swap_guard must be one of {GUARD_MODES}, got {mode!r}")
+    if mode == "off":
+        return False
+    new_t, cached_t, answer_t = _terms(new_query), _terms(cached_query), _terms(cached_answer)
+    only_cached = _unmatched(cached_t, new_t, min_prefix)
+    only_new = _unmatched(new_t, cached_t, min_prefix)
+    answer_lacks_added = any(_unmatched([t], answer_t, min_prefix) for t in only_new)
+    if mode == "strict":
+        swapped = bool(only_cached)
+    else:
+        swapped = any(not _unmatched([t], answer_t, min_prefix) for t in only_cached)
+    if swapped and answer_lacks_added:
+        return True
+    return set(new_t) == set(cached_t) and new_t != cached_t
 
 
 def _prefix_key(messages: list[Message]) -> str:
@@ -117,6 +195,7 @@ class SemanticCache:
         # cost once, not per lookup.
         self._ids: list[int] = []
         self._embedding_blobs: list[bytes] = []
+        self._queries: dict[int, str] = {}
         self._responses: dict[int, str] = {}
         self._expires_at: dict[int, Optional[float]] = {}
         self._hit_counts: dict[int, int] = {}
@@ -144,11 +223,12 @@ class SemanticCache:
         construction (so an existing on-disk cache is usable
         immediately) and available for tests that seed rows directly."""
         rows = self._conn.execute(
-            "SELECT id, query_embedding, response_text, expires_at, hit_count FROM cache_entries"
+            "SELECT id, query_embedding, response_text, expires_at, hit_count, query_text FROM cache_entries"
         ).fetchall()
         self._ids = [r[0] for r in rows]
         self._embedding_blobs = [r[1] for r in rows]
         self._responses = {r[0]: r[2] for r in rows}
+        self._queries = {r[0]: r[5] for r in rows}
         self._expires_at = {r[0]: r[3] for r in rows}
         self._hit_counts = {r[0]: r[4] for r in rows}
         self._matrix = None  # rebuilt lazily on first lookup
@@ -163,7 +243,7 @@ class SemanticCache:
 
     def write(self, messages: list[Message], response_text: str, ttl_seconds: Optional[int] = ...) -> None:
         query = messages[-1]["content"] if messages else ""
-        if not query or not is_cacheable(query):
+        if not query or not is_cacheable(query, self._config):
             return
 
         ttl = self._config.default_ttl_seconds if ttl_seconds is ... else ttl_seconds
@@ -186,6 +266,7 @@ class SemanticCache:
         self._ids.append(row_id)
         self._embedding_blobs.append(blob)
         self._responses[row_id] = response_text
+        self._queries[row_id] = query
         self._expires_at[row_id] = expires_at
         self._hit_counts[row_id] = 0
         self._matrix = None  # dirty -- rebuilt lazily on next lookup
@@ -233,15 +314,24 @@ class SemanticCache:
         )
         sims = np.where(expired, -1.0, sims)
 
-        best_idx = int(np.argmax(sims))
-        best_score = float(sims[best_idx])
-        if best_score < self._config.similarity_threshold:
-            return None
-
-        row_id = self._ids[best_idx]
-        self._hit_counts[row_id] += 1
-        self._conn.execute(
-            "UPDATE cache_entries SET hit_count = ? WHERE id = ?", (self._hit_counts[row_id], row_id)
-        )
-        self._conn.commit()
-        return self._responses[row_id]
+        # Best match first; a candidate the term-swap guard rejects falls
+        # through to the next one above the threshold.
+        for idx in np.argsort(-sims):
+            if float(sims[idx]) < self._config.similarity_threshold:
+                return None
+            row_id = self._ids[int(idx)]
+            if term_swap_conflict(
+                query,
+                self._queries.get(row_id, ""),
+                self._responses[row_id],
+                self._config.min_shared_prefix,
+                self._config.term_swap_guard,
+            ):
+                continue
+            self._hit_counts[row_id] += 1
+            self._conn.execute(
+                "UPDATE cache_entries SET hit_count = ? WHERE id = ?", (self._hit_counts[row_id], row_id)
+            )
+            self._conn.commit()
+            return self._responses[row_id]
+        return None

@@ -1,15 +1,15 @@
-{"original": "what is the capital of france", "paraphrase": "what's france's capital city"}
-{"original": "how do you spell definitely", "paraphrase": "what's the correct spelling of definitely"}
-{"original": "what is the boiling point of water in celsius", "paraphrase": "at what celsius temperature does water boil"}
-{"original": "who wrote romeo and juliet", "paraphrase": "who is the author of romeo and juliet"}
-{"original": "convert 10 miles to kilometers", "paraphrase": "how many kilometers is 10 miles"}
-{"original": "what does the word ubiquitous mean", "paraphrase": "can you define the word ubiquitous"}
-{"original": "what year did world war two end", "paraphrase": "in what year did world war 2 come to an end"}
-{"original": "give me a synonym for happy", "paraphrase": "what's another word for happy"}
-{"original": "explain how photosynthesis works", "paraphrase": "can you describe how photosynthesis functions"}
-{"original": "what is 15 times 4", "paraphrase": "what's the product of 15 and 4"}
-{"original": "what's the capital of japan", "paraphrase": "which city is the capital of japan"}
-{"original": "who is the current prime minister of the uk", "paraphrase": "who currently serves as uk prime minister"}
-{"original": "what is the chemical formula for water", "paraphrase": "how is water represented chemically"}
-{"original": "how many continents are there", "paraphrase": "what is the total number of continents"}
-{"original": "what is the speed of light", "paraphrase": "how fast does light travel"}
+{"original": "what is the capital of france", "paraphrase": "what's france's capital city", "answer": "The capital of France is Paris.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "how do you spell definitely", "paraphrase": "what's the correct spelling of definitely", "answer": "D-E-F-I-N-I-T-E-L-Y.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what is the boiling point of water in celsius", "paraphrase": "at what celsius temperature does water boil", "answer": "The boiling point of water is 100°C.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "who wrote romeo and juliet", "paraphrase": "who is the author of romeo and juliet", "answer": "William Shakespeare wrote Romeo and Juliet.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "convert 10 miles to kilometers", "paraphrase": "how many kilometers is 10 miles", "answer": "10 miles is equivalent to approximately 16.09 kilometers.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what does the word ubiquitous mean", "paraphrase": "can you define the word ubiquitous", "answer": "The word \"ubiquitous\" means being present or found everywhere at the same time.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what year did world war two end", "paraphrase": "in what year did world war 2 come to an end", "answer": "World War II ended in 1945.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "give me a synonym for happy", "paraphrase": "what's another word for happy", "answer": "Elated.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "explain how photosynthesis works", "paraphrase": "can you describe how photosynthesis functions", "answer": "Photosynthesis is the process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of glucose. This process involves the absorption of carbon dioxide and water, followed by the conversion of light energy into ATP and NADPH, which are then used to produce glucose and oxygen.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what is 15 times 4", "paraphrase": "what's the product of 15 and 4", "answer": "60", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what's the capital of japan", "paraphrase": "which city is the capital of japan", "answer": "Tokyo is the capital of Japan.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "who is the current prime minister of the uk", "paraphrase": "who currently serves as uk prime minister", "answer": "Rishi Sunak.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what is the chemical formula for water", "paraphrase": "how is water represented chemically", "answer": "H2O.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "how many continents are there", "paraphrase": "what is the total number of continents", "answer": "There are 7 continents: Africa, Antarctica, Asia, Australia, Europe, North America, and South America.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}
+{"original": "what is the speed of light", "paraphrase": "how fast does light travel", "answer": "The speed of light is approximately 299,792,458 meters per second.", "answer_source": "llama3.2:3b-instruct-q4_K_M"}

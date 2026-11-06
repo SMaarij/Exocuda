@@ -72,6 +72,8 @@ class Pipeline:
         shadow_labeler: Optional[ShadowLabeler] = None,
         confidence_floor: Optional[float] = 0.5,
         decision_log_path: Optional[Path] = None,
+        system_prompt: Optional[str] = None,
+        uncached_tiers: tuple[str, ...] = ("self_hosted",),
     ) -> None:
         self._backend = backend
         self._self_hosted_backend = self_hosted_backend
@@ -85,19 +87,29 @@ class Pipeline:
         # a path is explicitly configured. See decision_log.py's module
         # docstring for why this exists.
         self._decision_log_path = decision_log_path
+        # Prepended as a system message when the conversation has none.
+        # None or "" sends the conversation unchanged.
+        self._system_prompt = system_prompt or None
+        # Tiers whose answers depend on live data or tools (the router's
+        # self_hosted label means exactly that -- see coldstart_data.py), so
+        # they are never served from, or written to, the cache.
+        self._uncached_tiers = tuple(uncached_tiers)
 
     # ---- Pipeline seam (Section 9) --------------------------------------
 
     def run(self, messages: list[Message]) -> PipelineResult:
         start = time.monotonic()
         compressed = self._compressor.compress(messages) if self._compressor else messages
+        compressed = self._with_system_prompt(compressed)
 
-        if self._cache is not None:
+        tier = self._decide_initial_tier(compressed)
+        use_cache = self._cache is not None and tier not in self._uncached_tiers
+
+        if use_cache:
             cached = self._cache.lookup(compressed)
             if cached is not None:
                 return self._finalize(self._cache_hit_result(cached, start))
 
-        tier = self._decide_initial_tier(compressed)
         result, tier, escalated = self._execute(compressed, tier)
 
         if tier == "local" and self._confidence_floor is not None and self._self_hosted_backend is not None:
@@ -110,7 +122,7 @@ class Pipeline:
                 except Exception:
                     pass  # NFR-03: keep the local answer rather than fail the request
 
-        if self._cache is not None:
+        if use_cache:
             self._cache.write(compressed, result["text"])
 
         if self._shadow_labeler is not None:
@@ -129,6 +141,11 @@ class Pipeline:
             "est_cost_usd": result["est_cost_usd"],
         })
 
+    def _with_system_prompt(self, messages: list[Message]) -> list[Message]:
+        if not self._system_prompt or any(m["role"] == "system" for m in messages):
+            return messages
+        return [{"role": "system", "content": self._system_prompt}, *messages]
+
     def _finalize(self, result: PipelineResult) -> PipelineResult:
         """Every path through run() ends here -- the one place decision logging (FR-08.3) happens, off by default."""
         if self._decision_log_path is not None:
@@ -138,14 +155,15 @@ class Pipeline:
     def run_stream(self, messages: list[Message]) -> Iterator[str]:
         """See module docstring's STREAMING LIMITATION note."""
         compressed = self._compressor.compress(messages) if self._compressor else messages
+        compressed = self._with_system_prompt(compressed)
 
-        if self._cache is not None:
+        tier = self._decide_initial_tier(compressed)
+        if self._cache is not None and tier not in self._uncached_tiers:
             cached = self._cache.lookup(compressed)
             if cached is not None:
                 yield cached
                 return
 
-        tier = self._decide_initial_tier(compressed)
         stream_backend = self._backend_for_tier(tier)
 
         try:

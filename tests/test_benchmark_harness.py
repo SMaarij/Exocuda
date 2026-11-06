@@ -84,3 +84,27 @@ def test_estimate_cost_reduction_matches_local_fraction() -> None:
     assert result["projected_cost_reduction_vs_pure_cloud"] == 0.5
     # Must not silently fold in a cache contribution -- see the function's own docstring.
     assert "does not include a cache contribution" in result["note"].lower()
+
+
+def test_report_regenerates_only_its_own_section(tmp_path: Path, monkeypatch) -> None:
+    report = tmp_path / "BENCHMARK_REPORT.md"
+    report.write_text(
+        f"# Title\n\n{run_benchmark.GENERATED_START}\nold numbers\n{run_benchmark.GENERATED_END}\n\n## Hand-written addendum\nkeep me\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(run_benchmark, "REPORT_PATH", report)
+    router = run_benchmark.measure_router_agreement(FakeEmbedder())
+    cache = run_benchmark.measure_cache_hit_rate(FakeEmbedder(), tmp_path / "a.sqlite3")
+    wrong = run_benchmark.measure_wrong_hit_rate(FakeEmbedder(), tmp_path / "b.sqlite3")
+    run_benchmark._write_report(router, cache, wrong, [], run_benchmark.estimate_cost_reduction(router))
+
+    text = report.read_text(encoding="utf-8")
+    assert "old numbers" not in text
+    assert "Wrong hits:" in text
+    assert text.startswith("# Title") and text.rstrip().endswith("keep me")
+
+
+def test_wrong_hit_benchmark_uses_recorded_answers() -> None:
+    rows = run_benchmark._load_jsonl(run_benchmark.CACHE_NEAR_MISS_PAIRS_PATH)
+    assert rows and all(r.get("answer") for r in rows)
+    assert run_benchmark._stored_answer(rows[0]) == rows[0]["answer"]

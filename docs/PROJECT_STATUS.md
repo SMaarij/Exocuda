@@ -13,14 +13,25 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-03 | AccelerationEngine (layers, fallback, acceptance monitor) | Done and real; **not faster on CPU** | prompt lookup 0.60x, draft model 0.89x; off by default |
 | FR-04 | ContextCompressor | Done | unit tests |
 | FR-05 | SemanticRouter (3-way) | Done | 89.2% held-out agreement; live routing to `local` and `cloud_byok` |
-| FR-06 | SemanticCache | Done, verified live | paraphrase hit; 22–55 ms warm lookup |
+| FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
 | NFR-01 | ≥1.5x acceleration | **Not met** on the dev laptop | needs a GPU measurement |
-| NFR-02 | cache hit <150 ms | Met (warm) | first lookup per process ~2.4 s (model load) |
+| NFR-02 | cache hit <150 ms | Met (warm) | 55 ms median live; first lookup per process ~2.4 s (model load) |
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.3.1 — fixes from the first live end-to-end benchmark
+
+- The cache served a wrong answer (Celsius question → stored Fahrenheit answer) and replayed a
+  live-data answer ("current prime minister"). Fixed with a term-swap guard and by skipping the
+  cache for the live-data tier; 0/19 wrong answers on the near-miss fixture, down from 4/19.
+- A default, configurable system prompt: median answer time 23.7 s → 4.7 s over 67 live requests.
+- The benchmark now uses the CLI's real settings and recorded model answers, and sweeps every cache
+  setting. Details: `BENCHMARK_REPORT.md`, Addendum 5.
+- Open: reworded questions served from cache fell to 42.9% — the price of zero wrong answers with
+  these embeddings. A better duplicate-question model is a good contribution.
 
 ## 0.3.0 — open-source release
 
@@ -73,5 +84,8 @@ Code:
   `local` but doesn't say a fallback happened.
 - **Tool calling.** The router sends live-data queries ("what's the weather now") to `self_hosted`,
   but no tier executes tools yet.
+- **Cache recall without wrong answers.** The strict term-swap guard turns away rewordings that
+  swap a verb ("wrote" → "author"). A duplicate-question model that can tell those from
+  "fahrenheit" → "celsius" would win back hits; `scripts/run_benchmark.py` measures both sides.
 - **Postgres store** for a multi-host server (SQLite is correct for one host).
 - **PyPI release.** The name `cascade` is likely taken on PyPI; a distinct package name is needed.
