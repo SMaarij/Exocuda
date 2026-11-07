@@ -38,7 +38,7 @@ class _FakePipeline:
 
 
 class _FakeHardwareProfiler:
-    def __init__(self, runner=None) -> None:
+    def __init__(self, runner=None, **kwargs) -> None:
         pass
 
     def load_cached_profile(self):
@@ -316,3 +316,20 @@ def test_draft_settings_default_to_adaptive() -> None:
 def test_draft_settings_read_config() -> None:
     config = {"draft": {"adaptive": "false", "tokens": "8", "max_tokens": 12}}
     assert cli_main._draft_settings(config) == {"adaptive_draft": False, "draft_tokens": 8, "max_draft_tokens": 12}
+
+
+def test_profile_command_measures_the_configured_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.execution.hardware_profiler as hp_module
+
+    seen: dict = {}
+
+    class _Recording(_FakeHardwareProfiler):
+        def __init__(self, runner=None, **kwargs) -> None:
+            seen.update(kwargs)
+
+    monkeypatch.setattr(hp_module, "HardwareProfiler", _Recording)
+    cli_main.save_config({"runner": "llamacpp", "model": "qwen2.5-coder"})
+
+    assert runner.invoke(app, ["profile"]).exit_code == 0
+    assert seen["reference_model_id"] == "qwen2.5-coder"
+    assert seen["quant_levels"][0] == "7b-instruct-q4_K_M"

@@ -231,6 +231,10 @@ class LlamaCppRunner:
 
     # ---- weights ---------------------------------------------------------
 
+    def local_models(self) -> list[str]:
+        """Tags already downloaded (Ollama's store holds the GGUFs this runner loads)."""
+        return self._ollama.local_models()
+
     def _resolve_path(self, tag: str) -> str:
         if tag not in self._ollama.local_models():
             self._ollama._request("/api/pull", {"model": tag, "stream": False}, timeout=1800)

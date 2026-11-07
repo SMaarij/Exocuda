@@ -200,12 +200,23 @@ def _cache_config(config: dict):
     return CacheConfig(**overrides)
 
 
-def warn_if_unprofiled() -> None:
-    """The first local answer on a new machine runs the hardware check first; say so instead of hanging silently."""
+def hardware_profiler(config: dict, runner=None):
+    """HardwareProfiler for the configured `model`, at the same real tags the local backend loads."""
+    from engine.execution.backend import profile_quant_levels
     from engine.execution.hardware_profiler import HardwareProfiler
     from engine.execution.model_runner import OllamaReferenceModelRunner
 
-    if HardwareProfiler(OllamaReferenceModelRunner()).load_cached_profile() is None:
+    model = config.get("model", "llama3.2")
+    return HardwareProfiler(
+        runner if runner is not None else OllamaReferenceModelRunner(),
+        reference_model_id=model,
+        quant_levels=profile_quant_levels(model),
+    )
+
+
+def warn_if_unprofiled() -> None:
+    """The first local answer on a new machine runs the hardware check first; say so instead of hanging silently."""
+    if hardware_profiler(load_config()).load_cached_profile() is None:
         typer.secho(
             "No hardware profile yet: running the one-time hardware check before answering "
             "(several minutes on CPU). Run `cascade init` to do this ahead of time.",
@@ -236,11 +247,12 @@ def _status_footer(result: dict) -> str:
 @app.command()
 def init() -> None:
     """FR-08.1: profile this machine's hardware and write the config."""
-    from engine.execution.hardware_profiler import HardwareProfiler
-    from engine.execution.model_runner import OllamaReferenceModelRunner
-
-    typer.echo("Profiling your hardware (benchmarks a small local model; first run downloads it)...")
-    profile = HardwareProfiler(OllamaReferenceModelRunner()).profile()
+    config = load_config()
+    typer.echo(
+        f"Profiling your hardware (benchmarks {config.get('model', 'llama3.2')}; "
+        "downloads it first if it isn't local)..."
+    )
+    profile = hardware_profiler(config).profile()
 
     local_capable = profile["local_capable"]
     best_tok_s = max(profile["measured_tok_s"].values()) if profile["measured_tok_s"] else 0.0
@@ -325,10 +337,7 @@ def stats(log_path: Optional[Path] = None) -> None:
 @app.command()
 def profile() -> None:
     """Re-run HardwareProfiler after a hardware change (FR-01.4)."""
-    from engine.execution.hardware_profiler import HardwareProfiler
-    from engine.execution.model_runner import OllamaReferenceModelRunner
-
-    typer.echo(json.dumps(HardwareProfiler(OllamaReferenceModelRunner()).profile(), indent=2))
+    typer.echo(json.dumps(hardware_profiler(load_config()).profile(), indent=2))
 
 
 @app.command()
@@ -338,7 +347,6 @@ def doctor() -> None:
 
     import httpx
 
-    from engine.execution.hardware_profiler import HardwareProfiler
     from engine.execution.model_runner import OllamaReferenceModelRunner
 
     config = load_config()
@@ -363,9 +371,9 @@ def doctor() -> None:
         local = [m for m in ollama.local_models() if m.startswith(model + ":")]
         report(bool(local), f"local {model} models: {', '.join(local) or 'none'}", f"run `ollama pull {model}:3b-instruct-q4_K_M` or `cascade init`")
 
-    cached = HardwareProfiler(runner=ollama).load_cached_profile()
+    cached = hardware_profiler(config, runner=ollama).load_cached_profile()
     if cached is None:
-        report(False, "hardware profile", "run `cascade init`")
+        report(False, f"hardware profile for {config.get('model', 'llama3.2')}", "run `cascade init` (or `cascade profile`)")
     else:
         best = max(cached["measured_tok_s"].values(), default=0.0)
         report(cached["local_capable"], f"hardware profile: local_capable={cached['local_capable']}, best {best:.1f} tok/s",

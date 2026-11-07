@@ -48,7 +48,15 @@ class Message(TypedDict):
     content: str
 
 
-class HardwareProfile(TypedDict):
+class _HardwareProfileOptional(TypedDict, total=False):
+    """Optional HardwareProfile fields. Older cached profiles may lack them."""
+
+    # The model the benchmark ran on. Missing on profiles written before
+    # 0.3.3; those were always measured on llama3.2.
+    reference_model_id: str
+
+
+class HardwareProfile(_HardwareProfileOptional):
     """
     The versioned, MEASURED description of one machine.
 
@@ -72,6 +80,9 @@ class HardwareProfile(TypedDict):
         peak_memory_gb         -- {quant_level_label: peak RSS/VRAM during
                                    that quant level's benchmark run}, same
                                    keys as measured_tok_s.
+        reference_model_id     -- optional: the model measured_tok_s was
+                                   measured on. A profile for a different
+                                   model than the one configured is stale.
         local_capable          -- FR-01.5: False means no candidate rung
                                    cleared the configured latency floor --
                                    Pipeline routes this profile to

@@ -461,3 +461,19 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
 - qwen2.5-coder 7B + 0.5B draft, adaptive: 1.10x decode overall, 1.29x on grounded prompts;
   fixed k=4 reached 1.35x on grounded prompts in one run. Greedy check 0 violations everywhere.
   NFR-01 (1.5x) not met on CPU.
+
+## [Unreleased] -- 2026-11-07 -- hardware profile records the measured model
+
+### Changed (`shared/types.py`)
+
+- `HardwareProfile` gains an optional `reference_model_id: str`, the model the benchmark ran on.
+  `HARDWARE_PROFILE_SCHEMA_VERSION` stays 1. The field is optional and additive, so a bump would
+  only throw away every cached profile. Profiles without it are read as measured on `llama3.2`,
+  which is what every earlier version measured.
+- `HardwareProfiler.load_cached_profile()` returns None for a profile measured on a different
+  model than the profiler's `reference_model_id`, so changing `model` triggers re-profiling.
+  `LocalExecutionBackend` and the CLI (`init`, `profile`, `doctor`, the first-run warning) now
+  profile the configured model at its `_resolve_real_tag` tags, not always llama3.2.
+- The profiler benchmarks only the quant levels already present locally (when the runner can
+  list them). If none are present, it tries just the first level, so profiling downloads at
+  most one model.

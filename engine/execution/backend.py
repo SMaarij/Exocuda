@@ -108,13 +108,37 @@ def _resolve_real_tag(model_id: str, rung_label: str) -> str:
     return _RUNG_LABEL_TO_REAL_TAG.get(model_id, {}).get(rung_label, rung_label)
 
 
+def profile_quant_levels(model_id: str, ladder: Optional[ModelLadder] = None) -> tuple[str, ...]:
+    """The real tag suffixes HardwareProfiler should benchmark for `model_id`:
+    one per ModelLadder rung, lowest rung first, resolved via _resolve_real_tag()."""
+    rungs = (ladder or ModelLadder()).rungs
+    return tuple(_resolve_real_tag(model_id, rung.label) for rung in rungs)
+
+
+def build_profiler(
+    runner: ReferenceModelRunner,
+    model_id: str,
+    ladder: Optional[ModelLadder] = None,
+    **profiler_kwargs,
+) -> HardwareProfiler:
+    """A HardwareProfiler that measures (and caches a profile for) `model_id`.
+    Extra keyword arguments (e.g. profile_path) go to HardwareProfiler."""
+    return HardwareProfiler(
+        runner=runner,
+        reference_model_id=model_id,
+        quant_levels=profile_quant_levels(model_id, ladder),
+        **profiler_kwargs,
+    )
+
+
 class LocalExecutionBackend:
     """
     Real local execution backend. Conforms to shared.types.ExecutionBackend.
 
     Dependency-injection constructor (for tests and Track B):
         runner    -- the model runner; defaults to OllamaReferenceModelRunner.
-        profiler  -- defaults to HardwareProfiler(runner); injectable for
+        profiler  -- defaults to build_profiler(runner, model_id, ladder),
+                     which benchmarks model_id itself; injectable for
                      tests that need a controlled HardwareProfile.
         ladder    -- defaults to ModelLadder(); injectable for tests.
         preferred_layer -- the highest AccelerationLayer to attempt;
@@ -150,9 +174,13 @@ class LocalExecutionBackend:
         # Use OllamaReferenceModelRunner only as a real production default;
         # tests always inject a FakeReferenceModelRunner (NFR-09).
         self._runner: ReferenceModelRunner = runner or OllamaReferenceModelRunner()
-        self._profiler = profiler or HardwareProfiler(runner=self._runner)
         self._ladder = ladder or ModelLadder()
         self._model_id = model_id
+        # Profile the model this backend actually serves, not the llama3.2
+        # reference default: its tok/s is what rung selection needs, and a
+        # cached profile from another model is re-measured (see
+        # HardwareProfiler.load_cached_profile).
+        self._profiler = profiler or build_profiler(self._runner, model_id, self._ladder)
         self._engine = AccelerationEngine(
             runner=self._runner,
             preferred_layer=preferred_layer,
@@ -213,8 +241,9 @@ class LocalExecutionBackend:
 
     def _get_profile(self) -> HardwareProfile:
         """
-        Return the cached HardwareProfile if present and schema-compatible,
-        otherwise run a fresh profile (cascade profile flow, FR-01.4).
+        Return the cached HardwareProfile if present, schema-compatible and
+        measured on the profiler's model, otherwise run a fresh profile
+        (cascade profile flow, FR-01.4).
         """
         cached = self._profiler.load_cached_profile()
         if cached is not None:

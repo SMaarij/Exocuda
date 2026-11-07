@@ -253,6 +253,34 @@ class HardwareProfiler:
         self._min_tok_s_floor = min_tok_s_floor
         self._profile_path = profile_path
 
+    @property
+    def reference_model_id(self) -> str:
+        """The model this profiler benchmarks (and expects a cached profile
+        to have been measured on)."""
+        return self._reference_model_id
+
+    def _levels_to_benchmark(self) -> tuple[str, ...]:
+        """
+        Quant levels worth timing on this run. If the runner can list the
+        models it already has (`local_models()`), only those of the configured
+        quant levels are benchmarked -- pulling every quant of a 7B model
+        just to time it costs many GB and tens of minutes, far past the
+        60s budget (R-06). With none present locally, only the first level
+        is tried, so at most one model is downloaded. Runners that can't
+        list local models (test doubles) get every configured level.
+        """
+        list_local = getattr(self._runner, "local_models", None)
+        if not callable(list_local):
+            return self._quant_levels
+        try:
+            local = set(list_local())
+        except Exception:
+            return self._quant_levels
+        present = tuple(
+            q for q in self._quant_levels if f"{self._reference_model_id}:{q}" in local
+        )
+        return present or self._quant_levels[:1]
+
     # -- FR-01.2 ------------------------------------------------------
 
     def run_benchmark(
@@ -276,8 +304,9 @@ class HardwareProfiler:
         measured_tok_s: dict[str, float] = {}
         peak_memory_gb: dict[str, float] = {}
 
+        quant_levels = self._levels_to_benchmark()
         deadline = time.monotonic() + self._time_budget_s
-        for quant_level in self._quant_levels:
+        for quant_level in quant_levels:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
@@ -304,7 +333,7 @@ class HardwareProfiler:
             finally:
                 self._runner.unload()
 
-        if len(measured_tok_s) < 2 and len(self._quant_levels) >= 2:
+        if len(measured_tok_s) < 2 and len(quant_levels) >= 2:
             # FR-01.2 requires >= 2 quant levels measured. If the budget
             # or repeated load failures left us with fewer, that's a
             # real signal worth surfacing distinctly from "0 measured",
@@ -342,6 +371,7 @@ class HardwareProfiler:
         hardware_profile: HardwareProfile = {
             "schema_version": HARDWARE_PROFILE_SCHEMA_VERSION,
             "profiled_at": datetime.now(timezone.utc).isoformat(),
+            "reference_model_id": self._reference_model_id,
             "os": detect_os(),  # type: ignore[typeddict-item]
             "cpu_cores": detect_cpu_cores(),
             "ram_gb": detect_ram_gb(),
@@ -371,7 +401,13 @@ class HardwareProfiler:
         """Returns the last profile written by `profile()`, or None if
         this machine has never been profiled. Used by anything that
         needs a HardwareProfile but shouldn't trigger a fresh (slow)
-        benchmark run itself -- e.g. `cascade chat` on every launch."""
+        benchmark run itself -- e.g. `cascade chat` on every launch.
+
+        Also returns None when the cached profile was measured on a
+        different model than this profiler's `reference_model_id`: its
+        tok/s figures say nothing about the model now configured, so the
+        caller re-profiles. Profiles written before `reference_model_id`
+        was recorded were always measured on DEFAULT_REFERENCE_MODEL_ID."""
         if not self._profile_path.exists():
             return None
         with open(self._profile_path) as f:
@@ -379,5 +415,7 @@ class HardwareProfiler:
         if data.get("schema_version") != HARDWARE_PROFILE_SCHEMA_VERSION:
             # A profile written by an older/newer schema version isn't
             # safe to trust blindly -- caller should re-profile.
+            return None
+        if data.get("reference_model_id", DEFAULT_REFERENCE_MODEL_ID) != self._reference_model_id:
             return None
         return data  # type: ignore[return-value]
