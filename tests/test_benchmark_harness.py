@@ -124,3 +124,12 @@ def test_acceleration_summary_reports_each_round_and_peak_rss() -> None:
     s = summarize(results)["draft_model:adaptive"]["all"]
     assert s["decode_speedup_per_round"] == [1.5, 1.0]
     assert s["peak_rss_gb"] == 4.9
+
+
+def test_parse_mode_combines_options() -> None:
+    from scripts.benchmark_acceleration import parse_mode
+
+    mode, settings = parse_mode("draft_model:pmin=0.75:k=16:draft=qwen2.5@0.5b-instruct", 4, 10)
+    assert mode == "draft_model"
+    assert settings == {"draft_tokens": 16, "lookup_tokens": 10, "draft_p_min": 0.75,
+                        "draft_model_tag": "qwen2.5:0.5b-instruct"}

@@ -452,3 +452,23 @@ shared prefix.
 
 The CLI now defaults to `draft.p_min 0.75` (16-token cap). `cascade config set draft.p_min off`
 restores adaptive drafting.
+
+## Addendum 9 — a general-purpose draft model does not help open-ended prompts, 2026-11-08
+
+To test whether the coding draft model was what held open-ended prompts back, a general-purpose
+draft (`qwen2.5:0.5b-instruct`, same tokenizer) was run against the default `qwen2.5-coder:0.5b`,
+both with p_min 0.75, over 3 interleaved rounds (`acceleration_qwen7b_general_draft_3rounds.json`):
+
+| Draft model | Grounded | Open | All | Acceptance (open) |
+|---|---:|---:|---:|---:|
+| qwen2.5-coder 0.5B (default) | 1.71x | 1.04x | **1.38x** | 71% |
+| qwen2.5 0.5B instruct | 1.69x | 1.05x | **1.38x** | 76% |
+
+- 0 lossless-check violations; RSS is identical (5.34 GB).
+- The general draft is accepted slightly more often on open prompts, but the speed is the same within
+  noise. On open-ended text, drafts stay short (the draft model is rarely confident for long), and
+  verifying a short draft on this CPU costs nearly as much as the tokens it saves. The draft model is
+  not the bottleneck, so the default stays the coding draft.
+- This run reproduced the Addendum 8 default at 1.38x overall (1.33x there): rounds within ±0.03x.
+
+Benchmark modes accept `draft=FAMILY@TAG` to choose a draft model per mode.

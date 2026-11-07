@@ -74,7 +74,7 @@ MODES = ("none", "prompt_lookup", "draft_model")
 
 def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, dict]:
     """'draft_model', 'draft_model:k=2', 'draft_model:adaptive', 'draft_model:adaptive:pause=0', 'draft_model:pmin=0.75:k=16',
-    'prompt_lookup:k=3' -> (runner mode, LlamaCppRunner settings). Unspecified settings use
+    'draft_model:draft=qwen2.5@0.5b-instruct', 'prompt_lookup:k=3' -> (runner mode, LlamaCppRunner settings). Unspecified settings use
     the CLI flags."""
     mode, *options = spec.split(":")
     settings = {"draft_tokens": draft_tokens, "lookup_tokens": lookup_tokens}
@@ -87,6 +87,9 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
             settings["max_draft_pause"] = int(option[6:])
         elif option.startswith("pmin="):
             settings["draft_p_min"] = float(option[5:])
+        elif option.startswith("draft="):
+            # '@' stands for ':' inside the tag, since ':' separates options
+            settings["draft_model_tag"] = option[6:].replace("@", ":")
         else:
             raise ValueError(f"unknown mode option {option!r} in {spec!r}")
     return mode, settings
@@ -101,7 +104,8 @@ def run(model: str, quant: str, draft: str, max_tokens: int, draft_tokens: int =
     # on the machine -- heat, background load -- hits every mode alike.
     for round_no, spec in ((r, spec) for r in range(repeats) for spec in modes):
         mode, settings = parse_mode(spec, draft_tokens, lookup_tokens)
-        runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0, use_mmap=use_mmap, **settings)
+        settings.setdefault("draft_model_tag", draft)
+        runner = LlamaCppRunner(temperature=0.0, use_mmap=use_mmap, **settings)
         if not runner.set_acceleration(mode):
             print(f"  {spec}: not supported by runner, skipped")
             continue
