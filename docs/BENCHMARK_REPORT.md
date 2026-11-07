@@ -472,3 +472,31 @@ both with p_min 0.75, over 3 interleaved rounds (`acceleration_qwen7b_general_dr
 - This run reproduced the Addendum 8 default at 1.38x overall (1.33x there): rounds within ±0.03x.
 
 Benchmark modes accept `draft=FAMILY@TAG` to choose a draft model per mode.
+
+## Addendum 10 — speculative mode crashed past 512 tokens; fixed, and 0.7 GB less RAM, 2026-11-08
+
+With a draft model attached, llama-cpp-python 0.3.36 asks llama.cpp for logits at every position,
+prompt included, and copies them into a Python buffer of only `n_batch` (512) rows. So:
+
+- **Any prompt + output beyond 512 tokens crashed** (`ValueError: could not broadcast ...`). The
+  benchmark prompts are short, which is why no earlier run hit it. Long code prompts would have.
+- Every prompt token paid for the 152k-wide output projection, and llama.cpp held an output buffer
+  of 512 x 152k floats (311 MB).
+
+Sampling reads logits from the llama.cpp context, counting back from the last output, so verifying a
+draft needs only the last `len(draft) + 1` positions. Speculative-mode models now use an eval that
+requests logits for the last 64 positions only and skips the Python copy (`_install_windowed_eval`).
+`verify_greedy` switches the stock eval back on, with a full-context buffer, while it runs. Draft
+lengths of 64 or more are rejected.
+
+Measured A/B, the same process setup alternated (stock, windowed, stock, windowed), qwen2.5-coder 7B +
+0.5B draft, p_min 0.75:
+
+| | Stock eval | Windowed eval |
+|---|---:|---:|
+| 478-token prompt + 4 tokens | 32.9 s / 31.5 s | **29.0 s / 28.4 s** (−11%) |
+| RSS after that prompt | 6.25 / 6.31 GB | **5.60 / 5.60 GB** (−0.7 GB) |
+| Two short prompts, 96 tokens each | 4.52 / 4.53 tok/s, 5.62 GB | 4.58 / 4.55 tok/s, **5.49 GB** |
+| ~620-token prompt | crash | works; lossless check 48/48 exact |
+
+The RAM saved grows with prompt length, since stock eval wrote 608 KB of logits per prompt token.

@@ -22,6 +22,14 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.3.5 — long prompts no longer crash speculative mode; less RAM
+
+- Speculative decoding crashed once prompt + output passed 512 tokens (a llama-cpp-python buffer
+  sized to the batch, not the context). Fixed by computing logits only where verification needs
+  them: a 478-token prompt now prefills 11% faster in 0.7 GB less RAM. Addendum 10.
+- A general-purpose draft model ties the coding one (1.38x overall), so the draft model is not
+  what limits open-ended prompts. Addendum 9.
+
 ## 0.3.4 — confidence drafting: open-ended prompts no longer slower
 
 - The draft model now stops drafting at the first token it is less than 75% sure of (llama.cpp's

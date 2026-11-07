@@ -239,6 +239,51 @@ class ModelDraft(LlamaDraftModel):
         return np.ctypeslib.as_array(llm._ctx.get_logits(), shape=(llm.n_vocab(),)).astype(np.float64)
 
 
+# Positions whose logits a speculative eval keeps: the verification batch is the
+# last sampled token plus the draft, so this must exceed every draft length.
+OUTPUT_WINDOW = 64
+
+
+def _install_windowed_eval(llm: Any, window: int = OUTPUT_WINDOW) -> None:
+    """
+    Make a speculative-mode Llama compute logits only for the last `window`
+    positions of each eval, and stop copying them into `llm.scores`.
+
+    llama-cpp-python with a draft model asks llama.cpp for logits at *every*
+    position, including every prompt token, and copies them into a Python
+    buffer of only n_batch (512) rows. That cost an extra 152k-wide output
+    projection per prompt token, an output buffer of n_batch x vocab floats in
+    llama.cpp, and crashed outright once prompt + output passed 512 tokens.
+    Sampling reads logits from the llama.cpp context (negative indices count
+    from the last output), so verifying a draft needs only the last
+    len(draft) + 1 of them. `llm.keep_scores = True` restores the stock eval,
+    with a full-context `scores` buffer, for verify_greedy.
+    """
+    stock_eval = llm.eval
+    llm.keep_scores = False
+
+    def eval(tokens) -> None:
+        if llm.keep_scores:
+            if llm.scores.shape[0] < llm._n_ctx:
+                llm.scores = np.zeros((llm._n_ctx, llm._n_vocab), dtype=np.single)  # pages touched lazily
+            return stock_eval(tokens)
+        tokens = list(tokens)
+        first_output = len(tokens) - window
+        llm._ctx.kv_cache_seq_rm(-1, llm.n_tokens, -1)
+        for i in range(0, len(tokens), llm.n_batch):
+            batch = tokens[i:i + llm.n_batch]
+            n_past = llm.n_tokens
+            llm._batch.set_batch(batch=batch, n_past=n_past, logits_all=False)  # last position always on
+            for j in range(max(0, first_output - i), len(batch)):
+                llm._batch.batch.logits[j] = True
+            llm._ctx.decode(llm._batch)
+            llm.input_ids[n_past:n_past + len(batch)] = batch
+            llm.n_tokens += len(batch)
+            llm._requires_eval = False
+
+    llm.eval = eval
+
+
 def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool = False) -> LlamaFactory:
     def make(path: str, needs_all_logits: bool) -> Any:
         # A placeholder draft at construction is the only way to make
@@ -249,8 +294,11 @@ def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool 
         # CPU-friendly layout, so with the file also memory-mapped the
         # weights sat in RAM twice (qwen2.5-coder 7B Q4_K_M: 7.2 GB resident
         # with mmap, 4.6 GB without -- BENCHMARK_REPORT Addendum 7).
-        return Llama(model_path=path, n_ctx=n_ctx, n_threads=n_threads, use_mmap=use_mmap,
-                     verbose=False, draft_model=placeholder)
+        llm = Llama(model_path=path, n_ctx=n_ctx, n_threads=n_threads, use_mmap=use_mmap,
+                    verbose=False, draft_model=placeholder)
+        if needs_all_logits:
+            _install_windowed_eval(llm)
+        return llm
     return make
 
 
@@ -281,6 +329,9 @@ class LlamaCppRunner:
         self._draft_tokens = draft_tokens
         self._adaptive_draft = adaptive_draft
         self._max_draft_tokens = max_draft_tokens
+        longest = max(draft_tokens, max_draft_tokens, lookup_tokens)
+        if longest >= OUTPUT_WINDOW:
+            raise ValueError(f"draft length {longest} must be below {OUTPUT_WINDOW}")
         self._max_draft_pause = max_draft_pause
         self._draft_p_min = draft_p_min
         self._lookup_tokens = lookup_tokens
@@ -440,12 +491,18 @@ class LlamaCppRunner:
             return np.array(llm.scores[start:start + n], dtype=np.float64)
 
         saved_draft, llm.draft_model = llm.draft_model, None
+        windowed = hasattr(llm, "keep_scores")
+        if windowed:
+            llm.keep_scores = True
         try:
             sequential = logits(1)
             batched = [logits(size) for size in batch_sizes]
         finally:
             llm.reset()
             llm.draft_model = saved_draft
+            if windowed:
+                llm.keep_scores = False
+                llm.scores = np.ndarray((llm.n_batch, llm._n_vocab), dtype=np.single)  # free verification rows
 
         rows = np.arange(n)
         order = np.argsort(sequential, axis=1)

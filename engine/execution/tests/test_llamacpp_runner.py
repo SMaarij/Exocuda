@@ -468,3 +468,75 @@ def test_runner_passes_p_min_to_the_draft() -> None:
     runner.set_acceleration(ACCEL_DRAFT_MODEL)
     runner.load("llama3.2", "3b-instruct-q4_K_M")
     assert built[0].draft_model._draft._p_min == 0.8
+
+
+class _WindowLlm:
+    """Just enough of a Llama for _install_windowed_eval: records which batch positions ask for logits."""
+
+    def __init__(self, n_batch: int = 4, n_ctx: int = 32, n_vocab: int = 3) -> None:
+        import types
+
+        self.n_batch, self._n_ctx, self._n_vocab = n_batch, n_ctx, n_vocab
+        self.n_tokens = 0
+        self.input_ids = np.zeros(n_ctx, dtype=np.intc)
+        self.scores = np.zeros((n_batch, n_vocab), dtype=np.single)
+        self.decoded: list[list[bool]] = []
+        self.stock_calls: list[list[int]] = []
+        llm = self
+
+        class _Batch:
+            def __init__(self) -> None:
+                self.batch = types.SimpleNamespace(logits=[False] * n_batch, n_tokens=0)
+
+            def set_batch(self, batch, n_past, logits_all) -> None:
+                self.batch.n_tokens = len(batch)
+                for i in range(len(batch)):
+                    self.batch.logits[i] = logits_all
+                self.batch.logits[len(batch) - 1] = True
+
+        class _Ctx:
+            def kv_cache_seq_rm(self, *args) -> None:
+                pass
+
+            def decode(self, batch) -> None:
+                llm.decoded.append(list(batch.batch.logits[:batch.batch.n_tokens]))
+
+        self._batch, self._ctx = _Batch(), _Ctx()
+
+    def eval(self, tokens) -> None:
+        self.stock_calls.append(list(tokens))
+
+
+def test_windowed_eval_asks_for_logits_only_at_the_last_positions() -> None:
+    from engine.execution.llamacpp_runner import _install_windowed_eval
+
+    llm = _WindowLlm(n_batch=4)
+    _install_windowed_eval(llm, window=3)
+    llm.eval([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])  # a prompt longer than one batch
+    # set_batch always marks each chunk's last position (one harmless row per chunk)
+    assert llm.decoded == [[False, False, False, True], [False, False, False, True], [True, True]]
+    assert llm.n_tokens == 10
+    assert list(llm.input_ids[:10]) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert llm.stock_calls == []
+    llm.eval([11, 12])  # a verification batch shorter than the window: every position
+    assert llm.decoded[-1] == [True, True]
+    assert llm.n_tokens == 12
+
+
+def test_windowed_eval_keep_scores_uses_the_stock_eval_with_a_full_context_buffer() -> None:
+    from engine.execution.llamacpp_runner import _install_windowed_eval
+
+    llm = _WindowLlm(n_batch=4, n_ctx=32)
+    _install_windowed_eval(llm, window=3)
+    llm.keep_scores = True
+    llm.eval([1, 2])
+    assert llm.stock_calls == [[1, 2]]
+    assert llm.scores.shape == (32, 3)
+    assert llm.decoded == []
+
+
+def test_runner_rejects_drafts_longer_than_the_output_window() -> None:
+    from engine.execution.llamacpp_runner import OUTPUT_WINDOW
+
+    with pytest.raises(ValueError):
+        LlamaCppRunner(llama_factory=lambda path, all_logits: None, max_draft_tokens=OUTPUT_WINDOW)

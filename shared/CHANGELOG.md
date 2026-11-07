@@ -478,6 +478,25 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.3.5] -- 2026-11-08 -- speculative mode: fix crash past 512 tokens; less RAM
+
+No seam changes.
+
+### Fixed
+
+- Speculative decoding (draft model or prompt lookup) crashed with `ValueError: could not
+  broadcast` once prompt + output passed 512 tokens: llama-cpp-python copies every position's
+  logits into a buffer of only `n_batch` rows. Speculative-mode models now use an eval that asks
+  llama.cpp for logits at the last 64 positions only and skips the copy; `verify_greedy` restores
+  the stock eval while it runs. Draft lengths of 64 or more are rejected.
+
+### Changed
+
+- Same fix, measured: a 478-token prompt prefills 11% faster and leaves 0.7 GB less resident
+  (6.3 -> 5.6 GB); short prompts 0.13 GB less, same decode speed (BENCHMARK_REPORT Addendum 10).
+- `benchmark_acceleration.py` mode option `draft=FAMILY@TAG`. A general-purpose draft
+  (qwen2.5:0.5b-instruct) ties the coding draft at 1.38x overall (Addendum 9).
+
 ## [0.3.4] -- 2026-11-07 -- confidence drafting; 1.33x overall, open prompts no longer slower
 
 No seam changes.
