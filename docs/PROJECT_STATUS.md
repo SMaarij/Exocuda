@@ -16,11 +16,19 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
-| NFR-01 | ≥1.5x acceleration | **Met on grounded prompts** (1.65x), not yet overall (1.25x) | 3 interleaved rounds, verified lossless; open-ended prompts 0.85x |
+| NFR-01 | ≥1.5x acceleration | **Met on grounded prompts** (1.64x), not yet overall (1.33x) | confidence drafting, 3 interleaved rounds, verified lossless; open-ended prompts 1.01x |
 | NFR-02 | cache hit <150 ms | Met (warm) | 55 ms median live; first lookup per process ~2.4 s (model load) |
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.3.4 — confidence drafting: open-ended prompts no longer slower
+
+- The draft model now stops drafting at the first token it is less than 75% sure of (llama.cpp's
+  `--draft-p-min`), and the CLI uses this by default. Same rounds against the old default:
+  overall 1.19x → **1.33x**, open-ended prompts 0.83x → **1.01x**, code/rewrite prompts 1.64x.
+  Lossless check passes. Addendum 8.
+- Pausing the draft after rejections was tried and did not help; it stays off.
 
 ## 0.3.3 — RAM 7.2 → 4.6 GB, and 1.65x on grounded prompts
 

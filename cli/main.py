@@ -11,9 +11,11 @@ Config keys (set with `cascade config set KEY VALUE`):
     runner                ollama | llamacpp             (default ollama)
     acceleration          none | prompt_lookup | draft_model   (llamacpp only)
     draft_model           draft tag for draft_model     (default llama3.2:1b-instruct-q4_K_M)
-    draft.adaptive        adapt draft length to acceptance (default true: fastest in
-                          docs/benchmark/acceleration_sweep_qwen7b.json)
-    draft.tokens          draft tokens per step; starting length when adaptive (default 4)
+    draft.p_min           stop drafting at the first token the draft model is less sure of
+                          than this (default 0.75, fastest in
+                          docs/benchmark/acceleration_qwen7b_pmin_3rounds.json); off disables
+    draft.adaptive        adapt draft length to acceptance (default true when p_min is off)
+    draft.tokens          draft tokens per step (default 16 with p_min, else 4)
     draft.max_tokens      cap on the adaptive draft length (default 16)
     byok.base_url         OpenAI-compatible root, e.g. https://api.openai.com
     byok.model            e.g. gpt-4o-mini
@@ -140,15 +142,31 @@ def build_local_backend(config: dict):
 
 
 def _draft_settings(config: dict) -> dict:
-    adaptive = _get(config, "draft.adaptive", True)
+    """Default: confidence drafting (p_min 0.75, up to 16 tokens), the fastest mode in
+    docs/benchmark/acceleration_qwen7b_pmin_3rounds.json. `draft.p_min off` falls back
+    to adaptive length drafting."""
+    p_min = _get(config, "draft.p_min", DEFAULT_DRAFT_P_MIN)
+    if isinstance(p_min, str):
+        p_min = None if p_min.strip().lower() in ("", "off", "none", "false", "0") else float(p_min)
+    settings: dict = {}
+    if p_min:
+        settings["draft_p_min"] = float(p_min)
+        settings["draft_tokens"] = 16
+        default_adaptive = False
+    else:
+        default_adaptive = True
+    adaptive = _get(config, "draft.adaptive", default_adaptive)
     if isinstance(adaptive, str):
         adaptive = adaptive.strip().lower() not in ("false", "0", "no", "off")
-    settings = {"adaptive_draft": bool(adaptive)}
+    settings["adaptive_draft"] = bool(adaptive)
     for key, arg in (("draft.tokens", "draft_tokens"), ("draft.max_tokens", "max_draft_tokens")):
         value = _get(config, key)
         if value not in (None, ""):
             settings[arg] = int(value)
     return settings
+
+
+DEFAULT_DRAFT_P_MIN = 0.75
 
 
 def _local_limits(config: dict) -> dict:

@@ -355,7 +355,7 @@ def test_adaptive_draft_grows_when_fully_accepted_and_shrinks_otherwise() -> Non
 
 
 def test_adaptive_draft_never_drops_below_one_and_resets_per_request() -> None:
-    draft = ModelDraft(_CountingDraftLlm(), k=2, adaptive=True)
+    draft = ModelDraft(_CountingDraftLlm(), k=2, adaptive=True, max_pause=0)
     draft(np.zeros(10, dtype=np.intc))
     draft(np.zeros(11, dtype=np.intc))           # nothing accepted -> 1
     draft(np.zeros(12, dtype=np.intc))           # still nothing -> stays 1
@@ -380,3 +380,91 @@ def test_default_factory_loads_without_mmap_unless_asked(monkeypatch) -> None:
     lr._default_llama_factory(512, None)("model.gguf", False)
     lr._default_llama_factory(512, None, use_mmap=True)("model.gguf", False)
     assert [c["use_mmap"] for c in calls] == [False, True]
+
+
+def test_adaptive_draft_pauses_with_backoff_after_rejected_single_token() -> None:
+    draft = ModelDraft(_CountingDraftLlm(), k=1, adaptive=True, max_pause=4)
+    lengths = iter(range(10, 100))
+    calls = lambda n: [len(draft(np.zeros(next(lengths), dtype=np.intc))) for _ in range(n)]
+    # every call advances by 1 token: each 1-token draft is rejected
+    assert calls(1) == [1]
+    assert calls(2) == [0, 1]           # rejected -> pause 1, then probe
+    assert calls(3) == [0, 0, 1]        # rejected again -> pause 2
+    assert calls(5) == [0, 0, 0, 0, 1]  # pause 4 (capped)
+    assert calls(5) == [0, 0, 0, 0, 1]  # stays at the cap
+    assert draft.history[:3] == [1, 0, 1]
+
+
+def test_adaptive_draft_backoff_clears_on_full_acceptance_and_new_request() -> None:
+    draft = ModelDraft(_CountingDraftLlm(), k=1, adaptive=True, max_pause=8)
+    draft(np.zeros(10, dtype=np.intc))
+    assert len(draft(np.zeros(11, dtype=np.intc))) == 0   # rejected -> pause 1
+    assert len(draft(np.zeros(12, dtype=np.intc))) == 1   # probe
+    assert len(draft(np.zeros(14, dtype=np.intc))) == 3   # accepted (advanced 2) -> k = 3, backoff cleared
+    assert draft._backoff == 0
+    draft(np.zeros(15, dtype=np.intc))                    # 0 of 3 accepted -> k = 2
+    draft(np.zeros(5, dtype=np.intc))                     # new request: k and pause reset
+    assert (draft.k, draft._pause) == (1, 0)
+
+
+class _ConfidenceLlm:
+    """Draft-model fake: the next token after t is (t + 1) % V, with probability
+    `confidence[t]` (the rest spread evenly), exposing llama-cpp-python's eval/logits API."""
+
+    def __init__(self, confidence: dict, vocab: int = 8) -> None:
+        import ctypes
+
+        self._ctypes = ctypes
+        self.confidence, self.vocab = confidence, vocab
+        self.input_ids = np.zeros(256, dtype=np.intc)
+        self.n_tokens = 0
+        self.evaluated: list[list[int]] = []
+        self._buf = None
+        outer = self
+
+        class _Ctx:
+            def get_logits(self):
+                return outer._buf.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+
+        self._ctx = _Ctx()
+
+    def n_vocab(self) -> int:
+        return self.vocab
+
+    def eval(self, tokens) -> None:
+        tokens = list(tokens)
+        self.evaluated.append(tokens)
+        self.input_ids[self.n_tokens:self.n_tokens + len(tokens)] = tokens
+        self.n_tokens += len(tokens)
+        last = tokens[-1]
+        p = self.confidence.get(last, 0.9)
+        probs = np.full(self.vocab, (1 - p) / (self.vocab - 1))
+        probs[(last + 1) % self.vocab] = p
+        self._buf = np.log(probs).astype(np.float32)
+
+
+def test_confident_draft_stops_at_the_first_unsure_token() -> None:
+    llm = _ConfidenceLlm({1: 0.95, 2: 0.9, 3: 0.5})
+    draft = ModelDraft(llm, k=8, p_min=0.75)
+    assert list(draft(np.array([0, 1], dtype=np.intc))) == [2, 3]  # after 3 the draft is only 50% sure
+
+
+def test_confident_draft_is_empty_when_unsure_and_capped_at_k() -> None:
+    assert len(ModelDraft(_ConfidenceLlm({1: 0.3}), k=8, p_min=0.75)(np.array([0, 1], dtype=np.intc))) == 0
+    assert len(ModelDraft(_ConfidenceLlm({}), k=3, p_min=0.75)(np.array([0, 1], dtype=np.intc))) == 3
+
+
+def test_confident_draft_reuses_the_cached_prefix() -> None:
+    llm = _ConfidenceLlm({}, vocab=64)
+    draft = ModelDraft(llm, k=2, p_min=0.75)
+    draft(np.array([5, 6, 7], dtype=np.intc))          # evaluates the prompt, drafts 8, 9
+    llm.evaluated.clear()
+    draft(np.array([5, 6, 7, 8, 20], dtype=np.intc))    # 8 was cached; target replaced 9 with 20
+    assert llm.evaluated[0] == [20]
+
+
+def test_runner_passes_p_min_to_the_draft() -> None:
+    runner, built = _runner(draft_p_min=0.8)
+    runner.set_acceleration(ACCEL_DRAFT_MODEL)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    assert built[0].draft_model._draft._p_min == 0.8

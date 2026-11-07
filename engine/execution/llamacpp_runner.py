@@ -135,9 +135,23 @@ class ModelDraft(LlamaDraftModel):
     far the sequence advanced since the previous call: the target keeps the
     accepted drafts plus one token of its own. On copy-heavy text drafts grow
     long; on open-ended text they shrink, so rejected drafts waste less work.
+
+    Even a 1-token draft costs extra on a CPU: the draft model's step, plus
+    verifying 2 tokens instead of 1 (BENCHMARK_REPORT Addendum 7). So when a
+    1-token draft is rejected, drafting pauses for 1, 2, 4, ... calls (up to
+    `max_pause`; 0 disables) and those steps run as plain decoding. An
+    empty draft gives the target exactly its plain decoding step. The first
+    fully accepted draft clears the backoff.
+
+    With `p_min` set, drafting instead stops at the first token the draft
+    model is less than `p_min` sure of (its top softmax probability), as
+    llama.cpp's own speculative decoding does (`--draft-p-min`, default
+    0.75). `k` is then the longest draft. A step with no confident token
+    drafts nothing and costs what plain decoding costs.
     """
 
-    def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16) -> None:
+    def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16, max_pause: int = 0,
+                 p_min: Optional[float] = None) -> None:
         self._llm = llm
         self._initial_k = k
         self._k = k
@@ -145,6 +159,10 @@ class ModelDraft(LlamaDraftModel):
         self._max_k = max_k
         self._last_len: Optional[int] = None
         self._last_drafted = 0
+        self._max_pause = max_pause
+        self._p_min = p_min
+        self._pause = 0      # calls left to skip drafting
+        self._backoff = 0    # length of the next pause
         self.history: list[int] = []  # draft length used per call, for inspection
 
     @property
@@ -154,10 +172,15 @@ class ModelDraft(LlamaDraftModel):
     def _adapt(self, length: int) -> None:
         if self._last_len is None or length <= self._last_len:  # first call, or a new request
             self._k = self._initial_k
+            self._pause = self._backoff = 0
         elif self._last_drafted:
             accepted = length - self._last_len - 1
             if accepted >= self._last_drafted:
                 self._k = min(self._max_k, self._k + 2)
+                self._backoff = 0
+            elif self._k == 1 and self._max_pause > 0:
+                self._backoff = min(self._max_pause, max(1, 2 * self._backoff))
+                self._pause = self._backoff
             else:
                 self._k = max(1, self._k - 1)
         self._last_len = length
@@ -165,7 +188,17 @@ class ModelDraft(LlamaDraftModel):
     def __call__(self, input_ids, /, **kwargs):
         if self._adaptive:
             self._adapt(len(input_ids))
+            if self._pause > 0:
+                self._pause -= 1
+                self._last_drafted = 0
+                self.history.append(0)
+                return np.array([], dtype=np.intc)
         self.history.append(self._k)
+
+        if self._p_min is not None:
+            out = self._confident_draft(list(map(int, input_ids)))
+            self._last_drafted = len(out)
+            return np.array(out, dtype=np.intc)
 
         out: list[int] = []
         gen = self._llm.generate(list(map(int, input_ids)), top_k=1, temp=0.0, reset=True)
@@ -178,6 +211,32 @@ class ModelDraft(LlamaDraftModel):
             gen.close()
         self._last_drafted = len(out)
         return np.array(out, dtype=np.intc)
+
+    def _confident_draft(self, ids: list[int]) -> list[int]:
+        llm = self._llm
+        # Reuse the draft's KV cache for the prefix it has already seen.
+        cached = np.asarray(llm.input_ids[: llm.n_tokens])
+        m = min(len(cached), len(ids))
+        same = cached[:m] == np.asarray(ids[:m])
+        n = m if same.all() else int(np.argmin(same))
+        n = min(n, len(ids) - 1)  # always evaluate at least the last token, for its logits
+        llm.n_tokens = n
+        llm.eval(ids[n:])
+        out: list[int] = []
+        while len(out) < self._k:
+            logits = self._last_logits()
+            token = int(np.argmax(logits))
+            top_p = 1.0 / float(np.sum(np.exp(logits - logits[token])))
+            if top_p < self._p_min:
+                break
+            out.append(token)
+            if len(out) < self._k:
+                llm.eval([token])
+        return out
+
+    def _last_logits(self) -> np.ndarray:
+        llm = self._llm
+        return np.ctypeslib.as_array(llm._ctx.get_logits(), shape=(llm.n_vocab(),)).astype(np.float64)
 
 
 def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool = False) -> LlamaFactory:
@@ -205,6 +264,8 @@ class LlamaCppRunner:
         draft_tokens: int = 4,
         adaptive_draft: bool = False,
         max_draft_tokens: int = 16,
+        max_draft_pause: int = 0,
+        draft_p_min: Optional[float] = None,
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
@@ -220,6 +281,8 @@ class LlamaCppRunner:
         self._draft_tokens = draft_tokens
         self._adaptive_draft = adaptive_draft
         self._max_draft_tokens = max_draft_tokens
+        self._max_draft_pause = max_draft_pause
+        self._draft_p_min = draft_p_min
         self._lookup_tokens = lookup_tokens
         self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads, use_mmap)
         self._mode = ACCEL_NONE
@@ -264,7 +327,8 @@ class LlamaCppRunner:
             if self._draft_llm is None:
                 self._draft_llm = self._factory(self._resolve_path(self._draft_model_tag), False)
             self._counter = DraftCounter(ModelDraft(
-                self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens
+                self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens,
+                max_pause=self._max_draft_pause, p_min=self._draft_p_min
             ))
         else:
             self._counter = None

@@ -309,13 +309,19 @@ def test_every_cache_setting_is_configurable(captured_pipeline: dict) -> None:
     assert cache_config.time_sensitive_patterns == ("\bstock\b",)
 
 
-def test_draft_settings_default_to_adaptive() -> None:
-    assert cli_main._draft_settings({}) == {"adaptive_draft": True}
+def test_draft_settings_default_to_confidence_drafting() -> None:
+    assert cli_main._draft_settings({}) == {"draft_p_min": 0.75, "draft_tokens": 16, "adaptive_draft": False}
+
+
+def test_draft_settings_p_min_off_falls_back_to_adaptive() -> None:
+    assert cli_main._draft_settings({"draft": {"p_min": "off"}}) == {"adaptive_draft": True}
 
 
 def test_draft_settings_read_config() -> None:
-    config = {"draft": {"adaptive": "false", "tokens": "8", "max_tokens": 12}}
-    assert cli_main._draft_settings(config) == {"adaptive_draft": False, "draft_tokens": 8, "max_draft_tokens": 12}
+    config = {"draft": {"p_min": "0.6", "adaptive": "false", "tokens": "8", "max_tokens": 12}}
+    assert cli_main._draft_settings(config) == {
+        "draft_p_min": 0.6, "adaptive_draft": False, "draft_tokens": 8, "max_draft_tokens": 12
+    }
 
 
 def test_profile_command_measures_the_configured_model(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -478,6 +478,27 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.3.4] -- 2026-11-07 -- confidence drafting; 1.33x overall, open prompts no longer slower
+
+No seam changes.
+
+### Added
+
+- `ModelDraft(p_min=...)` / `LlamaCppRunner(draft_p_min=...)`: confidence drafting. The draft
+  model stops at the first token whose top probability is below `p_min`; an empty draft gives the
+  target a plain decoding step. The draft model's KV cache is reused for the shared prefix.
+- `ModelDraft(max_pause=...)` / `LlamaCppRunner(max_draft_pause=...)`: skip drafting with
+  exponential backoff after a rejected 1-token adaptive draft. Off by default (it was slower).
+- CLI key `draft.p_min` (default 0.75; `off` restores adaptive drafting).
+- `benchmark_acceleration.py` mode options combine: `draft_model:pmin=0.75:k=16`,
+  `draft_model:adaptive:pause=0`.
+
+### Changed
+
+- CLI default draft mode: confidence drafting (p_min 0.75, 16-token cap) instead of adaptive.
+  Same 3 interleaved rounds: overall 1.19x -> 1.33x, open-ended prompts 0.83x -> 1.01x,
+  0 lossless-check violations (`docs/benchmark/acceleration_qwen7b_pmin_3rounds.json`).
+
 ## [0.3.3] -- 2026-11-07 -- RAM 7.2 -> 4.6 GB; 1.65x on grounded prompts
 
 No seam changes.

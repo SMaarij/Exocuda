@@ -73,16 +73,22 @@ MODES = ("none", "prompt_lookup", "draft_model")
 
 
 def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, dict]:
-    """'draft_model', 'draft_model:k=2', 'draft_model:adaptive', 'prompt_lookup:k=3' ->
-    (runner mode, LlamaCppRunner settings). Unspecified settings use the CLI flags."""
-    mode, _, option = spec.partition(":")
+    """'draft_model', 'draft_model:k=2', 'draft_model:adaptive', 'draft_model:adaptive:pause=0', 'draft_model:pmin=0.75:k=16',
+    'prompt_lookup:k=3' -> (runner mode, LlamaCppRunner settings). Unspecified settings use
+    the CLI flags."""
+    mode, *options = spec.split(":")
     settings = {"draft_tokens": draft_tokens, "lookup_tokens": lookup_tokens}
-    if option == "adaptive":
-        settings["adaptive_draft"] = True
-    elif option.startswith("k="):
-        settings["lookup_tokens" if mode == "prompt_lookup" else "draft_tokens"] = int(option[2:])
-    elif option:
-        raise ValueError(f"unknown mode option {option!r} in {spec!r}")
+    for option in options:
+        if option == "adaptive":
+            settings["adaptive_draft"] = True
+        elif option.startswith("k="):
+            settings["lookup_tokens" if mode == "prompt_lookup" else "draft_tokens"] = int(option[2:])
+        elif option.startswith("pause="):
+            settings["max_draft_pause"] = int(option[6:])
+        elif option.startswith("pmin="):
+            settings["draft_p_min"] = float(option[5:])
+        else:
+            raise ValueError(f"unknown mode option {option!r} in {spec!r}")
     return mode, settings
 
 

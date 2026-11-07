@@ -413,3 +413,42 @@ plain, adaptive, ...) so machine drift affects both alike. Same 6 prompts, 128 t
 - Against the previous defaults (mmap, plain decoding: 3.48 tok/s in the Addendum 6 sweep), the new
   defaults (no mmap, adaptive draft: 5.26 tok/s) decode 1.5x faster in 2.6 GB less RAM. These
   numbers come from separate runs, so treat the ratio as approximate.
+
+## Addendum 8 — confidence drafting: open-ended prompts no longer lose, 2026-11-07
+
+### Pausing after rejections did not help
+
+`acceleration_qwen7b_pause_3rounds.json` tried skipping the draft for a few steps after a rejected
+1-token draft (exponential backoff). Over 3 interleaved rounds, without the pause: 1.71x grounded,
+0.93x open, 1.33x overall. With the pause: 1.64x, 0.90x, 1.27x. The pause is kept as
+`LlamaCppRunner(max_draft_pause=N)`, off by default.
+
+### Confidence drafting
+
+Adaptive drafting picks how many tokens to draft from past acceptance. Confidence drafting (llama.cpp
+`--draft-p-min`) instead decides token by token: the draft model stops at the first token whose top
+softmax probability is below `p_min`, up to 16 tokens. When it is unsure from the start, the draft
+is empty and the target does a plain decoding step, so a doubtful guess costs no verification batch.
+`ModelDraft(p_min=...)` reads the draft model's logits directly and reuses its KV cache for the
+shared prefix.
+
+`acceleration_qwen7b_pmin_3rounds.json`, 4 modes interleaved within each of 3 rounds, same 6 prompts,
+128 tokens, greedy decoding:
+
+| Mode | Grounded | Open | All | Acceptance (all) | Per round (all) |
+|---|---:|---:|---:|---:|---|
+| Plain | 4.18 tok/s | 4.16 tok/s | 4.17 tok/s | – | – |
+| Adaptive (previous default) | 1.54x | 0.83x | 1.19x | 56% | 1.08 / 1.22 / 1.27 |
+| **Confidence, p_min 0.75 (new default)** | **1.64x** | **1.01x** | **1.33x** | 79% | 1.27 / 1.36 / 1.37 |
+| Confidence, p_min 0.6 | 1.67x | 0.98x | 1.33x | 73% | 1.39 / 1.33 / 1.27 |
+
+- Greedy check: **0 violations** across every mode. Peak RSS 4.6 GB plain, 5.35 GB with the draft.
+- On open-ended prompts acceptance went from 33% to 71%, and the slowdown (0.83x) is gone (1.01x).
+  p_min 0.75 and 0.6 tie overall; 0.75 is the default because it never loses on open prompts.
+- Adaptive scored 1.19x here, 1.25x in Addendum 7 and 1.33x in the pause run. Machine drift between
+  runs is about ±0.07x; compare modes within one run.
+- **NFR-01: met on grounded prompts (1.64x); 1.33x overall.** The remaining gap is open-ended text,
+  where even a well-calibrated 0.5B coding model guesses the 7B's next token too rarely to help.
+
+The CLI now defaults to `draft.p_min 0.75` (16-token cap). `cascade config set draft.p_min off`
+restores adaptive drafting.
