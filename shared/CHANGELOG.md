@@ -432,3 +432,32 @@ No change to either seam or to any `shared/types.py` type. Changes behind them:
 ### Decisions recorded
 - LiteLLM was not added: one OpenAI-compatible client covers the same providers with no extra dependency.
 - BYOK lives in `gateway/` alongside the other OpenAI-compatible client code.
+
+## [0.3.2] -- 2026-11-07 -- speculative decoding verified lossless and tuned
+
+No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are unchanged).
+
+### Fixed
+
+- **Output depended on the previous request.** llama-cpp-python reused the KV cache of the
+  previous prompt's matching prefix. `LlamaCppRunner.generate` now resets state on every call,
+  formats prompts with the model's own chat template, uses llama-cpp-python's chat sampling
+  defaults, and stops on any end-of-generation token.
+
+### Added
+
+- `LlamaCppRunner.verify_greedy()` -> `GreedyCheck(tokens, exact, within_noise, violations,
+  noise_tolerance)`. It recomputes each output token one at a time and checks it against the
+  floating-point noise measured between batched and one-at-a-time evaluation.
+  `scripts/benchmark_acceleration.py` checks every output and prints PASS/FAIL.
+- Adaptive draft length (`LlamaCppRunner(adaptive_draft=..., max_draft_tokens=...)`), using the
+  HF Transformers heuristic schedule. CLI config keys: `draft.adaptive` (default true),
+  `draft.tokens`, `draft.max_tokens`.
+- `benchmark_acceleration.py` options: `--draft-tokens`, `--lookup-tokens`, and `--modes`
+  (e.g. `none,draft_model:k=8,draft_model:adaptive`).
+
+### Measured (CPU-only laptop, BENCHMARK_REPORT Addendum 6)
+
+- qwen2.5-coder 7B + 0.5B draft, adaptive: 1.10x decode overall, 1.29x on grounded prompts;
+  fixed k=4 reached 1.35x on grounded prompts in one run. Greedy check 0 violations everywhere.
+  NFR-01 (1.5x) not met on CPU.

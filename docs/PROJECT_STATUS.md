@@ -16,11 +16,21 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
-| NFR-01 | ≥1.5x acceleration | **Not met** on the dev laptop | needs a GPU measurement |
+| NFR-01 | ≥1.5x acceleration | **Not met** on the dev laptop | best 1.10x overall, 1.35x on grounded prompts, verified lossless; needs a GPU measurement |
 | NFR-02 | cache hit <150 ms | Met (warm) | 55 ms median live; first lookup per process ~2.4 s (model load) |
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.3.2 — speculative decoding verified lossless and tuned
+
+- The "accelerated output differs from plain output" problem had two causes. A real bug, KV-cache
+  state leaking between requests, is fixed. The rest is floating-point noise at near-ties:
+  `LlamaCppRunner.verify_greedy()` now proves every output token is a correct greedy choice within
+  the measured noise, with 0 violations across all runs.
+- Adaptive draft length, now the CLI default, and a better pair (qwen2.5-coder 7B + 0.5B draft):
+  1.10x overall and 1.29–1.35x on code and rewrite prompts on the CPU-only laptop. NFR-01 (1.5x)
+  still needs a GPU. Details: `BENCHMARK_REPORT.md`, Addendum 6.
 
 ## 0.3.1 — fixes from the first live end-to-end benchmark
 

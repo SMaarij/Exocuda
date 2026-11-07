@@ -124,14 +124,48 @@ class DraftCounter:
 
 
 class ModelDraft(LlamaDraftModel):
-    """Layer 3 draft: greedy `k` tokens from a small model, reusing its KV cache across calls."""
+    """
+    Layer 3 draft: greedy `k` tokens from a small model, reusing its KV cache
+    across calls.
 
-    def __init__(self, llm: Any, k: int = 4) -> None:
+    With `adaptive=True` the draft length follows the acceptance it observes,
+    using the schedule Hugging Face Transformers applies to assisted
+    generation ("heuristic"): every draft fully accepted -> k += 2, otherwise
+    k -= 1 (never below 1, never above `max_k`). Acceptance is read from how
+    far the sequence advanced since the previous call: the target keeps the
+    accepted drafts plus one token of its own. On copy-heavy text drafts grow
+    long; on open-ended text they shrink, so rejected drafts waste less work.
+    """
+
+    def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16) -> None:
         self._llm = llm
+        self._initial_k = k
         self._k = k
+        self._adaptive = adaptive
+        self._max_k = max_k
+        self._last_len: Optional[int] = None
+        self._last_drafted = 0
+        self.history: list[int] = []  # draft length used per call, for inspection
+
+    @property
+    def k(self) -> int:
+        return self._k
+
+    def _adapt(self, length: int) -> None:
+        if self._last_len is None or length <= self._last_len:  # first call, or a new request
+            self._k = self._initial_k
+        elif self._last_drafted:
+            accepted = length - self._last_len - 1
+            if accepted >= self._last_drafted:
+                self._k = min(self._max_k, self._k + 2)
+            else:
+                self._k = max(1, self._k - 1)
+        self._last_len = length
 
     def __call__(self, input_ids, /, **kwargs):
-        import numpy as np
+        if self._adaptive:
+            self._adapt(len(input_ids))
+        self.history.append(self._k)
 
         out: list[int] = []
         gen = self._llm.generate(list(map(int, input_ids)), top_k=1, temp=0.0, reset=True)
@@ -142,6 +176,7 @@ class ModelDraft(LlamaDraftModel):
                     break
         finally:
             gen.close()
+        self._last_drafted = len(out)
         return np.array(out, dtype=np.intc)
 
 
@@ -163,6 +198,8 @@ class LlamaCppRunner:
         ollama: Optional[OllamaReferenceModelRunner] = None,
         draft_model_tag: Optional[str] = DEFAULT_DRAFT_MODEL_TAG,
         draft_tokens: int = 4,
+        adaptive_draft: bool = False,
+        max_draft_tokens: int = 16,
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
@@ -175,6 +212,8 @@ class LlamaCppRunner:
         self._ollama = ollama or OllamaReferenceModelRunner()
         self._draft_model_tag = draft_model_tag
         self._draft_tokens = draft_tokens
+        self._adaptive_draft = adaptive_draft
+        self._max_draft_tokens = max_draft_tokens
         self._lookup_tokens = lookup_tokens
         self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads)
         self._mode = ACCEL_NONE
@@ -214,7 +253,9 @@ class LlamaCppRunner:
         elif self._mode == ACCEL_DRAFT_MODEL:
             if self._draft_llm is None:
                 self._draft_llm = self._factory(self._resolve_path(self._draft_model_tag), False)
-            self._counter = DraftCounter(ModelDraft(self._draft_llm, k=self._draft_tokens))
+            self._counter = DraftCounter(ModelDraft(
+                self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens
+            ))
         else:
             self._counter = None
         self._llm.draft_model = self._counter
@@ -313,7 +354,8 @@ class LlamaCppRunner:
         llm = self._llm
         n = len(output_ids)
         start = len(prompt_ids) - 1
-        batch_sizes = sorted({len(output_ids), self._draft_tokens + 1, self._lookup_tokens + 1})
+        batch_sizes = sorted({len(output_ids), self._draft_tokens + 1, self._lookup_tokens + 1}
+                             | ({self._max_draft_tokens + 1} if self._adaptive_draft else set()))
 
         def logits(chunk: int) -> np.ndarray:
             llm.reset()

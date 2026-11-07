@@ -194,7 +194,7 @@ def test_self_hosted_is_not_configured_by_default() -> None:
 def test_build_local_backend_honours_runner_and_acceleration(monkeypatch: pytest.MonkeyPatch) -> None:
     import engine.execution.llamacpp_runner as lr
 
-    monkeypatch.setattr(lr, "LlamaCppRunner", lambda draft_model_tag: _AcceleratedStub())
+    monkeypatch.setattr(lr, "LlamaCppRunner", lambda draft_model_tag, **kwargs: _AcceleratedStub())
     backend = cli_main.build_local_backend({"runner": "llamacpp", "acceleration": "draft_model"})
     from engine.execution.acceleration_engine import AccelerationLayer
 
@@ -307,3 +307,12 @@ def test_every_cache_setting_is_configurable(captured_pipeline: dict) -> None:
     assert cache_config.term_swap_guard == "lenient"
     assert cache_config.min_shared_prefix == 5
     assert cache_config.time_sensitive_patterns == ("\bstock\b",)
+
+
+def test_draft_settings_default_to_adaptive() -> None:
+    assert cli_main._draft_settings({}) == {"adaptive_draft": True}
+
+
+def test_draft_settings_read_config() -> None:
+    config = {"draft": {"adaptive": "false", "tokens": "8", "max_tokens": 12}}
+    assert cli_main._draft_settings(config) == {"adaptive_draft": False, "draft_tokens": 8, "max_draft_tokens": 12}

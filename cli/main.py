@@ -11,6 +11,10 @@ Config keys (set with `cascade config set KEY VALUE`):
     runner                ollama | llamacpp             (default ollama)
     acceleration          none | prompt_lookup | draft_model   (llamacpp only)
     draft_model           draft tag for draft_model     (default llama3.2:1b-instruct-q4_K_M)
+    draft.adaptive        adapt draft length to acceptance (default true: fastest in
+                          docs/benchmark/acceleration_sweep_qwen7b.json)
+    draft.tokens          draft tokens per step; starting length when adaptive (default 4)
+    draft.max_tokens      cap on the adaptive draft length (default 16)
     byok.base_url         OpenAI-compatible root, e.g. https://api.openai.com
     byok.model            e.g. gpt-4o-mini
     byok.api_key_env      env var holding the key       (default OPENAI_API_KEY)
@@ -126,13 +130,25 @@ def build_local_backend(config: dict):
         draft = config.get("draft_model", DEFAULT_DRAFT_MODEL_TAG)
         layer = AccelerationLayer[_ACCELERATION_LAYERS.get(config.get("acceleration", "none"), "NONE")]
         return LocalExecutionBackend(
-            runner=LlamaCppRunner(draft_model_tag=draft),
+            runner=LlamaCppRunner(draft_model_tag=draft, **_draft_settings(config)),
             model_id=model,
             preferred_layer=layer,
             validated_pairs=[DraftPair(model, draft, True)],
             **_local_limits(config),
         )
     return LocalExecutionBackend(model_id=model, **_local_limits(config))
+
+
+def _draft_settings(config: dict) -> dict:
+    adaptive = _get(config, "draft.adaptive", True)
+    if isinstance(adaptive, str):
+        adaptive = adaptive.strip().lower() not in ("false", "0", "no", "off")
+    settings = {"adaptive_draft": bool(adaptive)}
+    for key, arg in (("draft.tokens", "draft_tokens"), ("draft.max_tokens", "max_draft_tokens")):
+        value = _get(config, key)
+        if value not in (None, ""):
+            settings[arg] = int(value)
+    return settings
 
 
 def _local_limits(config: dict) -> dict:

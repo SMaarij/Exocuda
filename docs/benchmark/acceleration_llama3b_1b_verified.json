@@ -1,0 +1,414 @@
+{
+  "run_at": "2026-11-07T04:50:53.067186+00:00",
+  "machine": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel"
+  },
+  "model": "llama3.2:3b-instruct-q4_K_M",
+  "draft": "llama3.2:1b-instruct-q4_K_M",
+  "max_tokens": 128,
+  "runner": "llama-cpp-python (CPU build)",
+  "summary": {
+    "none": {
+      "grounded": {
+        "mean_decode_tok_s": 5.989,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 80.4,
+        "wall_speedup_vs_plain": 1.0,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "3/3",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 373
+      },
+      "open": {
+        "mean_decode_tok_s": 7.451,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 41.1,
+        "wall_speedup_vs_plain": 1.0,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "3/3",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 272
+      },
+      "all": {
+        "mean_decode_tok_s": 6.72,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 121.5,
+        "wall_speedup_vs_plain": 1.0,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "6/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 645
+      }
+    },
+    "prompt_lookup": {
+      "grounded": {
+        "mean_decode_tok_s": 4.025,
+        "decode_speedup_vs_plain": 0.672,
+        "total_wall_s": 110.8,
+        "wall_speedup_vs_plain": 0.725,
+        "mean_acceptance_rate": 0.169,
+        "outputs_identical_to_plain": "3/3",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 373
+      },
+      "open": {
+        "mean_decode_tok_s": 3.483,
+        "decode_speedup_vs_plain": 0.468,
+        "total_wall_s": 86.0,
+        "wall_speedup_vs_plain": 0.478,
+        "mean_acceptance_rate": 0.015,
+        "outputs_identical_to_plain": "1/3",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 4,
+        "greedy_check_tokens": 272
+      },
+      "all": {
+        "mean_decode_tok_s": 3.754,
+        "decode_speedup_vs_plain": 0.559,
+        "total_wall_s": 196.8,
+        "wall_speedup_vs_plain": 0.617,
+        "mean_acceptance_rate": 0.092,
+        "outputs_identical_to_plain": "4/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 4,
+        "greedy_check_tokens": 645
+      }
+    },
+    "draft_model": {
+      "grounded": {
+        "mean_decode_tok_s": 6.13,
+        "decode_speedup_vs_plain": 1.024,
+        "total_wall_s": 64.9,
+        "wall_speedup_vs_plain": 1.238,
+        "mean_acceptance_rate": 0.88,
+        "outputs_identical_to_plain": "2/3",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 1,
+        "greedy_check_tokens": 314
+      },
+      "open": {
+        "mean_decode_tok_s": 5.17,
+        "decode_speedup_vs_plain": 0.694,
+        "total_wall_s": 58.7,
+        "wall_speedup_vs_plain": 0.701,
+        "mean_acceptance_rate": 0.536,
+        "outputs_identical_to_plain": "1/3",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 4,
+        "greedy_check_tokens": 267
+      },
+      "all": {
+        "mean_decode_tok_s": 5.65,
+        "decode_speedup_vs_plain": 0.841,
+        "total_wall_s": 123.6,
+        "wall_speedup_vs_plain": 0.983,
+        "mean_acceptance_rate": 0.708,
+        "outputs_identical_to_plain": "3/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 5,
+        "greedy_check_tokens": 581
+      }
+    }
+  },
+  "per_prompt": {
+    "none": [
+      {
+        "kind": "grounded",
+        "decode_tok_s": 3.954,
+        "wall_s": 38.8,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "```python\ndef merge_sorted(a: list, b: list) -> list:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Args:\n        a (list): The first sorted list.\n        b (list): The second sorted list.\n\n    Returns:\n        list: A new sorted list containing all elements from a and b.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.6319
+        }
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.595,
+        "wall_s": 21.52,
+        "tokens": 117,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "```python\ndef merge_sorted_arrays(left_array, right_array):\n    left_index, right_index, merged_array = 0, 0, []\n    while left_index < len(left_array) and right_index < len(right_array):\n        if left_array[left_index] <= right_array[right_index]:\n            merged_array.append(left_array[left_index]); left_index += 1\n        else:\n            merged_array.append(right_array[right_index]); right_index += 1\n    merged_array.extend(left_array[left_index:]); merged_array.extend(right_array[right_index:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 117,
+          "exact": 117,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.5549
+        }
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 7.418,
+        "wall_s": 20.05,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "Here's the paragraph with British spelling:\n\nCascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.\n\nNote that the only change made was replacing \"model\" with \"model\" (no change needed), and \"API key\" with \"API key\" (no change needed). However, I did replace \"LLM\" with \"LLM\" (no change needed), but I should have changed",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4403
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 7.631,
+        "wall_s": 18.27,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "A hash table is a data structure that stores key-value pairs in an array using a hash function to map keys to specific indices. The hash function takes a key as input and generates a unique index, known as the hash code, which corresponds to a specific location in the array. When a key-value pair is inserted into the hash table, the hash function is used to determine the location where the value should be stored. This allows for efficient lookup, insertion, and deletion of key-value pairs, with an average time complexity of O(1). Hash tables are commonly used in many applications, including databases, caching systems, and data storage,",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.6838
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 6.914,
+        "wall_s": 3.73,
+        "tokens": 16,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "Crashing waves abide\nMoonlight dances on the tide\nPeaceful ocean night",
+        "greedy_check": {
+          "tokens": 16,
+          "exact": 16,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3196
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 7.807,
+        "wall_s": 19.12,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "text": "Here are three tips for writing readable Python:\n\n1. **Use Meaningful Variable Names**: Choose variable names that clearly describe the purpose of the variable. Avoid using single-letter variable names, as they can be confusing and difficult to understand. Instead, use descriptive names like `user_name`, `product_price`, or `average_score`.\n\n2. **Follow PEP 8 Conventions**: The Python Enhancement Proposal (PEP) 8 is a style guide that provides guidelines for writing readable and maintainable Python code. Some key conventions include:\n   - Indentation: Use 4 spaces for indentation.\n   - Line length: Limit lines",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.7311
+        }
+      }
+    ],
+    "prompt_lookup": [
+      {
+        "kind": "grounded",
+        "decode_tok_s": 3.69,
+        "wall_s": 38.89,
+        "tokens": 128,
+        "acceptance_rate": 0.128,
+        "ran": "prompt_lookup",
+        "text": "```python\ndef merge_sorted(a: list, b: list) -> list:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Args:\n        a (list): The first sorted list.\n        b (list): The second sorted list.\n\n    Returns:\n        list: A new sorted list containing all elements from a and b.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.6319
+        }
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 2.834,
+        "wall_s": 45.53,
+        "tokens": 117,
+        "acceptance_rate": 0.089,
+        "ran": "prompt_lookup",
+        "text": "```python\ndef merge_sorted_arrays(left_array, right_array):\n    left_index, right_index, merged_array = 0, 0, []\n    while left_index < len(left_array) and right_index < len(right_array):\n        if left_array[left_index] <= right_array[right_index]:\n            merged_array.append(left_array[left_index]); left_index += 1\n        else:\n            merged_array.append(right_array[right_index]); right_index += 1\n    merged_array.extend(left_array[left_index:]); merged_array.extend(right_array[right_index:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 117,
+          "exact": 117,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.5549
+        }
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 5.55,
+        "wall_s": 26.43,
+        "tokens": 128,
+        "acceptance_rate": 0.291,
+        "ran": "prompt_lookup",
+        "text": "Here's the paragraph with British spelling:\n\nCascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.\n\nNote that the only change made was replacing \"model\" with \"model\" (no change needed), and \"API key\" with \"API key\" (no change needed). However, I did replace \"LLM\" with \"LLM\" (no change needed), but I should have changed",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4403
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 2.826,
+        "wall_s": 46.61,
+        "tokens": 128,
+        "acceptance_rate": 0.014,
+        "ran": "prompt_lookup",
+        "text": "A hash table is a data structure that stores key-value pairs in an array using a hash function to map keys to specific indices. The hash function takes a key as input and generates a unique index, known as the hash code, which corresponds to a specific location in the array. When a key-value pair is inserted into the hash table, the hash function is used to determine the location where the value should be stored. This allows for efficient lookup, insertion, and deletion of key-value pairs, with an average time complexity of O(1), making hash tables a popular choice for many applications, including databases, caching systems, and data storage",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 127,
+          "within_noise": 1,
+          "violations": 0,
+          "noise_tolerance": 0.6838
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 3.657,
+        "wall_s": 5.83,
+        "tokens": 16,
+        "acceptance_rate": 0.0,
+        "ran": "prompt_lookup",
+        "text": "Crashing waves abide\nMoonlight dances on the tide\nPeaceful ocean night",
+        "greedy_check": {
+          "tokens": 16,
+          "exact": 16,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3196
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 3.967,
+        "wall_s": 33.55,
+        "tokens": 128,
+        "acceptance_rate": 0.031,
+        "ran": "prompt_lookup",
+        "text": "Here are three tips for writing readable Python:\n\n1. **Use Meaningful Variable Names**: Choose variable names that clearly describe the purpose of the variable. Avoid using single-letter variable names, as they can be confusing and make the code harder to understand. Instead, use descriptive names like `user_name`, `product_price`, or `average_temperature`.\n\n2. **Follow PEP 8 Conventions**: The Python Enhancement Proposal (PEP) 8 is a style guide that provides guidelines for writing readable and maintainable Python code. Some key conventions include:\n   - Indentation: Use 4 spaces for indentation.\n   - Line length",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 125,
+          "within_noise": 3,
+          "violations": 0,
+          "noise_tolerance": 0.7311
+        }
+      }
+    ],
+    "draft_model": [
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.663,
+        "wall_s": 25.03,
+        "tokens": 128,
+        "acceptance_rate": 0.971,
+        "ran": "draft_model",
+        "text": "```python\ndef merge_sorted(a: list, b: list) -> list:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Args:\n        a (list): The first sorted list.\n        b (list): The second sorted list.\n\n    Returns:\n        list: A new sorted list containing all elements from a and b.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.6319
+        }
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 5.512,
+        "wall_s": 24.82,
+        "tokens": 117,
+        "acceptance_rate": 0.786,
+        "ran": "draft_model",
+        "text": "```python\ndef merge_sorted_arrays(left_array, right_array):\n    left_index, right_index, merged_array = 0, 0, []\n    while left_index < len(left_array) and right_index < len(right_array):\n        if left_array[left_index] <= right_array[right_index]:\n            merged_array.append(left_array[left_index]); left_index += 1\n        else:\n            merged_array.append(right_array[right_index]); right_index += 1\n    merged_array.extend(left_array[left_index:]); merged_array.extend(right_array[right_index:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 117,
+          "exact": 117,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.5549
+        }
+      },
+      {
+        "kind": "grounded",
+        "decode_tok_s": 6.215,
+        "wall_s": 15.08,
+        "tokens": 69,
+        "acceptance_rate": 0.883,
+        "ran": "draft_model",
+        "text": "Here's the paragraph with British spelling:\n\nCascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.",
+        "greedy_check": {
+          "tokens": 69,
+          "exact": 68,
+          "within_noise": 1,
+          "violations": 0,
+          "noise_tolerance": 0.4403
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 5.422,
+        "wall_s": 25.16,
+        "tokens": 123,
+        "acceptance_rate": 0.621,
+        "ran": "draft_model",
+        "text": "A hash table is a data structure that stores key-value pairs in an array using a hash function to map keys to specific indices. When a key-value pair is inserted, the hash function generates a unique index based on the key, and the corresponding value is stored at that index. Hash tables allow for efficient lookup, insertion, and deletion of elements, with an average time complexity of O(1), making them a fundamental data structure in computer science. The hash function must be carefully chosen to minimize collisions, which occur when two different keys produce the same index, and to ensure that the table remains balanced and efficient.",
+        "greedy_check": {
+          "tokens": 123,
+          "exact": 120,
+          "within_noise": 3,
+          "violations": 0,
+          "noise_tolerance": 0.6431
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 5.402,
+        "wall_s": 4.52,
+        "tokens": 16,
+        "acceptance_rate": 0.5,
+        "ran": "draft_model",
+        "text": "Crashing waves abide\nMoonlight dances on the tide\nPeaceful ocean night",
+        "greedy_check": {
+          "tokens": 16,
+          "exact": 16,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3196
+        }
+      },
+      {
+        "kind": "open",
+        "decode_tok_s": 4.687,
+        "wall_s": 28.99,
+        "tokens": 128,
+        "acceptance_rate": 0.488,
+        "ran": "draft_model",
+        "text": "Here are three tips for writing readable Python:\n\n1. **Use Meaningful Variable Names**: Choose variable names that clearly describe the purpose of the variable. Avoid using single-letter variable names, as they can be confusing and difficult to understand. Instead, use descriptive names like `user_name`, `product_price`, or `average_score`.\n\n2. **Follow PEP 8 Conventions**: The Python Enhancement Proposal (PEP) 8 is a widely accepted style guide for Python code. It provides guidelines for indentation, spacing, naming conventions, and more. Following PEP 8 conventions can make your code more readable and maintainable. For",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 127,
+          "within_noise": 1,
+          "violations": 0,
+          "noise_tolerance": 0.7311
+        }
+      }
+    ]
+  }
+}

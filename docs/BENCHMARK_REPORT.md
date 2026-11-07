@@ -296,3 +296,66 @@ What changed:
 Still true: with no live-data tier configured, the local model answers live questions from its
 training data — it said the UK prime minister is Rishi Sunak. The cache no longer repeats that,
 but only a configured `self_hosted` server with tools can actually answer it.
+
+## Addendum 6 — speculative decoding made verifiably lossless, and tuned, 2026-11-07
+
+### The output mismatch, explained and fixed
+
+Addendum 3 found only 2 of 6 accelerated outputs identical to plain greedy output. There were two causes:
+
+1. **A real bug: state leaked between requests.** llama-cpp-python reused the KV cache from the
+   previous request's matching prefix (every chat prompt shares the template header), so the same
+   prompt gave different output depending on what ran before it. Every generation now starts from a
+   clean state, and prompts go through the model's own chat template.
+2. **Floating-point noise, not a bug.** Checking drafts evaluates several tokens in one batch, and
+   llama.cpp rounds batched arithmetic slightly differently from one token at a time. Where the
+   model's top two choices are nearly tied, the two can pick different tokens.
+
+To tell the two apart, `LlamaCppRunner.verify_greedy()` recomputes every output token one at a time,
+exactly as plain decoding does. Each token must be the model's top choice, or within the measured
+noise of it. The noise is measured on the same sequence, at every batch size the decoder uses, as
+the largest change in the gaps that decide the choice. `scripts/benchmark_acceleration.py` now
+checks every output after the timed runs and reports **PASS/FAIL**.
+
+**Result: 0 violations in every run below**, on every output token checked. Every
+divergence was a near-tie inside the measured noise (tolerance 0.3–0.7 logits).
+
+### Faster pairs and draft lengths
+
+Same 6 prompts and 128 max tokens as Addendum 3, greedy decoding, same CPU-only laptop. Raw data is in `docs/benchmark/`.
+
+| Target + draft | Mode | Decode vs plain | Wall vs plain | Grounded (decode) | Open (decode) | Acceptance | Greedy check |
+|---|---|---:|---:|---:|---:|---:|---|
+| llama3.2 3B + 1B | draft, k=4 | 0.84x | 0.98x | 1.02x (1.24x wall) | 0.69x | 71% | PASS |
+| qwen2.5-coder 7B + 0.5B | draft, k=4 (run 1) | 1.05x | 1.03x | **1.35x** (1.22x wall) | 0.76x | 60% | PASS |
+| qwen2.5-coder 7B + 0.5B | draft, k=2 | 0.71x | 0.72x | 0.81x | 0.60x | 68% | PASS |
+| qwen2.5-coder 7B + 0.5B | draft, k=4 (run 2) | 0.73x | 0.75x | 0.92x | 0.54x | 60% | PASS |
+| qwen2.5-coder 7B + 0.5B | draft, k=8 | 0.64x | 0.59x | 0.91x | 0.37x | 52% | PASS |
+| qwen2.5-coder 7B + 0.5B | **draft, adaptive** | **1.10x** | 1.00x | **1.29x** | 0.91x | 56% | PASS |
+
+Files:
+- `acceleration_llama3b_1b_verified.json`: the 3B + 1B run.
+- `acceleration_qwen7b_05b.json`: 7B + 0.5B, run 1.
+- `acceleration_sweep_qwen7b.json`: the draft-length sweep, k=2 / 4 / 8 / adaptive against one shared plain baseline.
+
+What this shows:
+
+- **A bigger gap between target and draft helps.** A 0.5B draft for a 7B target is ~14x smaller,
+  against ~3x for 1B → 3B, so a rejected draft costs much less.
+- **No fixed draft length fits both kinds of prompt.** Grounded prompts (rewrites, copying)
+  accept 85–93% of drafts and want long drafts. Open-ended prompts accept 20–40%, where every
+  extra drafted token is wasted work. **Adaptive draft length** follows the Hugging Face
+  Transformers heuristic schedule: +2 after a fully accepted draft, −1 otherwise. It was the
+  fastest setting in the sweep and the only one at or above plain on every subset. It is now the
+  CLI default (`draft.adaptive`, `draft.tokens`, `draft.max_tokens`).
+- **Run-to-run variation on this laptop is large.** The same k=4 setting measured 1.05x and 0.73x
+  in two runs an hour apart, with thermal throttling and background load as likely causes.
+  Only comparisons within one run, which share a baseline, are reliable. Repeated runs are
+  needed before trusting differences under ~0.3x.
+
+### NFR-01
+
+**Still not met on this machine.** The best overall result is 1.10x, and 1.29–1.35x on grounded
+prompts. On a 4-core CPU, verifying a batch of drafted tokens costs almost as much as generating
+them, which caps the gain. NFR-01 remains to be measured on a GPU, where verification is nearly
+free.

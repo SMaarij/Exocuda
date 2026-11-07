@@ -325,3 +325,48 @@ def test_verify_restores_the_draft_and_handles_empty_output() -> None:
     runner.verify_greedy([3], [0])
     assert model.draft_model is installed  # speculation still on after verifying
     assert runner.verify_greedy([3], []).tokens == 0
+
+
+# ---- adaptive draft length ------------------------------------------------------
+
+
+class _CountingDraftLlm:
+    def generate(self, tokens, top_k, temp, reset):
+        yield from range(1000, 1100)
+
+
+def test_fixed_draft_length_never_changes() -> None:
+    draft = ModelDraft(_CountingDraftLlm(), k=4)
+    for length in (10, 15, 16):
+        assert len(draft(np.zeros(length, dtype=np.intc))) == 4
+
+
+def test_adaptive_draft_grows_when_fully_accepted_and_shrinks_otherwise() -> None:
+    draft = ModelDraft(_CountingDraftLlm(), k=4, adaptive=True, max_k=8)
+    draft(np.zeros(10, dtype=np.intc))           # first call: k = 4
+    draft(np.zeros(15, dtype=np.intc))           # advanced 5 = 4 accepted + 1 -> all accepted -> 6
+    assert draft.k == 6
+    draft(np.zeros(22, dtype=np.intc))           # advanced 7 = 6 + 1 -> 8 (capped)
+    draft(np.zeros(31, dtype=np.intc))           # advanced 9 = 8 + 1 -> stays at max 8
+    assert draft.k == 8
+    draft(np.zeros(33, dtype=np.intc))           # advanced 2 -> 1 accepted of 8 -> 7
+    assert draft.k == 7
+    assert draft.history == [4, 6, 8, 8, 7]
+
+
+def test_adaptive_draft_never_drops_below_one_and_resets_per_request() -> None:
+    draft = ModelDraft(_CountingDraftLlm(), k=2, adaptive=True)
+    draft(np.zeros(10, dtype=np.intc))
+    draft(np.zeros(11, dtype=np.intc))           # nothing accepted -> 1
+    draft(np.zeros(12, dtype=np.intc))           # still nothing -> stays 1
+    assert draft.k == 1
+    draft(np.zeros(5, dtype=np.intc))            # shorter sequence = a new request -> back to 2
+    assert draft.k == 2
+
+
+def test_runner_passes_adaptive_settings_to_the_draft() -> None:
+    runner, built = _runner(adaptive_draft=True, max_draft_tokens=12)
+    runner.set_acceleration(ACCEL_DRAFT_MODEL)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    draft = built[0].draft_model._draft
+    assert (draft._adaptive, draft._max_k) == (True, 12)

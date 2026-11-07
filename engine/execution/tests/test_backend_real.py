@@ -369,3 +369,10 @@ def test_generate_falls_back_to_placeholder_when_runner_has_no_output_text(tmp_p
     result = _backend(tmp_path).generate(SAMPLE_MESSAGES)
     assert isinstance(result["text"], str)
     assert len(result["text"]) > 0
+
+
+def test_resolve_real_tag_maps_qwen_coder_rungs() -> None:
+    from engine.execution.backend import _resolve_real_tag
+
+    assert _resolve_real_tag("qwen2.5-coder", "q4_K_M") == "7b-instruct-q4_K_M"
+    assert _resolve_real_tag("unknown-model", "q4_K_M") == "q4_K_M"

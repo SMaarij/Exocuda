@@ -86,6 +86,13 @@ _RUNG_LABEL_TO_REAL_TAG: dict[str, dict[str, str]] = {
         "q5_K_M": "3b-instruct-q5_K_M",
         "q8_0": "3b-instruct-q8_0",
     },
+    # 7B target that pairs with qwen2.5-coder:0.5b as a draft model
+    # (same tokenizer); see BENCHMARK_REPORT Addendum 6.
+    "qwen2.5-coder": {
+        "q4_K_M": "7b-instruct-q4_K_M",
+        "q5_K_M": "7b-instruct-q5_K_M",
+        "q8_0": "7b-instruct-q8_0",
+    },
 }
 
 

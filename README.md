@@ -97,8 +97,14 @@ cascade config set byok.output_price_per_1k 0.0006
 ```bash
 pip install -e ".[llamacpp]" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 cascade config set runner llamacpp
-cascade config set acceleration prompt_lookup     # or draft_model, or none
+cascade config set acceleration draft_model       # or prompt_lookup, or none
+cascade config set model qwen2.5-coder            # 7B target
+cascade config set draft_model qwen2.5-coder:0.5b   # same tokenizer, ~14x smaller
 ```
+
+The draft length adapts to how often drafts are accepted (`draft.adaptive`, on by default).
+Every accelerated output can be checked against plain greedy decoding with
+`LlamaCppRunner.verify_greedy()`, and the benchmark script does this for every output.
 
 The llama.cpp runner loads the GGUF files Ollama already downloaded — nothing is fetched twice.
 Whether acceleration actually helps depends on the machine; measure it first
@@ -179,7 +185,7 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Reworded questions answered from cache | ≥90% of exact | 42.9% (strict guard, threshold 0.92) | **not met** — traded for zero wrong answers |
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
-| Speculative decoding speedup, CPU-only laptop | ≥1.5x | prompt lookup 0.60x, 1B draft model 0.89x | **not met** — acceleration is off by default |
+| Speculative decoding speedup, CPU-only laptop | ≥1.5x | best 1.10x overall, 1.29–1.35x on code/rewrite prompts (qwen2.5-coder 7B + 0.5B draft, adaptive); output verified lossless | **not met** — acceleration is off by default |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 
 The 37-query router set, 15 paraphrase pairs and 19 near-miss pairs are small hand-made fixtures. Results from other

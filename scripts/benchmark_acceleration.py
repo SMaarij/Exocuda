@@ -72,14 +72,30 @@ PROMPTS = [
 MODES = ("none", "prompt_lookup", "draft_model")
 
 
-def run(model: str, quant: str, draft: str, max_tokens: int) -> dict:
+def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, dict]:
+    """'draft_model', 'draft_model:k=2', 'draft_model:adaptive', 'prompt_lookup:k=3' ->
+    (runner mode, LlamaCppRunner settings). Unspecified settings use the CLI flags."""
+    mode, _, option = spec.partition(":")
+    settings = {"draft_tokens": draft_tokens, "lookup_tokens": lookup_tokens}
+    if option == "adaptive":
+        settings["adaptive_draft"] = True
+    elif option.startswith("k="):
+        settings["lookup_tokens" if mode == "prompt_lookup" else "draft_tokens"] = int(option[2:])
+    elif option:
+        raise ValueError(f"unknown mode option {option!r} in {spec!r}")
+    return mode, settings
+
+
+def run(model: str, quant: str, draft: str, max_tokens: int, draft_tokens: int = 4, lookup_tokens: int = 10,
+        modes: tuple[str, ...] = MODES) -> dict:
     from engine.execution.llamacpp_runner import LlamaCppRunner
 
-    runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0)
     results: dict[str, list[dict]] = {}
-    for mode in MODES:
+    for spec in modes:
+        mode, settings = parse_mode(spec, draft_tokens, lookup_tokens)
+        runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0, **settings)
         if not runner.set_acceleration(mode):
-            print(f"  {mode}: not supported by runner, skipped")
+            print(f"  {spec}: not supported by runner, skipped")
             continue
         runner.load(model, quant)
         runner.generate("Say OK.", 8)  # warm-up: first call pays one-off allocation costs
@@ -99,7 +115,7 @@ def run(model: str, quant: str, draft: str, max_tokens: int) -> dict:
                 "ran": sample.acceleration,
                 "text": sample.output_text,
             })
-            print(f"  {mode:<14} {kind:<9} {sample.tok_s:6.2f} tok/s  wall {wall_s:6.1f}s  "
+            print(f"  {spec:<20} {kind:<9} {sample.tok_s:6.2f} tok/s  wall {wall_s:6.1f}s  "
                   f"acc={rows[-1]['acceptance_rate']}", flush=True)
         # Verified after the timed runs so verification never affects speed.
         for row in rows:
@@ -108,7 +124,7 @@ def run(model: str, quant: str, draft: str, max_tokens: int) -> dict:
                 "tokens": check.tokens, "exact": check.exact, "within_noise": check.within_noise,
                 "violations": check.violations, "noise_tolerance": round(check.noise_tolerance, 4),
             }
-        results[mode] = rows
+        results[spec] = rows
         runner.unload()
     return results
 
@@ -150,17 +166,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quant", default=DEFAULT_QUANT)
     parser.add_argument("--draft", default="llama3.2:1b-instruct-q4_K_M")
     parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument("--draft-tokens", type=int, default=4, help="tokens the draft model proposes per step")
+    parser.add_argument("--lookup-tokens", type=int, default=10, help="tokens prompt lookup proposes per step")
+    parser.add_argument("--modes", default=",".join(MODES),
+                        help="comma-separated; 'none' first. Options: draft_model:k=N, draft_model:adaptive, prompt_lookup:k=N")
     parser.add_argument("--out", default="docs/benchmark/acceleration_results.json")
     args = parser.parse_args(argv)
 
-    print(f"Benchmarking {args.model}:{args.quant} (draft {args.draft}), {len(PROMPTS)} prompts x {len(MODES)} modes")
-    results = run(args.model, args.quant, args.draft, args.max_tokens)
+    print(f"Benchmarking {args.model}:{args.quant} (draft {args.draft}), {len(PROMPTS)} prompts x {len(args.modes.split(','))} modes")
+    modes = tuple(m.strip() for m in args.modes.split(",") if m.strip())
+    results = run(args.model, args.quant, args.draft, args.max_tokens, args.draft_tokens, args.lookup_tokens, modes)
     summary = summarize(results)
 
     print("\nmode            subset     decode tok/s  speedup  wall speedup  acceptance  identical  greedy check")
     for mode, kinds in summary.items():
         for kind, s in kinds.items():
-            print(f"{mode:<15} {kind:<9} {s['mean_decode_tok_s']:>12.2f} {s['decode_speedup_vs_plain'] or 0:>8.2f}x"
+            print(f"{mode:<21} {kind:<9} {s['mean_decode_tok_s']:>12.2f} {s['decode_speedup_vs_plain'] or 0:>8.2f}x"
                   f" {s['wall_speedup_vs_plain'] or 0:>11.2f}x  {str(s['mean_acceptance_rate']):>10}  {s['outputs_identical_to_plain']:>9}"
                   f"  {s['greedy_check_violations']} violations, {s['greedy_check_near_ties']} near-ties"
                   f" / {s['greedy_check_tokens']} tokens")
@@ -178,6 +199,8 @@ def main(argv: list[str] | None = None) -> int:
         "model": f"{args.model}:{args.quant}",
         "draft": args.draft,
         "max_tokens": args.max_tokens,
+        "draft_tokens": args.draft_tokens,
+        "lookup_tokens": args.lookup_tokens,
         "runner": "llama-cpp-python (CPU build)",
         "summary": summary,
         "per_prompt": results,
