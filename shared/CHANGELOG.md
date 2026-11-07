@@ -477,3 +477,23 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
 - The profiler benchmarks only the quant levels already present locally (when the runner can
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
+
+## [0.3.3] -- 2026-11-07 -- RAM 7.2 -> 4.6 GB; 1.65x on grounded prompts
+
+No seam changes.
+
+### Changed
+
+- `LlamaCppRunner(use_mmap=False)` is the new default. With mmap, the file pages stayed resident
+  next to llama.cpp's repacked weights: qwen2.5-coder 7B resident RAM went from 7.2 GB to 4.6 GB,
+  and a 5-token verification batch from 792 ms to 590 ms.
+
+### Added
+
+- `benchmark_acceleration.py`: `--repeats N` (modes interleaved within each round, with a
+  per-round speed-up in the summary), `--mmap`, and per-row `rss_gb` with a per-mode `peak_rss_gb`.
+
+### Measured (BENCHMARK_REPORT Addendum 7)
+
+- qwen2.5-coder 7B + 0.5B draft, adaptive, 3 rounds: 1.65x decode on grounded prompts (each round
+  at least 1.60x), 1.25x overall, 0.85x on open prompts; greedy check 0 violations.

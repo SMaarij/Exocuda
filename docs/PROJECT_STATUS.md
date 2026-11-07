@@ -16,11 +16,19 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
-| NFR-01 | ≥1.5x acceleration | **Not met** on the dev laptop | best 1.10x overall, 1.35x on grounded prompts, verified lossless; needs a GPU measurement |
+| NFR-01 | ≥1.5x acceleration | **Met on grounded prompts** (1.65x), not yet overall (1.25x) | 3 interleaved rounds, verified lossless; open-ended prompts 0.85x |
 | NFR-02 | cache hit <150 ms | Met (warm) | 55 ms median live; first lookup per process ~2.4 s (model load) |
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.3.3 — RAM 7.2 → 4.6 GB, and 1.65x on grounded prompts
+
+- llama.cpp kept the memory-mapped model file resident next to its repacked copy of the weights.
+  Loading without mmap (now the default): 7B RAM 7.2 GB → 4.6 GB, plain decoding ~20% faster, and
+  draft verification ~25% cheaper.
+- qwen2.5-coder 7B + 0.5B adaptive draft: 1.65x on code/rewrite prompts and 1.25x overall,
+  consistent across 3 interleaved rounds, 0 lossless-check violations. Addendum 7.
 
 ## 0.3.2 — speculative decoding verified lossless and tuned
 

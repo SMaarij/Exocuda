@@ -180,13 +180,18 @@ class ModelDraft(LlamaDraftModel):
         return np.array(out, dtype=np.intc)
 
 
-def _default_llama_factory(n_ctx: int, n_threads: Optional[int]) -> LlamaFactory:
+def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool = False) -> LlamaFactory:
     def make(path: str, needs_all_logits: bool) -> Any:
         # A placeholder draft at construction is the only way to make
         # llama-cpp-python keep per-position logits, which verifying
         # drafts needs. The real draft is swapped in afterwards.
         placeholder = LlamaPromptLookupDecoding() if needs_all_logits else None
-        return Llama(model_path=path, n_ctx=n_ctx, n_threads=n_threads, verbose=False, draft_model=placeholder)
+        # use_mmap=False: llama.cpp repacks the weights into a private
+        # CPU-friendly layout, so with the file also memory-mapped the
+        # weights sat in RAM twice (qwen2.5-coder 7B Q4_K_M: 7.2 GB resident
+        # with mmap, 4.6 GB without -- BENCHMARK_REPORT Addendum 7).
+        return Llama(model_path=path, n_ctx=n_ctx, n_threads=n_threads, use_mmap=use_mmap,
+                     verbose=False, draft_model=placeholder)
     return make
 
 
@@ -203,6 +208,7 @@ class LlamaCppRunner:
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
+        use_mmap: bool = False,
         llama_factory: Optional[LlamaFactory] = None,
         temperature: Optional[float] = None,
     ) -> None:
@@ -215,7 +221,7 @@ class LlamaCppRunner:
         self._adaptive_draft = adaptive_draft
         self._max_draft_tokens = max_draft_tokens
         self._lookup_tokens = lookup_tokens
-        self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads)
+        self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads, use_mmap)
         self._mode = ACCEL_NONE
         self._llm: Any = None
         self._llm_has_all_logits = False

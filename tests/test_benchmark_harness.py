@@ -108,3 +108,19 @@ def test_wrong_hit_benchmark_uses_recorded_answers() -> None:
     rows = run_benchmark._load_jsonl(run_benchmark.CACHE_NEAR_MISS_PAIRS_PATH)
     assert rows and all(r.get("answer") for r in rows)
     assert run_benchmark._stored_answer(rows[0]) == rows[0]["answer"]
+
+
+def test_acceleration_summary_reports_each_round_and_peak_rss() -> None:
+    from scripts.benchmark_acceleration import summarize
+
+    def row(rnd, tok_s, rss):
+        return {"round": rnd, "kind": "grounded", "decode_tok_s": tok_s, "wall_s": 10.0, "text": "x",
+                "acceptance_rate": None, "rss_gb": rss}
+
+    results = {
+        "none": [row(0, 2.0, 4.0), row(1, 4.0, 4.1)],
+        "draft_model:adaptive": [row(0, 3.0, 4.8), row(1, 4.0, 4.9)],
+    }
+    s = summarize(results)["draft_model:adaptive"]["all"]
+    assert s["decode_speedup_per_round"] == [1.5, 1.0]
+    assert s["peak_rss_gb"] == 4.9

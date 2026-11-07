@@ -359,3 +359,57 @@ What this shows:
 prompts. On a 4-core CPU, verifying a batch of drafted tokens costs almost as much as generating
 them, which caps the gain. NFR-01 remains to be measured on a GPU, where verification is nearly
 free.
+
+## Addendum 7 — RAM halved where it was doubled, and the 1.5x crossed on grounded prompts, 2026-11-07
+
+### The weights were in RAM twice
+
+RAM was measured for the first time (process resident set, after a 48-token generation), for
+qwen2.5-coder 7B Q4_K_M:
+
+| Load mode | Resident RAM | Committed | Load | Decode |
+|---|---:|---:|---:|---:|
+| memory-mapped file (old default) | 7.21 GB | 4.01 GB | 91 s | 2.53 tok/s |
+| read once, no mmap (new default) | **4.59 GB** | 5.46 GB | 34 s | 3.38 tok/s |
+
+This llama.cpp build repacks Q4_K weights into a private, CPU-friendly layout (`REPACK = 1` in
+`llama_print_system_info`). With mmap on, the file pages touched during load stayed resident next
+to the repacked copy. `LlamaCppRunner(use_mmap=False)` is now the default, with `use_mmap=True` and
+the benchmark's `--mmap` flag to restore the old behaviour. Halving the context to 1024 saved only
+~60 MB, so it is unchanged. Speculative mode adds ~0.75 GB, for the 0.5B draft and per-position
+logits.
+
+### Draft verification got cheaper
+
+Time to evaluate a batch of N tokens on the 7B target (median of 5, 4 batch threads):
+
+| | 1 token | 3 | 5 | 9 |
+|---|---:|---:|---:|---:|
+| Q4_K_M, mmap | 249 ms | 773 ms | 792 ms | 1281 ms |
+| Q4_K_M, no mmap | 237 ms | 498 ms | **590 ms** | 1066 ms |
+| Q4_0, no mmap | 224 ms | 531 ms | 638 ms | 1235 ms |
+
+Verifying a 4-token draft (a 5-token batch) dropped from 3.2x to 2.5x the cost of one token. Batch
+thread count (3, 4 or 8) made no measurable difference. Q4_0 is no faster than Q4_K_M here and is
+lower quality, so Q4_K_M stays.
+
+### Result: 3 interleaved rounds
+
+`acceleration_qwen7b_nommap_3rounds.json`: modes interleaved within each round (plain, adaptive,
+plain, adaptive, ...) so machine drift affects both alike. Same 6 prompts, 128 tokens, greedy decoding.
+
+| Subset | Plain | Adaptive draft | Speed-up (decode) | Per round | Wall |
+|---|---:|---:|---:|---|---:|
+| Grounded | 4.19 tok/s | 6.90 tok/s | **1.65x** | 1.74 / 1.61 / 1.60 | 1.43x |
+| Open | 4.26 | 3.63 | 0.85x | 0.85 / 0.84 / 0.86 | 0.93x |
+| All | 4.22 | 5.26 | **1.25x** | 1.28 / 1.23 / 1.23 | 1.16x |
+
+- Greedy check: **0 violations** over 3,459 tokens (9 near-ties within noise). Peak RSS 4.6 GB
+  plain, 5.4 GB adaptive.
+- Interleaving made the rounds agree to within ±0.06x, against ±0.3x between separate runs before.
+- **NFR-01: met on grounded prompts (1.65x, all 3 rounds ≥1.6x); not yet overall (1.25x).**
+  Open-ended prompts still lose about 15%, because drafts are rejected 2 times in 3 and each
+  rejected batch costs more than the token it replaces.
+- Against the previous defaults (mmap, plain decoding: 3.48 tok/s in the Addendum 6 sweep), the new
+  defaults (no mmap, adaptive draft: 5.26 tok/s) decode 1.5x faster in 2.6 GB less RAM. These
+  numbers come from separate runs, so treat the ratio as approximate.

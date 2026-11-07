@@ -87,13 +87,15 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
 
 
 def run(model: str, quant: str, draft: str, max_tokens: int, draft_tokens: int = 4, lookup_tokens: int = 10,
-        modes: tuple[str, ...] = MODES) -> dict:
+        modes: tuple[str, ...] = MODES, repeats: int = 1, use_mmap: bool = False) -> dict:
     from engine.execution.llamacpp_runner import LlamaCppRunner
 
     results: dict[str, list[dict]] = {}
-    for spec in modes:
+    # Rounds interleave the modes (none, A, B, none, A, B, ...) so slow drift
+    # on the machine -- heat, background load -- hits every mode alike.
+    for round_no, spec in ((r, spec) for r in range(repeats) for spec in modes):
         mode, settings = parse_mode(spec, draft_tokens, lookup_tokens)
-        runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0, **settings)
+        runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0, use_mmap=use_mmap, **settings)
         if not runner.set_acceleration(mode):
             print(f"  {spec}: not supported by runner, skipped")
             continue
@@ -107,12 +109,14 @@ def run(model: str, quant: str, draft: str, max_tokens: int, draft_tokens: int =
             ids = (list(runner.last_prompt_ids), list(runner.last_output_ids))
             rows.append({
                 "_ids": ids,
+                "round": round_no,
                 "kind": kind,
                 "decode_tok_s": round(sample.tok_s, 3),
                 "wall_s": round(wall_s, 2),
                 "tokens": sample.tokens_generated + 1,
                 "acceptance_rate": None if sample.acceptance_rate is None else round(sample.acceptance_rate, 3),
                 "ran": sample.acceleration,
+                "rss_gb": round(sample.peak_memory_gb, 3),
                 "text": sample.output_text,
             })
             print(f"  {spec:<20} {kind:<9} {sample.tok_s:6.2f} tok/s  wall {wall_s:6.1f}s  "
@@ -124,7 +128,7 @@ def run(model: str, quant: str, draft: str, max_tokens: int, draft_tokens: int =
                 "tokens": check.tokens, "exact": check.exact, "within_noise": check.within_noise,
                 "violations": check.violations, "noise_tolerance": round(check.noise_tolerance, 4),
             }
-        results[spec] = rows
+        results.setdefault(spec, []).extend(rows)
         runner.unload()
     return results
 
@@ -145,11 +149,20 @@ def summarize(results: dict) -> dict:
             identical = sum(1 for i in idx if base and rows[i]["text"] == base[i]["text"])
             accs = [rows[i]["acceptance_rate"] for i in idx if rows[i]["acceptance_rate"] is not None]
             checks = [rows[i].get("greedy_check") for i in idx if rows[i].get("greedy_check")]
+            rounds = sorted({rows[i].get("round", 0) for i in idx})
+            round_speedups = []
+            for r in rounds:
+                ri = [i for i in idx if rows[i].get("round", 0) == r]
+                b = statistics.mean(base[i]["decode_tok_s"] for i in ri) if base else 0.0
+                round_speedups.append(round(statistics.mean(rows[i]["decode_tok_s"] for i in ri) / b, 3) if b else None)
+            rss = [rows[i]["rss_gb"] for i in idx if rows[i].get("rss_gb")]
             per_kind[kind] = {
                 "mean_decode_tok_s": round(tok_s, 3),
                 "decode_speedup_vs_plain": round(tok_s / base_tok_s, 3) if base_tok_s else None,
                 "total_wall_s": round(wall, 1),
                 "wall_speedup_vs_plain": round(base_wall / wall, 3) if wall else None,
+                "decode_speedup_per_round": round_speedups,
+                "peak_rss_gb": max(rss) if rss else None,
                 "mean_acceptance_rate": round(statistics.mean(accs), 3) if accs else None,
                 "outputs_identical_to_plain": f"{identical}/{len(idx)}",
                 "greedy_check_violations": sum(c["violations"] for c in checks),
@@ -170,12 +183,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lookup-tokens", type=int, default=10, help="tokens prompt lookup proposes per step")
     parser.add_argument("--modes", default=",".join(MODES),
                         help="comma-separated; 'none' first. Options: draft_model:k=N, draft_model:adaptive, prompt_lookup:k=N")
+    parser.add_argument("--repeats", type=int, default=1, help="rounds; modes are interleaved within each round")
+    parser.add_argument("--mmap", action="store_true", help="memory-map the model file (uses more RAM, see Addendum 7)")
     parser.add_argument("--out", default="docs/benchmark/acceleration_results.json")
     args = parser.parse_args(argv)
 
     print(f"Benchmarking {args.model}:{args.quant} (draft {args.draft}), {len(PROMPTS)} prompts x {len(args.modes.split(','))} modes")
     modes = tuple(m.strip() for m in args.modes.split(",") if m.strip())
-    results = run(args.model, args.quant, args.draft, args.max_tokens, args.draft_tokens, args.lookup_tokens, modes)
+    results = run(args.model, args.quant, args.draft, args.max_tokens, args.draft_tokens, args.lookup_tokens, modes,
+                  repeats=args.repeats, use_mmap=args.mmap)
     summary = summarize(results)
 
     print("\nmode            subset     decode tok/s  speedup  wall speedup  acceptance  identical  greedy check")
@@ -184,7 +200,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{mode:<21} {kind:<9} {s['mean_decode_tok_s']:>12.2f} {s['decode_speedup_vs_plain'] or 0:>8.2f}x"
                   f" {s['wall_speedup_vs_plain'] or 0:>11.2f}x  {str(s['mean_acceptance_rate']):>10}  {s['outputs_identical_to_plain']:>9}"
                   f"  {s['greedy_check_violations']} violations, {s['greedy_check_near_ties']} near-ties"
-                  f" / {s['greedy_check_tokens']} tokens")
+                  f" / {s['greedy_check_tokens']} tokens  RSS {s['peak_rss_gb']} GB"
+                  + (f"  rounds {s['decode_speedup_per_round']}" if len(s['decode_speedup_per_round']) > 1 else ""))
     violations = sum(k["all"]["greedy_check_violations"] for k in summary.values())
     print(f"\nLossless (greedy check): {'PASS' if violations == 0 else 'FAIL'} -- {violations} tokens outside measured noise")
 
@@ -201,6 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         "max_tokens": args.max_tokens,
         "draft_tokens": args.draft_tokens,
         "lookup_tokens": args.lookup_tokens,
+        "repeats": args.repeats,
+        "use_mmap": args.mmap,
         "runner": "llama-cpp-python (CPU build)",
         "summary": summary,
         "per_prompt": results,

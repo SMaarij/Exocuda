@@ -370,3 +370,13 @@ def test_runner_passes_adaptive_settings_to_the_draft() -> None:
     runner.load("llama3.2", "3b-instruct-q4_K_M")
     draft = built[0].draft_model._draft
     assert (draft._adaptive, draft._max_k) == (True, 12)
+
+
+def test_default_factory_loads_without_mmap_unless_asked(monkeypatch) -> None:
+    import engine.execution.llamacpp_runner as lr
+
+    calls = []
+    monkeypatch.setattr(lr, "Llama", lambda **kwargs: calls.append(kwargs) or object())
+    lr._default_llama_factory(512, None)("model.gguf", False)
+    lr._default_llama_factory(512, None, use_mmap=True)("model.gguf", False)
+    assert [c["use_mmap"] for c in calls] == [False, True]
