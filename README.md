@@ -54,6 +54,22 @@ tell Cascade its prices.
 If you skip `cascade init`, the first `ask` runs the same one-time hardware check first
 (several minutes on a CPU) and says so.
 
+### Fastest setup (measured 2.19x on a mixed session, all answers correct)
+
+```bash
+cascade config set runner llamacpp
+cascade config set model qwen2.5-coder                 # 7B for hard questions
+cascade config set acceleration draft_model            # confidence drafting with qwen2.5-coder:0.5b
+cascade config set draft_model qwen2.5-coder:0.5b
+cascade config set small_model qwen2.5:1.5b-instruct   # fast model for easy questions
+```
+
+The first `cascade ask` starts a background model server on 127.0.0.1 and loads the models
+(about a minute on a CPU laptop); after that, easy answers take about 2 seconds and repeated
+questions come back from the cache in well under one. The server exits after 10 idle minutes
+(`server.idle_minutes`) and frees the RAM; `cascade stop` frees it at once,
+`cascade config set server.auto off` disables it.
+
 ### Answer length and the cache
 
 Every setting has a default you can change; nothing below is fixed in code.
@@ -185,6 +201,7 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Reworded questions answered from cache | ≥90% of exact | 42.9% (strict guard, threshold 0.92) | **not met** — traded for zero wrong answers |
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
+| **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **2.19x faster than the plain 7B** (431 s → 197 s), median answer 9.6 s → 2.0 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting) | |
 | Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.69x on code/rewrite prompts**, 1.39x overall, 1.08x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, confidence drafting, 3 rounds); output verified lossless | met on grounded prompts, not yet overall |
 | RAM, 7B Q4_K_M via llama.cpp | – | 4.6 GB (was 7.2 GB with the model file memory-mapped); +0.75 GB with the draft model | |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |

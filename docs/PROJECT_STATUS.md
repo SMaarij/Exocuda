@@ -22,6 +22,16 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.4.0 — whole system 2.19x faster per session; models stay loaded
+
+- Measured end to end on a 34-question session (easy, hard, repeats, rewordings, near-misses), every
+  answer checked: plain 7B 431 s; Cascade with a 1.5B model for easy questions **197 s (2.19x)**,
+  median answer 9.6 s → 2.0 s, **34/34 correct**, peak RAM 7.0 GB. Addendum 11.
+- `cascade ask` keeps models loaded in a background server (127.0.0.1, exits after 10 idle minutes):
+  warm answers ~2 s instead of 60–90 s of model loading per call.
+- Fixed: double 7B load (peak 9.5 → 5.9 GB) and a step-down that made answers after the 20th up to
+  3.5x slower.
+
 ## 0.3.6 — memory leak fixed; 1.39x overall confirmed
 
 - 0.3.5's fix left a reference cycle that kept replaced models in RAM until garbage collection

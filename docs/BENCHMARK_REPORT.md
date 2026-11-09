@@ -520,3 +520,63 @@ and `set_acceleration` rebuild the model) stayed resident until a garbage-collec
 held off, a second load measured 9.4 GB instead of 5.4 GB. The closure now holds a weak reference;
 the same test then returns to 0.05 GB after each discarded runner. The numbers in the A/B table
 above were taken in fresh processes, one model each, so they are unaffected.
+
+## Addendum 11 — whole-system session benchmark: 2.19x faster, 34/34 correct, 2026-11-09
+
+The acceleration numbers above measure one technique on single prompts. `scripts/benchmark_system.py`
+measures what a user gets: one 34-question session through the real Pipeline (real embedder, cache,
+router, local models), every answer checked against expected-answer patterns. The session mixes 12
+easy questions, 8 hard code/reasoning ones, 4 exact repeats, 6 rewordings of earlier questions, and
+4 near-misses that resemble an earlier question but need a different answer ("capital of Austria"
+after "capital of Australia"). Each configuration runs in its own process; models are loaded before
+the session (as in a running chat or the new background server), and load time is reported apart.
+
+`docs/benchmark/system_session.json`, max 256 tokens per answer, same system prompt everywhere:
+
+| Configuration | Session | Mean | Median | vs plain | Correct | Peak RAM | Cache / small / 7B |
+|---|---:|---:|---:|---:|---:|---:|---|
+| plain: 7B, plain decoding, no cache/router | 431 s | 12.7 s | 9.6 s | 1.00x | 34/34 | 5.07 GB | 0 / 0 / 34 |
+| cascade: 7B + confidence drafting, cache, router | 306 s | 9.0 s | 8.0 s | **1.41x** | 34/34 | 5.89 GB | 7 / 0 / 27 |
+| **+ small model qwen2.5 1.5B for easy queries** | **197 s** | **5.8 s** | **2.0 s** | **2.19x** | **34/34** | 7.01 GB | 7 / 16 / 11 |
+| + small model qwen2.5 0.5B for easy queries | 239 s | 7.0 s | 1.7 s | 1.80x | 34/34 | 6.38 GB | 7 / 16 / 11 |
+
+Mean seconds per question by category:
+
+| | Easy | Hard | Repeat | Reworded | Near-miss |
+|---|---:|---:|---:|---:|---:|
+| plain | 8.7 | 23.9 | 10.6 | 10.2 | 8.1 |
+| cascade | 9.1 | 18.0 | **0.01** | 3.9 | 7.4 |
+| + 1.5B | **2.7** | 17.4 | **0.01** | **2.0** | **3.3** |
+
+- Repeats and 4 of 6 rewordings come from the cache in ~10 ms; all 4 near-misses were correctly
+  *not* served from it. Easy questions on the 1.5B model take 2.7 s instead of 8.7 s, still all
+  correct. Hard questions gain ~1.35x from confidence drafting on the 7B.
+- The 1.5B is recommended over the 0.5B: equal on this checked session, but in a live check the
+  0.5B answered "Name a primary colour." without naming one.
+- RAM: two local models cost +1.9 GB over plain (7.0 GB on a 15.7 GB laptop). The background server
+  frees all of it after 10 idle minutes.
+
+### Three bugs this benchmark found (fixed before the numbers above)
+
+The first runs showed the cascade configuration *slower* than plain (0.61x) with a 9.5 GB peak:
+
+1. `AccelerationEngine.load()` loaded the model, then switched it to speculative mode, which in
+   llama.cpp rebuilds it: the 7B loaded twice (149 s instead of 68 s) and both copies were resident at
+   once. The layer is now chosen before loading, and the runner frees the old model before rebuilding.
+2. The acceptance monitor (step down below 60% acceptance over 20 requests) dropped confidence
+   drafting to prompt lookup, which is 0.60x on this CPU, so every answer after the 7B's 20th was
+   1.5–3.5x slower (questions 24 and 30: 72 s and 56 s, against 20 s and 32 s). Confidence drafting
+   already skips drafts the draft model is unsure of, so a low acceptance rate no longer means a
+   slowdown; such runners are no longer stepped down.
+3. In the new background server (below), the cache's SQLite connection was used from request threads
+   it does not allow, so uncached questions failed there and `cascade ask` silently fell back to
+   loading the models itself. All Pipeline work now runs on one thread.
+
+### Model loading per `cascade ask`
+
+Each `cascade ask` is a new process, and with the llama.cpp runner each one loaded the models first
+(58–94 s in the table's load column). `cascade ask` now starts a background server on 127.0.0.1 on
+first use and keeps the models loaded for `server.idle_minutes` (default 10). Measured live with the
+1.5B + 7B configuration: first question ~70 s (loading), then easy questions **~2 s** end to end and
+cache hits **<1 s**, against 60–90 s each before. (Ollama-runner users already had warm models:
+Ollama keeps them loaded itself.)

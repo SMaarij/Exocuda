@@ -478,6 +478,33 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.4.0] -- 2026-11-09 -- small-model routing, background model server; 2.19x per session
+
+No seam changes. `Pipeline` gains an optional `small_local_backend` keyword and a `warm()` method;
+`PipelineResult` is unchanged (small-model answers report tier "local").
+
+### Added
+
+- `Pipeline(small_local_backend=...)`: queries the router labels "local" go to a small fast model;
+  weak answers (estimate_local_confidence below the floor) and cloud_byok-labelled queries without a
+  cloud backend go to the main local model. CLI key `small_model` (recommended
+  `qwen2.5:1.5b-instruct`), sharing the main model's hardware profile.
+- Model ids with an explicit size, e.g. `qwen2.5:1.5b-instruct`.
+- Background model server (`cli/warm_server.py`): `cascade ask` starts it on first use (default for
+  the llama.cpp runner, `server.auto`), keeps models loaded for `server.idle_minutes` (10), binds
+  127.0.0.1 only. `cascade serve`, `cascade stop`.
+- `scripts/benchmark_system.py`: 34-question session through the real Pipeline, answers checked.
+  1.5B small model + cache + router + 7B with confidence drafting: 2.19x faster than plain 7B,
+  median answer 9.6 s -> 2.0 s, 34/34 correct (BENCHMARK_REPORT Addendum 11).
+
+### Fixed
+
+- `AccelerationEngine.load()` loaded a llama.cpp model twice (plain, then rebuilt for speculative
+  mode), holding both copies: peak 9.5 GB -> 5.9 GB, load 149 s -> 68 s.
+- The acceptance monitor stepped confidence drafting down to prompt lookup (0.60x on CPU) after 20
+  requests; self-regulating runners (`LlamaCppRunner.self_regulating`) are no longer stepped down.
+- `LlamaCppRunner` frees the old model before rebuilding.
+
 ## [0.3.6] -- 2026-11-09 -- fix memory leak from the 0.3.5 windowed eval
 
 No seam changes.
