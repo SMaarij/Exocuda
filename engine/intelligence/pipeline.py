@@ -102,6 +102,14 @@ class Pipeline:
         # they are never served from, or written to, the cache.
         self._uncached_tiers = tuple(uncached_tiers)
 
+    def warm(self) -> None:
+        """Load the local models now (one tiny generation each), not on the first real question.
+        Nothing is cached or logged."""
+        probe: list[Message] = [{"role": "user", "content": "Say OK."}]
+        for backend in (self._backend, self._small_local_backend):
+            if backend is not None:
+                backend.generate(probe)
+
     # ---- Pipeline seam (Section 9) --------------------------------------
 
     def run(self, messages: list[Message]) -> PipelineResult:

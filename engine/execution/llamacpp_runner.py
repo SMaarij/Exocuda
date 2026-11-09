@@ -369,8 +369,15 @@ class LlamaCppRunner:
             raise RuntimeError(f"Ollama has no GGUF file for {tag}")
         return path
 
+    @property
+    def self_regulating(self) -> bool:
+        """True when confidence drafting is active: unsure drafts are skipped per token, so
+        AccelerationEngine should not step down on a low acceptance rate."""
+        return self._mode == ACCEL_DRAFT_MODEL and self._draft_p_min is not None
+
     def _build(self) -> None:
         needs_all_logits = self._mode != ACCEL_NONE
+        self._llm = None  # release the old model before loading the new one: never two copies at once
         self._llm = self._factory(self._model_path, needs_all_logits)
         self._llm_has_all_logits = needs_all_logits
         self._install_draft()

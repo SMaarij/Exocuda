@@ -181,9 +181,12 @@ class AccelerationEngine:
         self._loaded_model_id: Optional[str] = None
 
     def load(self, model_id: str, quant_level: str) -> None:
+        # Choose the layer before loading: switching a loaded llama.cpp model
+        # into speculative mode rebuilds it, which loaded a 7B twice and held
+        # both copies at once (peak RSS 9.5 GB instead of ~5.5 GB).
+        self._active_layer = self._apply_layer(self._resolve_layer(model_id))
         self._runner.load(model_id, quant_level)
         self._loaded_model_id = model_id
-        self._active_layer = self._apply_layer(self._resolve_layer(model_id))
 
     def unload(self) -> None:
         self._runner.unload()
@@ -195,7 +198,12 @@ class AccelerationEngine:
         ran_layer = _LAYER_FOR_MODE.get(base.acceleration, AccelerationLayer.NONE)
         acceptance = base.acceptance_rate if base.acceptance_rate is not None else 1.0
 
-        if base.acceptance_rate is not None and ran_layer != AccelerationLayer.NONE:
+        # A self-regulating runner (confidence drafting) already skips drafts its
+        # draft model is unsure of, so a low acceptance rate no longer means a
+        # slowdown -- and stepping down from it (to prompt lookup, 0.60x on CPU)
+        # made later answers 1.5-3.5x slower in benchmark_system.py.
+        if (base.acceptance_rate is not None and ran_layer != AccelerationLayer.NONE
+                and not getattr(self._runner, "self_regulating", False)):
             self._monitor.record(base.acceptance_rate)
             if self._monitor.should_step_down():
                 self._step_down_layer()

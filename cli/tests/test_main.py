@@ -64,7 +64,12 @@ class _FakeIncapableHardwareProfiler(_FakeHardwareProfiler):
 
 @pytest.fixture(autouse=True)
 def _isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cli import warm_server
+
     monkeypatch.setattr(cli_main, "CONFIG_PATH", tmp_path / "config.json")
+    # Never reach a real background model server, or start one, from a test.
+    monkeypatch.setattr(warm_server, "health", lambda port=None: None)
+    monkeypatch.setattr(warm_server, "spawn", lambda *a, **k: pytest.fail("test tried to spawn a server"))
 
 
 @pytest.fixture(autouse=True)
@@ -354,3 +359,19 @@ def test_small_local_backend_shares_the_main_profile_and_runs_the_floor_rung(mon
     assert small._model_id == "qwen2.5:1.5b-instruct"
     assert small.profiler is main.profiler
     assert [r.label for r in small._ladder.rungs] == ["q4_K_M"]
+
+
+def test_server_auto_start_defaults_on_only_for_llamacpp() -> None:
+    assert cli_main._server_settings({})[0] is False
+    assert cli_main._server_settings({"runner": "llamacpp"})[0] is True
+    assert cli_main._server_settings({"runner": "llamacpp", "server": {"auto": "off"}})[0] is False
+    assert cli_main._server_settings({"server": {"port": 9000, "idle_minutes": 2}})[1:] == (9000, 2.0)
+
+
+def test_ask_uses_the_warm_server_when_it_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_main, "_ask_warm_server", lambda messages, log: {
+        "text": "from server", "tier": "local", "cache_hit": False, "tok_s": 5.0, "latency_ms": 10.0,
+        "est_cost_usd": 0.0, "escalated": False})
+    monkeypatch.setattr(cli_main, "build_pipeline", lambda **kw: pytest.fail("loaded models in-process"))
+    result = runner.invoke(app, ["ask", "hi"])
+    assert result.exit_code == 0 and "from server" in result.output

@@ -551,3 +551,13 @@ def test_windowed_eval_does_not_keep_its_model_alive() -> None:
     captured = [cell.cell_contents for cell in llm.eval.__closure__ or ()]
     assert all(obj is not llm for obj in captured)
     assert not any(getattr(obj, "__self__", None) is llm for obj in captured)
+
+
+def test_runner_is_self_regulating_only_with_confidence_drafting() -> None:
+    plain = LlamaCppRunner(llama_factory=lambda path, all_logits: None)
+    plain.set_acceleration(ACCEL_DRAFT_MODEL)
+    assert not plain.self_regulating
+    confident = LlamaCppRunner(llama_factory=lambda path, all_logits: None, draft_p_min=0.75)
+    assert not confident.self_regulating
+    confident.set_acceleration(ACCEL_DRAFT_MODEL)
+    assert confident.self_regulating

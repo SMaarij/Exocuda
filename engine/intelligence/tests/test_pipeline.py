@@ -262,3 +262,21 @@ def test_failing_small_model_falls_back_to_the_big_model(messages: list[Message]
 def test_stream_uses_the_small_model_for_local_queries(messages: list[Message]) -> None:
     pipeline = Pipeline(FakeBackend(text="big"), small_local_backend=FakeBackend(text="small one"), router=_FixedRouter("local"))
     assert "".join(pipeline.run_stream(messages)).strip() == "small one"
+
+
+def test_warm_loads_both_local_models_without_caching_or_logging(tmp_path) -> None:
+    class _Counting(FakeBackend):
+        calls = 0
+
+        def generate(self, messages):
+            type(self).calls += 1
+            return super().generate(messages)
+
+    class _Small(_Counting):
+        calls = 0
+
+    log = tmp_path / "decisions.jsonl"
+    pipeline = Pipeline(_Counting(), small_local_backend=_Small(), decision_log_path=log)
+    pipeline.warm()
+    assert (_Counting.calls, _Small.calls) == (1, 1)
+    assert not log.exists()

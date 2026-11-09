@@ -19,6 +19,10 @@ Config keys (set with `cascade config set KEY VALUE`):
     draft.adaptive        adapt draft length to acceptance (default true when p_min is off)
     draft.tokens          draft tokens per step (default 16 with p_min, else 4)
     draft.max_tokens      cap on the adaptive draft length (default 16)
+    server.auto           keep models loaded between `cascade ask` calls in a background
+                          server on 127.0.0.1 (default true for runner llamacpp)
+    server.idle_minutes   the server exits after this long without a request (default 10)
+    server.port           (default 8765)
     byok.base_url         OpenAI-compatible root, e.g. https://api.openai.com
     byok.model            e.g. gpt-4o-mini
     byok.api_key_env      env var holding the key       (default OPENAI_API_KEY)
@@ -326,8 +330,14 @@ def ask(
 ) -> None:
     """FR-08.2: one-shot, scriptable use."""
     warn_if_unprofiled()
-    pipeline = build_pipeline(decision_logging=not no_log)
     messages = [{"role": "user", "content": query}]
+    if not stream:
+        result = _ask_warm_server(messages, log=not no_log)
+        if result is not None:
+            typer.echo(result["text"])
+            typer.secho(_status_footer(result), fg=typer.colors.BRIGHT_BLACK, err=True)
+            return
+    pipeline = build_pipeline(decision_logging=not no_log)
     if stream:
         for piece in pipeline.run_stream(messages):
             typer.echo(piece, nl=False)
@@ -336,6 +346,60 @@ def ask(
     result = pipeline.run(messages)
     typer.echo(result["text"])
     typer.secho(_status_footer(result), fg=typer.colors.BRIGHT_BLACK, err=True)
+
+
+def _server_settings(config: dict) -> tuple[bool, int, float]:
+    """(auto-start, port, idle minutes). Auto-start defaults on for the llama.cpp runner, which
+    loads models in this process; Ollama already keeps its models loaded between calls."""
+    from cli import warm_server
+
+    auto = _get(config, "server.auto", config.get("runner", "ollama") == "llamacpp")
+    if isinstance(auto, str):
+        auto = auto.strip().lower() not in ("false", "0", "no", "off")
+    return (bool(auto), int(_get(config, "server.port", warm_server.DEFAULT_PORT)),
+            float(_get(config, "server.idle_minutes", warm_server.DEFAULT_IDLE_MINUTES)))
+
+
+def _ask_warm_server(messages: list, log: bool) -> Optional[dict]:
+    """The answer from the background server -- started first if needed and enabled -- or None
+    to answer in this process instead."""
+    from cli import warm_server
+
+    auto, port, idle = _server_settings(load_config())
+    state = warm_server.health(port)
+    if state is None:
+        if not auto:
+            return None
+        typer.secho("Starting the background model server (first question loads the models; "
+                    f"they stay loaded for {idle:g} idle minutes)...", fg=typer.colors.BRIGHT_BLACK, err=True)
+        warm_server.spawn(port, idle, log_path=CONFIG_PATH.parent / "server.log")
+    if not warm_server.wait_ready(port):
+        return None
+    return warm_server.ask(messages, log=log, port=port)
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(None, help="Port on 127.0.0.1 (default: config server.port, 8765)."),
+    idle_minutes: float = typer.Option(None, help="Exit after this long without a request."),
+) -> None:
+    """Keep the models loaded for `cascade ask` (started automatically when server.auto is on)."""
+    from cli import warm_server
+
+    _, default_port, default_idle = _server_settings(load_config())
+    server = warm_server.WarmServer(lambda: build_pipeline(decision_logging=True), config_path=CONFIG_PATH,
+                                    idle_seconds=(idle_minutes or default_idle) * 60, port=port or default_port)
+    typer.echo(f"Cascade model server on 127.0.0.1:{port or default_port}, loading models...")
+    server.serve_forever(load_in_background=True)
+
+
+@app.command()
+def stop() -> None:
+    """Stop the background model server and free its RAM."""
+    from cli import warm_server
+
+    port = _server_settings(load_config())[1]
+    typer.echo("Stopped." if warm_server.stop(port) else "No model server running.")
 
 
 @app.command()

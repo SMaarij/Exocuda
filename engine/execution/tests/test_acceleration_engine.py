@@ -287,3 +287,32 @@ def test_load_validated_pairs_skips_unvalidated(tmp_path) -> None:
     p.write_text(json.dumps(data), encoding="utf-8")
     pairs = load_validated_pairs(p)
     assert [pp.target_model_id for pp in pairs] == ["m1"]
+
+
+class TestLoadOrderAndSelfRegulation:
+    def test_layer_is_chosen_before_the_model_loads(self) -> None:
+        """Switching a loaded llama.cpp model to speculative mode rebuilds it (two copies at once)."""
+        events: list[str] = []
+
+        class _Recording(FakeAcceleratedRunner):
+            def set_acceleration(self, mode: str) -> bool:
+                events.append(f"mode:{mode}")
+                return super().set_acceleration(mode)
+
+            def load(self, model_id: str, quant_level: str) -> None:
+                events.append("load")
+                super().load(model_id, quant_level)
+
+        _engine(AccelerationLayer.DRAFT_MODEL, runner=_Recording(), pair=True)
+        assert events == [f"mode:{ACCEL_DRAFT_MODEL}", "load"]
+
+    def test_self_regulating_runner_is_never_stepped_down(self) -> None:
+        class _Confident(FakeAcceleratedRunner):
+            self_regulating = True
+
+        runner = _Confident(acceptance_rate=0.1)
+        engine = _engine(AccelerationLayer.DRAFT_MODEL, runner=runner, pair=True, monitor=_bad_monitor())
+        for _ in range(3):
+            engine.generate_accelerated("p", 10)
+        assert engine.active_layer == AccelerationLayer.DRAFT_MODEL
+        assert runner.mode == ACCEL_DRAFT_MODEL
