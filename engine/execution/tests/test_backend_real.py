@@ -376,3 +376,11 @@ def test_resolve_real_tag_maps_qwen_coder_rungs() -> None:
 
     assert _resolve_real_tag("qwen2.5-coder", "q4_K_M") == "7b-instruct-q4_K_M"
     assert _resolve_real_tag("unknown-model", "q4_K_M") == "q4_K_M"
+
+
+def test_model_id_with_explicit_size_resolves_tag_and_family() -> None:
+    from engine.execution.backend import _resolve_real_tag, _runner_model
+
+    assert _resolve_real_tag("qwen2.5:1.5b-instruct", "q4_K_M") == "1.5b-instruct-q4_K_M"
+    assert _runner_model("qwen2.5:1.5b-instruct") == "qwen2.5"
+    assert _runner_model("llama3.2") == "llama3.2"

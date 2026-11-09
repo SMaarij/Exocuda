@@ -10,6 +10,8 @@ Config keys (set with `cascade config set KEY VALUE`):
     model                 local model family            (default llama3.2)
     runner                ollama | llamacpp             (default ollama)
     acceleration          none | prompt_lookup | draft_model   (llamacpp only)
+    small_model           fast model for easy queries, e.g. qwen2.5:1.5b-instruct (default
+                          off); the router sends hard ones to `model`
     draft_model           draft tag for draft_model     (default llama3.2:1b-instruct-q4_K_M)
     draft.p_min           stop drafting at the first token the draft model is less sure of
                           than this (default 0.75, fastest in
@@ -141,6 +143,29 @@ def build_local_backend(config: dict):
     return LocalExecutionBackend(model_id=model, **_local_limits(config))
 
 
+def build_small_local_backend(config: dict, main_backend):
+    """
+    The optional fast model for easy queries (config `small_model`, e.g.
+    qwen2.5:1.5b-instruct), or None. It shares the main backend's hardware
+    profile -- one profiling run, no profile cache thrash between two models --
+    and always runs its smallest quant level, without speculative decoding.
+    """
+    from engine.execution.backend import LocalExecutionBackend
+    from engine.execution.model_ladder import DEFAULT_LADDER, ModelLadder
+
+    small = _get(config, "small_model")
+    if not small:
+        return None
+    floor = ModelLadder(rungs=(min(DEFAULT_LADDER, key=lambda r: r.min_tok_s),))
+    runner = None
+    if config.get("runner", "ollama") == "llamacpp":
+        from engine.execution.llamacpp_runner import LlamaCppRunner
+
+        runner = LlamaCppRunner(draft_model_tag=None)
+    return LocalExecutionBackend(runner=runner, model_id=small, profiler=main_backend.profiler, ladder=floor,
+                                 **_local_limits(config))
+
+
 def _draft_settings(config: dict) -> dict:
     """Default: confidence drafting (p_min 0.75, up to 16 tokens), the fastest mode in
     docs/benchmark/acceleration_qwen7b_pmin_3rounds.json. `draft.p_min off` falls back
@@ -190,8 +215,10 @@ def build_pipeline(decision_logging: bool = True):
     byok = _byok_settings(config)
     self_hosted = _self_hosted_settings(config)
 
+    local = build_local_backend(config)
     return Pipeline(
-        backend=build_local_backend(config),
+        backend=local,
+        small_local_backend=build_small_local_backend(config, local),
         self_hosted_backend=SelfHostedBackend(**self_hosted) if self_hosted else None,
         cloud_byok_backend=CloudBYOKBackend(**byok) if byok and byok["api_key"] else None,
         compressor=ContextCompressor(embedder),

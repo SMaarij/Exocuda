@@ -74,8 +74,15 @@ class Pipeline:
         decision_log_path: Optional[Path] = None,
         system_prompt: Optional[str] = None,
         uncached_tiers: tuple[str, ...] = ("self_hosted",),
+        small_local_backend: Optional[ExecutionBackend] = None,
     ) -> None:
         self._backend = backend
+        # Optional fast, small local model for queries the router labels
+        # "local" (trivial/moderate). `backend` then serves only the hard
+        # ones -- cloud_byok-labelled queries with no cloud configured, and
+        # small-model answers that look weak. None keeps one local model.
+        self._small_local_backend = small_local_backend
+        self.last_served_by_small = False
         self._self_hosted_backend = self_hosted_backend
         self._cloud_byok_backend = cloud_byok_backend
         self._compressor = compressor
@@ -111,6 +118,15 @@ class Pipeline:
                 return self._finalize(self._cache_hit_result(cached, start))
 
         result, tier, escalated = self._execute(compressed, tier)
+
+        if self.last_served_by_small and self._confidence_floor is not None:
+            if estimate_local_confidence(result["text"]) < self._confidence_floor:
+                try:
+                    result = self._backend.generate(compressed)
+                    escalated = True
+                    self.last_served_by_small = False
+                except Exception:
+                    pass  # NFR-03: keep the small model's answer rather than fail
 
         if tier == "local" and self._confidence_floor is not None and self._self_hosted_backend is not None:
             local_confidence = estimate_local_confidence(result["text"])
@@ -165,6 +181,8 @@ class Pipeline:
                 return
 
         stream_backend = self._backend_for_tier(tier)
+        if tier == "local" and self._small_local_backend is not None:
+            stream_backend = self._small_local_backend
 
         try:
             yield from stream_backend.generate_stream(compressed)
@@ -206,6 +224,14 @@ class Pipeline:
         exact behavior j2_integration_test.py's test_j2_5 verifies).
         """
         cascade_failed = False
+        self.last_served_by_small = False
+        if tier == "local" and self._small_local_backend is not None:
+            try:
+                result = self._small_local_backend.generate(messages)
+                self.last_served_by_small = True
+                return result, "local", False
+            except Exception:
+                pass  # NFR-03: the main local model takes over
         remote = self._backend_for_tier(tier)
         if remote is not self._backend:
             try:

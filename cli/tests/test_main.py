@@ -339,3 +339,18 @@ def test_profile_command_measures_the_configured_model(monkeypatch: pytest.Monke
     assert runner.invoke(app, ["profile"]).exit_code == 0
     assert seen["reference_model_id"] == "qwen2.5-coder"
     assert seen["quant_levels"][0] == "7b-instruct-q4_K_M"
+
+
+def test_small_local_backend_is_off_by_default() -> None:
+    assert cli_main.build_small_local_backend({}, main_backend=None) is None
+
+
+def test_small_local_backend_shares_the_main_profile_and_runs_the_floor_rung(monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.execution.llamacpp_runner as lr
+
+    monkeypatch.setattr(lr, "LlamaCppRunner", lambda draft_model_tag, **kwargs: _AcceleratedStub())
+    main = cli_main.build_local_backend({"runner": "llamacpp", "model": "qwen2.5-coder"})
+    small = cli_main.build_small_local_backend({"runner": "llamacpp", "small_model": "qwen2.5:1.5b-instruct"}, main)
+    assert small._model_id == "qwen2.5:1.5b-instruct"
+    assert small.profiler is main.profiler
+    assert [r.label for r in small._ladder.rungs] == ["q4_K_M"]

@@ -96,8 +96,16 @@ _RUNG_LABEL_TO_REAL_TAG: dict[str, dict[str, str]] = {
 }
 
 
+def _runner_model(model_id: str) -> str:
+    """The family name the runner loads: "qwen2.5" for "qwen2.5:1.5b-instruct"."""
+    return model_id.split(":", 1)[0]
+
+
 def _resolve_real_tag(model_id: str, rung_label: str) -> str:
     """
+    A model_id with an explicit size ("qwen2.5:1.5b-instruct") resolves to
+    "<size>-<rung>" ("1.5b-instruct-q4_K_M"), loaded under _runner_model().
+
     Translate an abstract ModelLadder rung label into the real Ollama tag
     suffix for `model_id`. Falls back to the bare label unresolved if
     `model_id` has no registered mapping (e.g. a test double's synthetic
@@ -105,6 +113,8 @@ def _resolve_real_tag(model_id: str, rung_label: str) -> str:
     pull` step for an unmapped production model, rather than silently
     guessing a tag that might not exist.
     """
+    if ":" in model_id:
+        return f"{model_id.split(':', 1)[1]}-{rung_label}"
     return _RUNG_LABEL_TO_REAL_TAG.get(model_id, {}).get(rung_label, rung_label)
 
 
@@ -191,6 +201,10 @@ class LocalExecutionBackend:
         self._max_tokens = max_tokens
         self._loaded: Optional[tuple[str, str]] = None
 
+    @property
+    def profiler(self) -> HardwareProfiler:
+        return self._profiler
+
     # ---- ExecutionBackend protocol implementation ----------------------
 
     def generate(self, messages: list[Message]) -> BackendResult:
@@ -266,7 +280,7 @@ class LocalExecutionBackend:
                 # Keep the model resident between requests; reloading per
                 # request costs seconds of cold-load each time.
                 if self._loaded != (self._model_id, real_tag):
-                    self._engine.load(self._model_id, real_tag)
+                    self._engine.load(_runner_model(self._model_id), real_tag)
                     self._loaded = (self._model_id, real_tag)
                 sample = self._engine.generate_accelerated(prompt, max_tokens=self._max_tokens)
                 return sample, rung

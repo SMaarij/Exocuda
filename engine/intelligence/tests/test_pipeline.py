@@ -224,3 +224,41 @@ def test_failed_escalation_keeps_the_local_answer(messages: list[Message]) -> No
     pipeline = Pipeline(FakeBackend(text="?"), self_hosted_backend=_FailingRemote(), confidence_floor=0.99)
     result = pipeline.run(messages)
     assert (result["text"], result["tier"], result["escalated"]) == ("?", "local", False)
+
+
+# ---- small local model for easy queries -------------------------------------
+
+LONG_ANSWER = "Paris is the capital of France."
+
+
+def test_small_model_serves_queries_routed_local(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="big"), small_local_backend=FakeBackend(text=LONG_ANSWER), router=_FixedRouter("local"))
+    result = pipeline.run(messages)
+    assert (result["text"], result["tier"], result["escalated"]) == (LONG_ANSWER, "local", False)
+    assert pipeline.last_served_by_small
+
+
+def test_hard_queries_go_to_the_big_local_model_when_no_cloud(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="big answer"), small_local_backend=FakeBackend(text=LONG_ANSWER),
+                        router=_FixedRouter("cloud_byok"))
+    result = pipeline.run(messages)
+    assert (result["text"], result["tier"]) == ("big answer", "local")
+    assert not pipeline.last_served_by_small
+
+
+def test_weak_small_model_answer_escalates_to_the_big_model(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="big answer, confidently"), small_local_backend=FakeBackend(text="I'm not sure"),
+                        router=_FixedRouter("local"), confidence_floor=0.8)
+    result = pipeline.run(messages)
+    assert (result["text"], result["tier"], result["escalated"]) == ("big answer, confidently", "local", True)
+    assert not pipeline.last_served_by_small
+
+
+def test_failing_small_model_falls_back_to_the_big_model(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="big answer"), small_local_backend=FakeBackend(raise_error=True), router=_FixedRouter("local"))
+    assert pipeline.run(messages)["text"] == "big answer"
+
+
+def test_stream_uses_the_small_model_for_local_queries(messages: list[Message]) -> None:
+    pipeline = Pipeline(FakeBackend(text="big"), small_local_backend=FakeBackend(text="small one"), router=_FixedRouter("local"))
+    assert "".join(pipeline.run_stream(messages)).strip() == "small one"
