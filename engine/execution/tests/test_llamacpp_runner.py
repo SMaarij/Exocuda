@@ -540,3 +540,14 @@ def test_runner_rejects_drafts_longer_than_the_output_window() -> None:
 
     with pytest.raises(ValueError):
         LlamaCppRunner(llama_factory=lambda path, all_logits: None, max_draft_tokens=OUTPUT_WINDOW)
+
+
+def test_windowed_eval_does_not_keep_its_model_alive() -> None:
+    from engine.execution.llamacpp_runner import _install_windowed_eval
+
+    llm = _WindowLlm()
+    _install_windowed_eval(llm)
+    # No llm -> eval -> llm cycle: such a cycle kept replaced 4-5 GB models in RAM until a gc pass.
+    captured = [cell.cell_contents for cell in llm.eval.__closure__ or ()]
+    assert all(obj is not llm for obj in captured)
+    assert not any(getattr(obj, "__self__", None) is llm for obj in captured)

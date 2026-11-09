@@ -185,7 +185,7 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Reworded questions answered from cache | ≥90% of exact | 42.9% (strict guard, threshold 0.92) | **not met** — traded for zero wrong answers |
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
-| Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.64x on code/rewrite prompts**, 1.33x overall, 1.01x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, confidence drafting, 3 rounds); output verified lossless | met on grounded prompts, not yet overall |
+| Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.69x on code/rewrite prompts**, 1.39x overall, 1.08x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, confidence drafting, 3 rounds); output verified lossless | met on grounded prompts, not yet overall |
 | RAM, 7B Q4_K_M via llama.cpp | – | 4.6 GB (was 7.2 GB with the model file memory-mapped); +0.75 GB with the draft model | |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 

@@ -478,6 +478,19 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.3.6] -- 2026-11-09 -- fix memory leak from the 0.3.5 windowed eval
+
+No seam changes.
+
+### Fixed
+
+- The 0.3.5 windowed eval kept a strong reference from the model's `eval` back to the model, so
+  every replaced model (a reload in `set_acceleration` or `verify_greedy`, or a discarded runner)
+  stayed resident until a garbage-collector pass: 9.4 GB after a second 7B load instead of 5.4 GB.
+  It now holds a weak reference.
+- Confirmed 3-round speed with the windowed eval: 1.69x grounded, 1.08x open, 1.39x overall,
+  lossless (`docs/benchmark/acceleration_qwen7b_windowed_3rounds.json`).
+
 ## [0.3.5] -- 2026-11-08 -- speculative mode: fix crash past 512 tokens; less RAM
 
 No seam changes.

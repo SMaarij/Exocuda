@@ -16,11 +16,17 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
-| NFR-01 | ≥1.5x acceleration | **Met on grounded prompts** (1.64x), not yet overall (1.33x) | confidence drafting, 3 interleaved rounds, verified lossless; open-ended prompts 1.01x |
+| NFR-01 | ≥1.5x acceleration | **Met on grounded prompts** (1.69x), not yet overall (1.39x) | confidence drafting, 3 interleaved rounds, verified lossless; open-ended prompts 1.08x |
 | NFR-02 | cache hit <150 ms | Met (warm) | 55 ms median live; first lookup per process ~2.4 s (model load) |
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.3.6 — memory leak fixed; 1.39x overall confirmed
+
+- 0.3.5's fix left a reference cycle that kept replaced models in RAM until garbage collection
+  (up to 9.4 GB with two 7B copies). Fixed; RAM is back to 4.6 GB plain, ~5.5 GB with the draft.
+- Confirmation run: 1.69x on code/rewrite prompts, 1.08x open-ended, **1.39x overall**, lossless.
 
 ## 0.3.5 — long prompts no longer crash speculative mode; less RAM
 

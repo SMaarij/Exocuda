@@ -500,3 +500,23 @@ Measured A/B, the same process setup alternated (stock, windowed, stock, windowe
 | ~620-token prompt | crash | works; lossless check 48/48 exact |
 
 The RAM saved grows with prompt length, since stock eval wrote 608 KB of logits per prompt token.
+
+### Confirmation run, and a memory leak it exposed (2026-11-09)
+
+`acceleration_qwen7b_windowed_3rounds.json`, plain vs the default (p_min 0.75), 3 interleaved rounds,
+with the windowed eval:
+
+| Subset | Plain | Default | Speed-up | Per round |
+|---|---:|---:|---:|---|
+| Grounded | 3.99 tok/s | 6.73 tok/s | **1.69x** | 1.87 / 1.63 / 1.57 |
+| Open | 3.82 | 4.14 | 1.08x | 1.04 / 1.07 / 1.14 |
+| All | 3.91 | 5.44 | **1.39x** | 1.45 / 1.36 / 1.37 |
+
+0 lossless-check violations. Speed matches the previous runs (1.33x and 1.38x overall).
+
+The run's peak RSS, however, read 8.8 GB. The windowed eval's closure held a strong reference to its
+own model, so each replaced model (the benchmark builds a new runner per mode, and `verify_greedy`
+and `set_acceleration` rebuild the model) stayed resident until a garbage-collector pass. With gc
+held off, a second load measured 9.4 GB instead of 5.4 GB. The closure now holds a weak reference;
+the same test then returns to 0.05 GB after each discarded runner. The numbers in the A/B table
+above were taken in fresh processes, one model each, so they are unaffected.

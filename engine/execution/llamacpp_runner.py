@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import inspect
 import time
+import weakref
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -259,14 +260,19 @@ def _install_windowed_eval(llm: Any, window: int = OUTPUT_WINDOW) -> None:
     len(draft) + 1 of them. `llm.keep_scores = True` restores the stock eval,
     with a full-context `scores` buffer, for verify_greedy.
     """
-    stock_eval = llm.eval
+    # No strong reference from the closure back to llm: a llm -> eval -> llm
+    # cycle kept every replaced 4-5 GB model alive until the garbage collector
+    # happened to run (RSS 9.4 GB after a reload instead of 5.4 GB).
+    stock_eval = type(llm).eval
+    ref = weakref.ref(llm)
     llm.keep_scores = False
 
     def eval(tokens) -> None:
+        llm = ref()
         if llm.keep_scores:
             if llm.scores.shape[0] < llm._n_ctx:
                 llm.scores = np.zeros((llm._n_ctx, llm._n_vocab), dtype=np.single)  # pages touched lazily
-            return stock_eval(tokens)
+            return stock_eval(llm, tokens)
         tokens = list(tokens)
         first_output = len(tokens) - window
         llm._ctx.kv_cache_seq_rm(-1, llm.n_tokens, -1)
