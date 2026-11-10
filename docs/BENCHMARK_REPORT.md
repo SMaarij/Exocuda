@@ -650,3 +650,35 @@ Whole session with the check on (`docs/benchmark/system_session_escalation.json`
 Run-to-run spread on this laptop is large (the 1.5B setup measured 2.19x, 1.79x and 1.56x in three
 sessions; the shared 0.5B 1.65x and 2.11x), so the two are about equally fast. The shared 0.5B is now
 the recommended setup: as accurate or better with the check, and 0.9–1.1 GB less RAM.
+
+## Addendum 14 — drop-in for Ollama and OpenAI clients; memory against Ollama itself, 2026-11-10
+
+`cascade start` runs the model server with `keep_listening`: it answers `/api/chat`, `/api/generate`,
+`/api/tags`, `/api/show`, `/api/ps`, `/api/version` (Ollama) and `/v1/chat/completions`, `/v1/models`
+(OpenAI), and after `server.idle_minutes` unloads the models instead of exiting. Checked live with the
+real Ollama CLI 0.40.15 (`OLLAMA_HOST=127.0.0.1:8765 ollama run qwen2.5-coder ...`) and an OpenAI-style
+request, config file containing only `model qwen2.5-coder` (runner, drafting and the shared 0.5B small
+model on by default):
+
+| Request | Wall time (client) | Served by |
+|---|---:|---|
+| `ollama run` "What is the capital of Japan?" | 6.5 s | small model (first request after load) |
+| same again | **0.7 s** | cache |
+| `ollama run` "Write a Python function that returns the factorial of n." | 23.1 s | 7B, drafting |
+| `/v1/chat/completions` "How many legs does a spider have?" | 1.8 s | small model |
+
+Memory, Windows working set (RSS) and committed private bytes:
+
+| Process | Models | RSS | Committed |
+|---|---|---:|---:|
+| Ollama `llama-server` (num_ctx 2048) | 7B | 5.06 GB | 5.21 GB |
+| Cascade server, before this change | 7B + 0.5B + embedder | 5.46 GB | 7.19 GB |
+| **Cascade server** | 7B + 0.5B + embedder | **5.47 GB** | **6.61 GB** |
+| one llama-cpp-python 7B load, in isolation | 7B | – | 5.43 → **5.14 GB** |
+
+The committed-memory cut: llama-cpp-python allocates a float32 logits buffer per model (here
+512 x 152k = 0.29 GB) that neither the windowed speculative eval nor plain decoding writes. It is now
+replaced by a one-row buffer at load (verify_greedy still re-creates a full one while it runs);
+-0.58 GB for the 7B and the 0.5B. The 7B alone now commits slightly less than Ollama's process, and
+the whole Cascade server holds 0.4 GB more working set than Ollama with the 7B alone while also
+holding the small model, the embedder and the cache.

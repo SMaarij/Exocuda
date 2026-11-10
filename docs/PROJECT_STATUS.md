@@ -22,6 +22,13 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.5.0 — works under the tools people already use; fastest setup is the default
+
+- `cascade start`: the Ollama CLI, Ollama apps and OpenAI-SDK tools run on Cascade unchanged
+  (cache hit 0.7 s, easy answers ~2 s), verified with the real `ollama run`.
+- Setting only `model qwen2.5-coder` now gives the measured fastest setup automatically.
+- Memory: Cascade with 7B + 0.5B + embedder holds 5.47 GB; Ollama holds 5.06 GB for the 7B alone.
+
 ## 0.4.2 — the small model re-asks the 7B when unsure; 0.5B setup recommended
 
 - Small-model answers with mean token probability below 0.75 go to the 7B. On 128 checked easy

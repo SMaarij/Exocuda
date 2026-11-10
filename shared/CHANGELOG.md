@@ -478,6 +478,21 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.5.0] -- 2026-11-10 -- drop-in for Ollama/OpenAI clients; fastest setup by default
+
+### Added
+- `cli/warm_server.py`: Ollama API (`/api/chat`, `/api/generate`, `/api/tags`, `/api/show`, `/api/ps`,
+  `/api/version`, `/api/pull`) and OpenAI API (`/v1/chat/completions` incl. SSE streaming,
+  `/v1/models`) on the model server; `keep_listening` unloads models when idle instead of exiting
+  and reloads them on the next request.
+- `cascade start`: background server for all local tools, with the connection instructions.
+
+### Changed
+- `cli/main.py` defaults: `runner` llamacpp when llama-cpp-python is installed, `acceleration`
+  draft_model, `small_model` qwen2.5:0.5b-instruct for qwen2.5 models on llamacpp (`off` disables).
+- `engine/execution/llamacpp_runner.py`: unused logits buffer replaced by one row at load
+  (-0.29 GB committed per model). No seam changes. BENCHMARK_REPORT Addendum 14.
+
 ## [0.4.2] -- 2026-11-10 -- token-probability escalation for the small model
 
 ### Changed (seam: additive)

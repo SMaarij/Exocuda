@@ -8,11 +8,13 @@ file -- it names the environment variable that holds each key.
 
 Config keys (set with `cascade config set KEY VALUE`):
     model                 local model family            (default llama3.2)
-    runner                ollama | llamacpp             (default ollama)
-    acceleration          none | prompt_lookup | draft_model   (llamacpp only)
-    small_model           fast model for easy queries, e.g. qwen2.5:0.5b-instruct (default
-                          off); the router sends hard ones to `model`. Same family as
-                          `model` -> it is also the draft model, loaded once for both
+    runner                ollama | llamacpp             (default llamacpp when llama-cpp-python
+                          is installed, else ollama)
+    acceleration          none | prompt_lookup | draft_model   (llamacpp only; default draft_model)
+    small_model           fast model for easy queries; the router sends hard ones to `model`.
+                          Same family as `model` -> it is also the draft model, loaded once
+                          for both. Default on llamacpp: qwen2.5:0.5b-instruct for qwen2.5
+                          models, else off; `off` disables
     small_model_min_confidence  re-ask `model` when the small model's mean token probability is
                           below this (default 0.75; off disables)
     draft_model           draft tag for draft_model     (default: small_model when it is
@@ -44,6 +46,7 @@ Config keys (set with `cascade config set KEY VALUE`):
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import sys
@@ -136,11 +139,11 @@ def build_local_backend(config: dict):
     from engine.execution.backend import LocalExecutionBackend
 
     model = config.get("model", "llama3.2")
-    if config.get("runner", "ollama") == "llamacpp":
+    if _runner_kind(config) == "llamacpp":
         from engine.execution.llamacpp_runner import DEFAULT_DRAFT_MODEL_TAG, LlamaCppRunner
 
         draft = config.get("draft_model") or _small_model_as_draft(config) or DEFAULT_DRAFT_MODEL_TAG
-        layer = AccelerationLayer[_ACCELERATION_LAYERS.get(config.get("acceleration", "none"), "NONE")]
+        layer = AccelerationLayer[_ACCELERATION_LAYERS.get(config.get("acceleration", "draft_model"), "NONE")]
         return LocalExecutionBackend(
             runner=LlamaCppRunner(draft_model_tag=draft, **_draft_settings(config)),
             model_id=model,
@@ -149,6 +152,39 @@ def build_local_backend(config: dict):
             **_local_limits(config),
         )
     return LocalExecutionBackend(model_id=model, **_local_limits(config))
+
+
+# Measured defaults: with no `small_model` set, a model of these families gets this
+# small model for easy queries, which also serves as its draft model (one instance in
+# RAM). qwen2.5: BENCHMARK_REPORT Addenda 12-13.
+DEFAULT_SMALL_MODELS = {"qwen2.5": "qwen2.5:0.5b-instruct"}
+_OFF = ("", "off", "none", "false", "0", "no")
+
+
+def _llama_cpp_available() -> bool:
+    return importlib.util.find_spec("llama_cpp") is not None
+
+
+def _runner_kind(config: dict) -> str:
+    """`runner` if set, else llamacpp when llama-cpp-python is installed (speculative
+    decoding, lower RAM, shared small model), else ollama."""
+    runner = config.get("runner")
+    if runner:
+        return runner
+    return "llamacpp" if _llama_cpp_available() else "ollama"
+
+
+def _small_model(config: dict) -> Optional[str]:
+    """`small_model` if set (off disables), else the measured default for the model's
+    family on the llama.cpp runner, else None."""
+    small = _get(config, "small_model")
+    if isinstance(small, str) and small.strip().lower() in _OFF:
+        return None
+    if small:
+        return small
+    if _runner_kind(config) != "llamacpp":
+        return None
+    return DEFAULT_SMALL_MODELS.get(_family_base(config.get("model", "llama3.2")))
 
 
 def _family_base(model: str) -> str:
@@ -167,7 +203,7 @@ def _small_model_as_draft(config: dict) -> Optional[str]:
     from engine.execution.backend import _resolve_real_tag
     from engine.execution.model_ladder import DEFAULT_LADDER
 
-    small = _get(config, "small_model")
+    small = _small_model(config)
     if not small or _family_base(small) != _family_base(config.get("model", "llama3.2")):
         return None
     floor = min(DEFAULT_LADDER, key=lambda r: r.min_tok_s)
@@ -184,12 +220,12 @@ def build_small_local_backend(config: dict, main_backend):
     from engine.execution.backend import LocalExecutionBackend
     from engine.execution.model_ladder import DEFAULT_LADDER, ModelLadder
 
-    small = _get(config, "small_model")
+    small = _small_model(config)
     if not small:
         return None
     floor = ModelLadder(rungs=(min(DEFAULT_LADDER, key=lambda r: r.min_tok_s),))
     runner = None
-    if config.get("runner", "ollama") == "llamacpp":
+    if _runner_kind(config) == "llamacpp":
         from engine.execution.llamacpp_runner import LlamaCppRunner
 
         runner = LlamaCppRunner(draft_model_tag=None)
@@ -390,7 +426,7 @@ def _server_settings(config: dict) -> tuple[bool, int, float]:
     loads models in this process; Ollama already keeps its models loaded between calls."""
     from cli import warm_server
 
-    auto = _get(config, "server.auto", config.get("runner", "ollama") == "llamacpp")
+    auto = _get(config, "server.auto", _runner_kind(config) == "llamacpp")
     if isinstance(auto, str):
         auto = auto.strip().lower() not in ("false", "0", "no", "off")
     return (bool(auto), int(_get(config, "server.port", warm_server.DEFAULT_PORT)),
@@ -418,16 +454,47 @@ def _ask_warm_server(messages: list, log: bool) -> Optional[dict]:
 @app.command()
 def serve(
     port: int = typer.Option(None, help="Port on 127.0.0.1 (default: config server.port, 8765)."),
-    idle_minutes: float = typer.Option(None, help="Exit after this long without a request."),
+    idle_minutes: float = typer.Option(None, help="Free the models' RAM after this long without a request."),
+    keep_listening: bool = typer.Option(False, help="After idle, unload the models but keep serving (reload on demand) "
+                                                    "instead of exiting."),
 ) -> None:
-    """Keep the models loaded for `cascade ask` (started automatically when server.auto is on)."""
+    """Keep the models loaded for `cascade ask` and for Ollama / OpenAI clients (see `cascade start`)."""
     from cli import warm_server
 
-    _, default_port, default_idle = _server_settings(load_config())
+    config = load_config()
+    _, default_port, default_idle = _server_settings(config)
+    port = port or default_port
     server = warm_server.WarmServer(lambda: build_pipeline(decision_logging=True), config_path=CONFIG_PATH,
-                                    idle_seconds=(idle_minutes or default_idle) * 60, port=port or default_port)
-    typer.echo(f"Cascade model server on 127.0.0.1:{port or default_port}, loading models...")
+                                    idle_seconds=(idle_minutes or default_idle) * 60, port=port,
+                                    keep_listening=keep_listening, model_name=config.get("model", "llama3.2"))
+    typer.echo(f"Cascade model server on 127.0.0.1:{port}, loading models...")
     server.serve_forever(load_in_background=True)
+
+
+@app.command()
+def start() -> None:
+    """
+    Run Cascade in the background for every program on this machine: Ollama and OpenAI
+    clients pointed at it get Cascade's cache, routing, speculative decoding and lower RAM.
+    It stays reachable; after `server.idle_minutes` without a request it unloads the models
+    to free their RAM and reloads them on the next one. `cascade stop` ends it.
+    """
+    from cli import warm_server
+
+    _, port, idle = _server_settings(load_config())
+    state = warm_server.health(port)
+    if state is None:
+        warm_server.spawn(port, idle, log_path=CONFIG_PATH.parent / "server.log", keep_listening=True)
+        typer.echo("Starting Cascade in the background (loading models, about a minute on a CPU)...")
+        if not warm_server.wait_ready(port):
+            typer.secho(f"The server did not come up; see {CONFIG_PATH.parent / 'server.log'}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+    typer.echo(f"Cascade is running on http://127.0.0.1:{port}\n")
+    typer.echo("Use it from any tool, unchanged:")
+    typer.echo(f"  Ollama clients:  OLLAMA_HOST=127.0.0.1:{port} in that terminal or app, then e.g.  ollama run qwen2.5-coder")
+    typer.echo("                   (not system-wide: the Ollama app itself listens on OLLAMA_HOST)")
+    typer.echo(f"  OpenAI clients:  base URL http://127.0.0.1:{port}/v1   (any API key)")
+    typer.echo("Stop it with:  cascade stop")
 
 
 @app.command()
@@ -525,10 +592,10 @@ def doctor() -> None:
         report(cached["local_capable"], f"hardware profile: local_capable={cached['local_capable']}, best {best:.1f} tok/s",
                "this machine is below the local floor -- configure a cloud tier")
 
-    runner_kind = config.get("runner", "ollama")
+    runner_kind = _runner_kind(config)
     if runner_kind == "llamacpp":
         report(importlib.util.find_spec("llama_cpp") is not None, "llama-cpp-python installed (runner=llamacpp)", "pip install llama-cpp-python")
-        note(f"acceleration: {config.get('acceleration', 'none')}")
+        note(f"acceleration: {config.get('acceleration', 'draft_model')}; small model: {_small_model(config) or 'off'}")
     else:
         note("runner: ollama (no speculative decoding; set runner=llamacpp to enable it)")
 

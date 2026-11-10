@@ -54,25 +54,59 @@ tell Cascade its prices.
 If you skip `cascade init`, the first `ask` runs the same one-time hardware check first
 (several minutes on a CPU) and says so.
 
-### Fastest setup (measured 1.65–2.11x on a mixed session, all answers correct, 5.9 GB peak RAM)
+### Fastest setup (measured 1.65–2.11x on a mixed session, all answers correct)
 
 ```bash
-cascade config set runner llamacpp
-cascade config set model qwen2.5-coder                 # 7B for hard questions
-cascade config set acceleration draft_model            # confidence drafting
-cascade config set small_model qwen2.5:0.5b-instruct   # easy questions; also the 7B's draft model
+pip install -e ".[llamacpp]" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+cascade config set model qwen2.5-coder     # everything else below is automatic
 ```
 
-The 0.5B model answers easy questions and drafts for the 7B, loaded once. When it is unsure of an
-answer (mean token probability below `small_model_min_confidence`, default 0.75) the 7B answers
-instead: on 128 checked easy questions that leaves 4 wrong answers, against 11 for the 0.5B alone
-and 6 for the 1.5B model (BENCHMARK_REPORT Addendum 13).
+With llama-cpp-python installed, Cascade picks its fastest setup by itself: the llama.cpp runner,
+confidence drafting for the 7B, and for qwen2.5 models a 0.5B model that answers easy questions and
+also drafts for the 7B, loaded once. When the 0.5B is unsure of an answer (mean token probability
+below `small_model_min_confidence`, default 0.75) the 7B answers instead: on 128 checked easy
+questions that leaves 4 wrong answers, against 11 for the 0.5B alone and 6 for the 1.5B model
+(BENCHMARK_REPORT Addendum 13). Any of it can be changed or switched off with `cascade config set`
+(`runner ollama`, `acceleration none`, `small_model off`).
 
 The first `cascade ask` starts a background model server on 127.0.0.1 and loads the models
 (about a minute on a CPU laptop); after that, easy answers take about 2 seconds and repeated
 questions come back from the cache in well under one. The server exits after 10 idle minutes
 (`server.idle_minutes`) and frees the RAM; `cascade stop` frees it at once,
 `cascade config set server.auto off` disables it.
+
+### Use Cascade from the tools you already have
+
+```bash
+cascade start
+```
+
+Cascade keeps running in the background and answers the **Ollama** and **OpenAI** APIs, so existing
+tools run on it unchanged and get its cache, small/big routing, speculative decoding and memory
+savings:
+
+```bash
+# Ollama CLI and Ollama-based apps: point them at Cascade in that terminal or app
+OLLAMA_HOST=127.0.0.1:8765 ollama run qwen2.5-coder "What is a hash table?"   # bash
+$env:OLLAMA_HOST="127.0.0.1:8765"; ollama run qwen2.5-coder                    # PowerShell
+```
+
+```python
+# OpenAI SDK, LangChain, IDE assistants, Open WebUI ...: base URL + any key
+from openai import OpenAI
+client = OpenAI(base_url="http://127.0.0.1:8765/v1", api_key="unused")
+client.chat.completions.create(model="any", messages=[{"role": "user", "content": "Hi"}])
+```
+
+Set `OLLAMA_HOST` per terminal or app, not system-wide: the Ollama app itself listens on that
+address, and Cascade still uses the real Ollama (port 11434) to download model files. Whatever model
+a client names, Cascade answers with its configured models. After `server.idle_minutes` without a
+request it unloads the models to free their RAM, stays reachable, and reloads them on the next
+request; `cascade stop` ends it.
+
+Measured on a 4-core laptop: the 7B through Ollama alone holds 5.06 GB; Cascade holds 5.47 GB for the
+7B **plus** the 0.5B model and the embedding model, and answers repeated questions in 0.7 s and easy
+ones in about 2 s (BENCHMARK_REPORT Addendum 14).
 
 ### Answer length and the cache
 

@@ -317,6 +317,13 @@ def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool 
         # with mmap, 4.6 GB without -- BENCHMARK_REPORT Addendum 7).
         llm = Llama(model_path=path, n_ctx=n_ctx, n_threads=n_threads, use_mmap=use_mmap,
                     verbose=False, draft_model=placeholder)
+        # llama-cpp-python allocates a float32 logits buffer of n_ctx x n_vocab rows when
+        # all logits are kept (qwen2.5 7B: 2048 x 152k = 1.24 GB) and n_batch rows
+        # otherwise (0.31 GB). Neither the windowed eval nor plain decoding writes it
+        # (plain eval stopped filling it in 0.3); verify_greedy re-creates the large one
+        # only while it runs. Committed memory, not just resident: drop it.
+        if hasattr(llm, "n_vocab"):  # (test doubles have no buffer)
+            llm.scores = np.ndarray((1, llm.n_vocab()), dtype=np.single)
         if needs_all_logits:
             _install_windowed_eval(llm)
         else:

@@ -70,6 +70,8 @@ def _isolated_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Never reach a real background model server, or start one, from a test.
     monkeypatch.setattr(warm_server, "health", lambda port=None: None)
     monkeypatch.setattr(warm_server, "spawn", lambda *a, **k: pytest.fail("test tried to spawn a server"))
+    # Defaults must not depend on whether this machine has llama-cpp-python.
+    monkeypatch.setattr(cli_main, "_llama_cpp_available", lambda: False)
 
 
 @pytest.fixture(autouse=True)
@@ -379,6 +381,23 @@ def test_small_confidence_floor_setting() -> None:
     assert cli_main._small_confidence_floor({"small_model_min_confidence": "off"}) is None
 
 
+def test_llamacpp_is_the_default_runner_when_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert cli_main._runner_kind({}) == "ollama"
+    monkeypatch.setattr(cli_main, "_llama_cpp_available", lambda: True)
+    assert cli_main._runner_kind({}) == "llamacpp"
+    assert cli_main._runner_kind({"runner": "ollama"}) == "ollama"
+
+
+def test_small_model_defaults_on_for_qwen_with_llamacpp() -> None:
+    qwen = {"runner": "llamacpp", "model": "qwen2.5-coder"}
+    assert cli_main._small_model(qwen) == "qwen2.5:0.5b-instruct"
+    assert cli_main._small_model(qwen | {"small_model": "off"}) is None
+    assert cli_main._small_model(qwen | {"small_model": "qwen2.5:1.5b-instruct"}) == "qwen2.5:1.5b-instruct"
+    assert cli_main._small_model({"runner": "llamacpp", "model": "llama3.2"}) is None  # unmeasured family
+    assert cli_main._small_model({"runner": "ollama", "model": "qwen2.5-coder"}) is None
+    assert cli_main._small_model_as_draft(qwen) == "qwen2.5:0.5b-instruct-q4_K_M"  # shared as draft too
+
+
 def test_server_auto_start_defaults_on_only_for_llamacpp() -> None:
     assert cli_main._server_settings({})[0] is False
     assert cli_main._server_settings({"runner": "llamacpp"})[0] is True
@@ -393,3 +412,10 @@ def test_ask_uses_the_warm_server_when_it_answers(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(cli_main, "build_pipeline", lambda **kw: pytest.fail("loaded models in-process"))
     result = runner.invoke(app, ["ask", "hi"])
     assert result.exit_code == 0 and "from server" in result.output
+
+
+def test_llama_cpp_detection_runs_unpatched() -> None:
+    import importlib
+
+    real = importlib.reload(cli_main)._llama_cpp_available  # not the autouse fixture's stub
+    assert isinstance(real(), bool)
