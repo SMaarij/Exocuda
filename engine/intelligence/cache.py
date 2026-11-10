@@ -105,9 +105,32 @@ def is_cacheable(query: str, config: Optional[CacheConfig] = None) -> bool:
     return True
 
 
+# Ways of asking the same question, mapped to one term so the term-swap guard
+# sees a rewording, not a swap ("Who is the author of X" / "Who wrote X").
+# Only question phrasing belongs here -- never content words whose swap changes
+# the answer (places, units, numbers, names).
+_SYNONYMS: dict[str, str] = {
+    **dict.fromkeys(("author", "authored", "writer", "written", "penned"), "wrote"),
+    **dict.fromkeys(("painter",), "painted"),
+    **dict.fromkeys(("inventor",), "invented"),
+    **dict.fromkeys(("discoverer",), "discovered"),
+    **dict.fromkeys(("founder",), "founded"),
+    **dict.fromkeys(("biggest",), "largest"),
+    **dict.fromkeys(("big",), "large"),
+    **dict.fromkeys(("tiniest",), "smallest"),
+    **dict.fromkeys(("quickest",), "fastest"),
+    **dict.fromkeys(("means", "meaning", "stand", "stands"), "mean"),
+}
+# Words that frame a question without changing what it asks.
+_FILLER = frozenset(("abbreviation", "acronym", "please", "tell", "exactly", "briefly"))
+
+
 def _terms(text: str) -> list[str]:
-    """Content terms in order: lowercase words and numbers minus scikit-learn's English stop words."""
-    return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w.isdigit() or (len(w) > 1 and w not in ENGLISH_STOP_WORDS)]
+    """Content terms in order: lowercase words and numbers minus scikit-learn's English stop words,
+    question-framing filler dropped and question-phrasing synonyms mapped to one form."""
+    words = re.findall(r"[a-z0-9]+", text.lower())
+    return [_SYNONYMS.get(w, w) for w in words
+            if w.isdigit() or (len(w) > 1 and w not in ENGLISH_STOP_WORDS and w not in _FILLER)]
 
 
 def _same_term(a: str, b: str, min_prefix: int) -> bool:

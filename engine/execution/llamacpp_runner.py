@@ -34,6 +34,7 @@ constructing a runner raises a clear error.
 from __future__ import annotations
 
 import inspect
+import os
 import time
 import weakref
 from dataclasses import dataclass
@@ -290,8 +291,22 @@ def _install_windowed_eval(llm: Any, window: int = OUTPUT_WINDOW) -> None:
     llm.eval = eval
 
 
+# Plain (one-logit) models loaded in this process, by file and settings. A model
+# loaded as the small backend for easy queries and the same file used as the big
+# model's draft are then one instance in RAM, not two. Safe because every caller
+# re-syncs the KV cache with its own tokens before use (generate() resets;
+# ModelDraft compares the cached prefix), and the Pipeline runs one request at a
+# time. Weak references: the pool never keeps a model alive by itself.
+_SHARED_MODELS: "weakref.WeakValueDictionary[tuple, Any]" = weakref.WeakValueDictionary()
+
+
 def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool = False) -> LlamaFactory:
     def make(path: str, needs_all_logits: bool) -> Any:
+        key = (os.path.realpath(path), n_ctx, n_threads, use_mmap)
+        if not needs_all_logits:
+            shared = _SHARED_MODELS.get(key)
+            if shared is not None:
+                return shared
         # A placeholder draft at construction is the only way to make
         # llama-cpp-python keep per-position logits, which verifying
         # drafts needs. The real draft is swapped in afterwards.
@@ -304,6 +319,11 @@ def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool 
                     verbose=False, draft_model=placeholder)
         if needs_all_logits:
             _install_windowed_eval(llm)
+        else:
+            try:
+                _SHARED_MODELS[key] = llm
+            except TypeError:  # not weak-referenceable (a test double): just don't share
+                pass
         return llm
     return make
 

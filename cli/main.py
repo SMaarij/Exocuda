@@ -10,9 +10,11 @@ Config keys (set with `cascade config set KEY VALUE`):
     model                 local model family            (default llama3.2)
     runner                ollama | llamacpp             (default ollama)
     acceleration          none | prompt_lookup | draft_model   (llamacpp only)
-    small_model           fast model for easy queries, e.g. qwen2.5:1.5b-instruct (default
-                          off); the router sends hard ones to `model`
-    draft_model           draft tag for draft_model     (default llama3.2:1b-instruct-q4_K_M)
+    small_model           fast model for easy queries, e.g. qwen2.5:0.5b-instruct (default
+                          off); the router sends hard ones to `model`. Same family as
+                          `model` -> it is also the draft model, loaded once for both
+    draft_model           draft tag for draft_model     (default: small_model when it is
+                          the same family, else llama3.2:1b-instruct-q4_K_M)
     draft.p_min           stop drafting at the first token the draft model is less sure of
                           than this (default 0.75, fastest in
                           docs/benchmark/acceleration_qwen7b_pmin_3rounds.json); off disables
@@ -135,7 +137,7 @@ def build_local_backend(config: dict):
     if config.get("runner", "ollama") == "llamacpp":
         from engine.execution.llamacpp_runner import DEFAULT_DRAFT_MODEL_TAG, LlamaCppRunner
 
-        draft = config.get("draft_model", DEFAULT_DRAFT_MODEL_TAG)
+        draft = config.get("draft_model") or _small_model_as_draft(config) or DEFAULT_DRAFT_MODEL_TAG
         layer = AccelerationLayer[_ACCELERATION_LAYERS.get(config.get("acceleration", "none"), "NONE")]
         return LocalExecutionBackend(
             runner=LlamaCppRunner(draft_model_tag=draft, **_draft_settings(config)),
@@ -145,6 +147,29 @@ def build_local_backend(config: dict):
             **_local_limits(config),
         )
     return LocalExecutionBackend(model_id=model, **_local_limits(config))
+
+
+def _family_base(model: str) -> str:
+    """"qwen2.5-coder:7b" -> "qwen2.5": models with the same base share a tokenizer."""
+    return model.split(":", 1)[0].split("-", 1)[0].lower()
+
+
+def _small_model_as_draft(config: dict) -> Optional[str]:
+    """
+    The small model's real tag when it can also draft for `model` (same tokenizer
+    family), else None. The llama.cpp runner then loads that file once for both
+    jobs (llamacpp_runner._SHARED_MODELS), saving the separate draft model's RAM.
+    qwen2.5:0.5b-instruct drafts for qwen2.5-coder:7b as well as the coder draft
+    does: 1.376x vs 1.379x, lossless (docs/benchmark/acceleration_qwen7b_general_draft_3rounds.json).
+    """
+    from engine.execution.backend import _resolve_real_tag
+    from engine.execution.model_ladder import DEFAULT_LADDER
+
+    small = _get(config, "small_model")
+    if not small or _family_base(small) != _family_base(config.get("model", "llama3.2")):
+        return None
+    floor = min(DEFAULT_LADDER, key=lambda r: r.min_tok_s)
+    return f"{small.split(':', 1)[0]}:{_resolve_real_tag(small, floor.label)}" if ":" in small else None
 
 
 def build_small_local_backend(config: dict, main_backend):

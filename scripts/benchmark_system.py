@@ -21,6 +21,9 @@ Configurations:
     cascade    -- 7B with confidence drafting, cache, compressor, router
     small15    -- cascade + qwen2.5 1.5B for queries the router calls easy
     small05    -- cascade + qwen2.5 0.5B for queries the router calls easy
+    shared05   -- small05, but the 0.5B model is also the 7B's draft model:
+                  one instance in RAM for both jobs (cli default when
+                  small_model is the same family as model)
 """
 
 from __future__ import annotations
@@ -39,8 +42,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 BIG_MODEL = "qwen2.5-coder"
 DRAFT_MODEL = "qwen2.5-coder:0.5b"
-SMALL_MODELS = {"small15": "qwen2.5:1.5b-instruct", "small05": "qwen2.5:0.5b-instruct"}
-CONFIGS = ("plain", "cascade", "small15", "small05")
+SMALL_MODELS = {"small15": "qwen2.5:1.5b-instruct", "small05": "qwen2.5:0.5b-instruct",
+                "shared05": "qwen2.5:0.5b-instruct"}
+SHARED_DRAFT = {"shared05": "qwen2.5:0.5b-instruct-q4_K_M"}  # the small model's own file
+CONFIGS = ("plain", "cascade", "small15", "small05", "shared05")
 
 # (category, question, expected-answer regexes: all must match, case-insensitive)
 SESSION: list[tuple[str, str, list[str]]] = [
@@ -92,7 +97,7 @@ class _FixedProfiler:
         return self.load_cached_profile()
 
 
-def _local_backend(model_id: str, accelerated: bool, max_tokens: int):
+def _local_backend(model_id: str, accelerated: bool, max_tokens: int, draft: str = DRAFT_MODEL):
     from engine.execution.acceleration_engine import AccelerationLayer, DraftPair
     from engine.execution.backend import LocalExecutionBackend
     from engine.execution.llamacpp_runner import LlamaCppRunner
@@ -100,10 +105,10 @@ def _local_backend(model_id: str, accelerated: bool, max_tokens: int):
 
     floor = ModelLadder(rungs=(min(DEFAULT_LADDER, key=lambda r: r.min_tok_s),))
     if accelerated:
-        runner = LlamaCppRunner(draft_model_tag=DRAFT_MODEL, temperature=0.0, draft_p_min=0.75, draft_tokens=16)
+        runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0, draft_p_min=0.75, draft_tokens=16)
         return LocalExecutionBackend(runner=runner, model_id=model_id, profiler=_FixedProfiler(), ladder=floor,
                                      preferred_layer=AccelerationLayer.DRAFT_MODEL,
-                                     validated_pairs=[DraftPair(model_id, DRAFT_MODEL, True)], max_tokens=max_tokens)
+                                     validated_pairs=[DraftPair(model_id, draft, True)], max_tokens=max_tokens)
     runner = LlamaCppRunner(draft_model_tag=None, temperature=0.0)
     return LocalExecutionBackend(runner=runner, model_id=model_id, profiler=_FixedProfiler(), ladder=floor,
                                  max_tokens=max_tokens)
@@ -124,7 +129,7 @@ def build(config: str, max_tokens: int, cache_dir: Path):
 
     embedder = FastEmbedEmbedder()
     small = _local_backend(SMALL_MODELS[config], False, max_tokens) if config in SMALL_MODELS else None
-    big = _local_backend(BIG_MODEL, True, max_tokens)
+    big = _local_backend(BIG_MODEL, True, max_tokens, SHARED_DRAFT.get(config, DRAFT_MODEL))
     embedder.embed("warm-up")  # load the embedding model before the session too
     return Pipeline(
         big,
@@ -146,6 +151,8 @@ def run_config(config: str, max_tokens: int) -> dict:
         for backend in backends:  # load every model before the session, as a running chat or server has
             backend.generate([{"role": "user", "content": "Say OK."}])
         load_s = time.perf_counter() - t0
+        rss_after_load = round(proc.memory_info().rss / 1e9, 2)
+        peak_after_load = round(getattr(proc.memory_info(), "peak_wset", 0) / 1e9, 2)
         rows = []
         for i, (category, question, patterns) in enumerate(SESSION):
             start = time.perf_counter()
@@ -157,12 +164,13 @@ def run_config(config: str, max_tokens: int) -> dict:
             correct = all(re.search(p, text, re.IGNORECASE) for p in patterns)
             rows.append({"i": i, "category": category, "question": question, "seconds": round(seconds, 2),
                          "served_by": served, "escalated": result["escalated"], "correct": correct,
-                         "answer": text[:400]})
+                         "rss_gb": round(proc.memory_info().rss / 1e9, 2), "answer": text[:400]})
             print(f"  [{config}] {i:2d} {category:9s} {served:5s} {seconds:6.1f}s {'ok ' if correct else 'BAD'} {question[:60]}",
                   flush=True)
         total = time.perf_counter() - t0
     mem = proc.memory_info()
     return {"config": config, "rows": rows, "total_s_including_load": round(total, 1), "load_s": round(load_s, 1),
+            "rss_after_load_gb": rss_after_load, "peak_after_load_gb": peak_after_load,
             "peak_rss_gb": round(getattr(mem, "peak_wset", mem.rss) / 1e9, 2)}
 
 
@@ -217,7 +225,7 @@ def main() -> None:
               f"{s['correct']:>3d}/{s['questions']:<3d} {s['peak_rss_gb']:7.2f}GB  {sv['cache']}/{sv['small']}/{sv['big']}")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({"max_tokens": args.max_tokens, "big_model": BIG_MODEL, "draft_model": DRAFT_MODEL,
-                                    "small_models": SMALL_MODELS, "results": results}, indent=2), encoding="utf-8")
+                                    "small_models": SMALL_MODELS, "shared_draft": SHARED_DRAFT, "results": results}, indent=2), encoding="utf-8")
     print(f"Wrote {args.out}")
 
 

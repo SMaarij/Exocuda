@@ -228,3 +228,25 @@ def test_no_system_prompt_sends_messages_unchanged(tmp_path: Path, value) -> Non
 def test_unknown_guard_mode_is_rejected_up_front() -> None:
     with pytest.raises(ValueError):
         CacheConfig(term_swap_guard="stirct")
+
+
+@pytest.mark.parametrize("new, cached, answer", [
+    ("Who is the author of Romeo and Juliet?", "Who wrote Romeo and Juliet?", "Romeo and Juliet was written by William Shakespeare."),
+    ("What's the biggest planet in the solar system?", "Name the largest planet in our solar system.", "The largest planet is Jupiter."),
+    ("What does the abbreviation CPU mean?", "What does CPU stand for?", "CPU stands for Central Processing Unit."),
+])
+def test_question_phrasing_synonyms_are_rewordings_not_swaps(new: str, cached: str, answer: str) -> None:
+    from engine.intelligence.cache import term_swap_conflict
+
+    assert not term_swap_conflict(new, cached, answer)
+
+
+@pytest.mark.parametrize("new, cached, answer", [
+    ("What is the capital of Austria?", "What is the capital of Australia?", "The capital of Australia is Canberra."),
+    ("What is the smallest planet?", "What is the largest planet?", "The largest planet is Jupiter."),
+    ("Who painted the Mona Lisa?", "Who wrote the Mona Lisa?", "Leonardo da Vinci wrote notes about it."),
+])
+def test_synonyms_do_not_hide_real_swaps(new: str, cached: str, answer: str) -> None:
+    from engine.intelligence.cache import term_swap_conflict
+
+    assert term_swap_conflict(new, cached, answer)

@@ -361,6 +361,18 @@ def test_small_local_backend_shares_the_main_profile_and_runs_the_floor_rung(mon
     assert [r.label for r in small._ladder.rungs] == ["q4_K_M"]
 
 
+def test_small_model_of_the_same_family_is_the_default_draft(monkeypatch: pytest.MonkeyPatch) -> None:
+    import engine.execution.llamacpp_runner as lr
+
+    tags = []
+    monkeypatch.setattr(lr, "LlamaCppRunner", lambda draft_model_tag, **kwargs: tags.append(draft_model_tag) or _AcceleratedStub())
+    base = {"runner": "llamacpp", "model": "qwen2.5-coder"}
+    cli_main.build_local_backend(base | {"small_model": "qwen2.5:0.5b-instruct"})
+    cli_main.build_local_backend(base | {"small_model": "llama3.2:1b"})  # other tokenizer: not a draft
+    cli_main.build_local_backend(base | {"small_model": "qwen2.5:0.5b-instruct", "draft_model": "qwen2.5-coder:0.5b"})
+    assert tags == ["qwen2.5:0.5b-instruct-q4_K_M", lr.DEFAULT_DRAFT_MODEL_TAG, "qwen2.5-coder:0.5b"]
+
+
 def test_server_auto_start_defaults_on_only_for_llamacpp() -> None:
     assert cli_main._server_settings({})[0] is False
     assert cli_main._server_settings({"runner": "llamacpp"})[0] is True

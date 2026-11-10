@@ -382,6 +382,29 @@ def test_default_factory_loads_without_mmap_unless_asked(monkeypatch) -> None:
     assert [c["use_mmap"] for c in calls] == [False, True]
 
 
+def test_default_factory_shares_one_plain_instance_per_file(monkeypatch) -> None:
+    """The small backend's model and the same file as a draft are one instance in RAM."""
+    import engine.execution.llamacpp_runner as lr
+
+    class _Model:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(lr, "Llama", _Model)
+    monkeypatch.setattr(lr, "_install_windowed_eval", lambda llm: None)
+    monkeypatch.setattr(lr, "_SHARED_MODELS", __import__("weakref").WeakValueDictionary())
+    make = lr._default_llama_factory(512, None)
+    small = make("small.gguf", False)
+    assert lr._default_llama_factory(512, None)("small.gguf", False) is small  # another runner, same file
+    other = make("other.gguf", False)
+    assert other is not small
+    assert make("small.gguf", True) is not small        # a target model is never shared
+    assert lr._default_llama_factory(1024, None)("small.gguf", False) is not small  # other n_ctx
+    del small
+    import gc; gc.collect()
+    assert len(lr._SHARED_MODELS) == 1                  # only other.gguf left: weak references
+
+
 def test_adaptive_draft_pauses_with_backoff_after_rejected_single_token() -> None:
     draft = ModelDraft(_CountingDraftLlm(), k=1, adaptive=True, max_pause=4)
     lengths = iter(range(10, 100))
