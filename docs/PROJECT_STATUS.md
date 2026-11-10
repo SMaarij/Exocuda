@@ -22,6 +22,13 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.4.1 — small model at no extra RAM; more cache hits on rewordings
+
+- The 0.5B small model doubles as the 7B's draft model, one instance in RAM: whole session 1.65x faster
+  than plain at 5.88 GB peak, the same as without a small model (1.5B setup: 1.79x at 7.0 GB).
+- Reworded questions hit the cache more often (fixture 42.9% -> 50.0%) with still 0/19 wrong answers.
+- Rejected: the 1.5B as draft model (1.08x vs 1.58x). Details: BENCHMARK_REPORT Addendum 12.
+
 ## 0.4.0 — whole system 2.19x faster per session; models stay loaded
 
 - Measured end to end on a 34-question session (easy, hard, repeats, rewordings, near-misses), every

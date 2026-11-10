@@ -478,6 +478,18 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.4.1] -- 2026-11-10 -- small model shared as the draft; better cache hits on rewordings
+
+### Changed
+- `engine/execution/llamacpp_runner.py`: the default llama factory shares one plain (one-logit)
+  instance per (file, n_ctx, n_threads, use_mmap) through a weak pool, so a small model that is also
+  the draft is loaded once. Target (all-logits) models are never shared.
+- `cli/main.py`: `draft_model` defaults to `small_model` when both share a tokenizer family.
+- `engine/intelligence/cache.py`: term canonicalisation maps phrasing synonyms to one form and drops
+  filler words before the term-swap guard. Paraphrase hit rate 42.9% -> 50.0%, near-miss wrong 0/19.
+- `scripts/benchmark_system.py`: `shared05` config, RSS per row. No seam changes. BENCHMARK_REPORT
+  Addendum 12.
+
 ## [0.4.0] -- 2026-11-09 -- small-model routing, background model server; 2.19x per session
 
 No seam changes. `Pipeline` gains an optional `small_local_backend` keyword and a `warm()` method;
