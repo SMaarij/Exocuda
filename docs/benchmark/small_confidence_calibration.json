@@ -1,0 +1,1484 @@
+{
+  "qwen2.5:0.5b-instruct": {
+    "summary": {
+      "correct": 60,
+      "questions": 64,
+      "auc": {
+        "heuristic": 0.5,
+        "mean_p": 0.8833333333333333,
+        "min_p": 0.8333333333333334,
+        "low3_p": 0.8666666666666667,
+        "first_p": 0.5666666666666667
+      },
+      "thresholds": {
+        "mean_p<0.5": {
+          "wrong_caught": 0,
+          "right_escalated": 0
+        },
+        "mean_p<0.6": {
+          "wrong_caught": 1,
+          "right_escalated": 1
+        },
+        "mean_p<0.7": {
+          "wrong_caught": 1,
+          "right_escalated": 5
+        },
+        "mean_p<0.75": {
+          "wrong_caught": 3,
+          "right_escalated": 8
+        },
+        "mean_p<0.8": {
+          "wrong_caught": 3,
+          "right_escalated": 13
+        },
+        "mean_p<0.85": {
+          "wrong_caught": 4,
+          "right_escalated": 16
+        },
+        "mean_p<0.9": {
+          "wrong_caught": 4,
+          "right_escalated": 33
+        },
+        "low3_p<0.5": {
+          "wrong_caught": 2,
+          "right_escalated": 12
+        },
+        "low3_p<0.6": {
+          "wrong_caught": 4,
+          "right_escalated": 17
+        },
+        "low3_p<0.7": {
+          "wrong_caught": 4,
+          "right_escalated": 28
+        },
+        "low3_p<0.75": {
+          "wrong_caught": 4,
+          "right_escalated": 35
+        },
+        "low3_p<0.8": {
+          "wrong_caught": 4,
+          "right_escalated": 41
+        },
+        "low3_p<0.85": {
+          "wrong_caught": 4,
+          "right_escalated": 49
+        },
+        "low3_p<0.9": {
+          "wrong_caught": 4,
+          "right_escalated": 57
+        },
+        "min_p<0.5": {
+          "wrong_caught": 4,
+          "right_escalated": 21
+        },
+        "min_p<0.6": {
+          "wrong_caught": 4,
+          "right_escalated": 36
+        },
+        "min_p<0.7": {
+          "wrong_caught": 4,
+          "right_escalated": 44
+        },
+        "min_p<0.75": {
+          "wrong_caught": 4,
+          "right_escalated": 50
+        },
+        "min_p<0.8": {
+          "wrong_caught": 4,
+          "right_escalated": 57
+        },
+        "min_p<0.85": {
+          "wrong_caught": 4,
+          "right_escalated": 59
+        },
+        "min_p<0.9": {
+          "wrong_caught": 4,
+          "right_escalated": 60
+        }
+      }
+    },
+    "rows": [
+      {
+        "question": "Name a primary colour.",
+        "answer": "Red is a primary colour.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.6462724847220426,
+        "min_p": 0.23634554197933585,
+        "low3_p": 0.43641771157214165,
+        "first_p": 0.23634554197933585
+      },
+      {
+        "question": "What is the capital of Canada?",
+        "answer": "The capital of Canada is Ottawa.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9535123312662376,
+        "min_p": 0.7930632891744814,
+        "low3_p": 0.904046026122696,
+        "first_p": 0.7930632891744814
+      },
+      {
+        "question": "What is the capital of Turkey?",
+        "answer": "The capital of Turkey is Ankara.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9444238584573447,
+        "min_p": 0.7179677758013131,
+        "low3_p": 0.8814632961865461,
+        "first_p": 0.7179677758013131
+      },
+      {
+        "question": "What is the capital of Brazil?",
+        "answer": "The capital of Brazil is Bras\u00edlia.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.915837741916797,
+        "min_p": 0.6214074936713804,
+        "low3_p": 0.8090765680048332,
+        "first_p": 0.6214074936713804
+      },
+      {
+        "question": "What is the capital of Switzerland?",
+        "answer": "The capital of Switzerland is Bern.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9346199426095686,
+        "min_p": 0.7659879849780106,
+        "low3_p": 0.8586070687558772,
+        "first_p": 0.8481280683469057
+      },
+      {
+        "question": "What is the capital of Australia?",
+        "answer": "The capital of Australia is Canberra.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.916301771342591,
+        "min_p": 0.5780132083680332,
+        "low3_p": 0.8234628051835816,
+        "first_p": 0.5780132083680332
+      },
+      {
+        "question": "What is the capital of New Zealand?",
+        "answer": "The capital of New Zealand is Wellington.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9110638415839031,
+        "min_p": 0.6639958166609311,
+        "low3_p": 0.7871672042200029,
+        "first_p": 0.75575075691485
+      },
+      {
+        "question": "What is the capital of Nigeria?",
+        "answer": "The capital of Nigeria is Abuja.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9406500826128852,
+        "min_p": 0.770218159928886,
+        "low3_p": 0.859053695902964,
+        "first_p": 0.770218159928886
+      },
+      {
+        "question": "What is the capital of Pakistan?",
+        "answer": "The capital of Pakistan is Islamabad. Islamabad is the largest city and the capital of Pakistan.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.6664988745592212,
+        "min_p": 0.25209977170247877,
+        "low3_p": 0.31048700518178074,
+        "first_p": 0.7537460891722563
+      },
+      {
+        "question": "What is the capital of Morocco?",
+        "answer": "The capital of Morocco is Rabat.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9426736057870374,
+        "min_p": 0.7540564813826354,
+        "low3_p": 0.8613285808536338,
+        "first_p": 0.8627631923130347
+      },
+      {
+        "question": "What is the capital of Vietnam?",
+        "answer": "The capital of Vietnam is Hanoi.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9694742877511926,
+        "min_p": 0.8626602665061162,
+        "low3_p": 0.9302659338044031,
+        "first_p": 0.8626602665061162
+      },
+      {
+        "question": "What is the capital of India?",
+        "answer": "The capital of India is New Delhi.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9276738281143433,
+        "min_p": 0.6948379827301031,
+        "low3_p": 0.8308080406703204,
+        "first_p": 0.8537820960667587
+      },
+      {
+        "question": "Which planet is closest to the Sun?",
+        "answer": "The planet closest to the Sun is Mercury.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8790293926557514,
+        "min_p": 0.505599428910515,
+        "low3_p": 0.6983890545697257,
+        "first_p": 0.505599428910515
+      },
+      {
+        "question": "Which planet is known as the Red Planet?",
+        "answer": "The Red Planet is Mars.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7295113283509245,
+        "min_p": 0.5739937579533064,
+        "low3_p": 0.6117964331184617,
+        "first_p": 0.7113184309418876
+      },
+      {
+        "question": "What is the largest planet in the solar system?",
+        "answer": "The largest planet in the solar system is Jupiter. It is the sixth planet from the Sun and is known as the largest planet in the solar system.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.6583103724160843,
+        "min_p": 0.1540766945951194,
+        "low3_p": 0.24775677483452965,
+        "first_p": 0.9205233412297142
+      },
+      {
+        "question": "Who painted the Mona Lisa?",
+        "answer": "The Mona Lisa was painted by Leonardo da Vinci.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8939557360042718,
+        "min_p": 0.6268072354194155,
+        "low3_p": 0.7221763488457481,
+        "first_p": 0.6268072354194155
+      },
+      {
+        "question": "What is the largest ocean on Earth?",
+        "answer": "The largest ocean on Earth is the Pacific Ocean.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.915610292116522,
+        "min_p": 0.6295417838332891,
+        "low3_p": 0.7706216692915172,
+        "first_p": 0.9368335854668922
+      },
+      {
+        "question": "How many legs does a spider have?",
+        "answer": "A spider has eight legs.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9041532780109516,
+        "min_p": 0.7335296927201563,
+        "low3_p": 0.836134834486274,
+        "first_p": 0.7335296927201563
+      },
+      {
+        "question": "What is the boiling point of water in Fahrenheit?",
+        "answer": "The boiling point of water in Fahrenheit is 212\u00b0F.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8953796097786837,
+        "min_p": 0.5070843856835545,
+        "low3_p": 0.6226725436132242,
+        "first_p": 0.6539511703038864
+      },
+      {
+        "question": "What is the freezing point of water in Celsius?",
+        "answer": "The freezing point of water in Celsius is 0 degrees Celsius.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8523346744111779,
+        "min_p": 0.537519055277463,
+        "low3_p": 0.6020156142489506,
+        "first_p": 0.7561983415834742
+      },
+      {
+        "question": "What is the square root of 144?",
+        "answer": "The square root of 144 is 12.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9733827111095349,
+        "min_p": 0.7658196603652495,
+        "low3_p": 0.8961296978936204,
+        "first_p": 0.7658196603652495
+      },
+      {
+        "question": "Who was the first person to walk on the Moon?",
+        "answer": "The first person to walk on the Moon was Neil Armstrong, who became the first person to set foot on the lunar surface on July 20, 1969.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8239673820751571,
+        "min_p": 0.21349968878410963,
+        "low3_p": 0.29554519516345634,
+        "first_p": 0.8188035290588138
+      },
+      {
+        "question": "In what year did World War II end?",
+        "answer": "World War II ended in 1945.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.902756446050189,
+        "min_p": 0.47684933046246897,
+        "low3_p": 0.7112653480408947,
+        "first_p": 0.47684933046246897
+      },
+      {
+        "question": "How many continents are there?",
+        "answer": "There are 6 continents: Asia, Africa, North America, South America, Oceania, and Antarctica.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.818046107898653,
+        "min_p": 0.33619453524114673,
+        "low3_p": 0.3713315797952644,
+        "first_p": 0.6775537825905885
+      },
+      {
+        "question": "What is the smallest prime number?",
+        "answer": "The smallest prime number is 2.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9230110029851627,
+        "min_p": 0.6312968473144202,
+        "low3_p": 0.8138465465725876,
+        "first_p": 0.9005269766559464
+      },
+      {
+        "question": "Which gas do plants absorb from the air for photosynthesis?",
+        "answer": "Plants absorb carbon dioxide (CO2) from the air for photosynthesis.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8647158333047386,
+        "min_p": 0.5632075003079977,
+        "low3_p": 0.6167621033814057,
+        "first_p": 0.6047891774245973
+      },
+      {
+        "question": "Who developed the theory of relativity?",
+        "answer": "Albert Einstein developed the theory of relativity.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.909661536811713,
+        "min_p": 0.5744555027804308,
+        "low3_p": 0.7569923821659754,
+        "first_p": 0.5744555027804308
+      },
+      {
+        "question": "How many sides does a hexagon have?",
+        "answer": "A hexagon has 6 sides.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8921829797646768,
+        "min_p": 0.5500964452610257,
+        "low3_p": 0.7458680748978178,
+        "first_p": 0.8397162187138595
+      },
+      {
+        "question": "What is the chemical symbol for sodium?",
+        "answer": "The chemical symbol for sodium is Na.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9488505142596987,
+        "min_p": 0.773360165424135,
+        "low3_p": 0.8786825601456953,
+        "first_p": 0.773360165424135
+      },
+      {
+        "question": "What is the chemical symbol for iron?",
+        "answer": "The chemical symbol for iron is Fe.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9021035939335984,
+        "min_p": 0.5062091003993064,
+        "low3_p": 0.7700726984086363,
+        "first_p": 0.5062091003993064
+      },
+      {
+        "question": "What is the chemical symbol for potassium?",
+        "answer": "The chemical symbol for potassium is K.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9396879761035606,
+        "min_p": 0.7133606440692027,
+        "low3_p": 0.857183383176535,
+        "first_p": 0.7133606440692027
+      },
+      {
+        "question": "What is the chemical symbol for silver?",
+        "answer": "Silver's chemical symbol is Ag.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7661742183738938,
+        "min_p": 0.3610909640405644,
+        "low3_p": 0.5504139382596286,
+        "first_p": 0.5334188287115328
+      },
+      {
+        "question": "Which element has atomic number 1?",
+        "answer": "The element with atomic number 1 is hydrogen.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.769703259247103,
+        "min_p": 0.29763626838881935,
+        "low3_p": 0.45190255495856446,
+        "first_p": 0.3875044308798317
+      },
+      {
+        "question": "How many bones are in the adult human body?",
+        "answer": "The adult human body has 206 bones.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8244762483045354,
+        "min_p": 0.2915623308774957,
+        "low3_p": 0.5370220404281804,
+        "first_p": 0.2915623308774957
+      },
+      {
+        "question": "What is 15% of 200?",
+        "answer": "15% of 200 is 30.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9543826754299205,
+        "min_p": 0.7697360178338345,
+        "low3_p": 0.8425690619260467,
+        "first_p": 0.7697360178338345
+      },
+      {
+        "question": "What is 12 squared?",
+        "answer": "12 squared is 144.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8805094017470644,
+        "min_p": 0.7132412105185014,
+        "low3_p": 0.7498804888847972,
+        "first_p": 0.7328863988362923
+      },
+      {
+        "question": "What is 7 times 8?",
+        "answer": "7 times 8 is 56.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8833229079051751,
+        "min_p": 0.5658361102096603,
+        "low3_p": 0.7044663011118261,
+        "first_p": 0.5658361102096603
+      },
+      {
+        "question": "What is 17 times 3?",
+        "answer": "17 times 3 is 51.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9289153222556538,
+        "min_p": 0.7366936994119557,
+        "low3_p": 0.8224007560441795,
+        "first_p": 0.7366936994119557
+      },
+      {
+        "question": "What is 1000 divided by 8?",
+        "answer": "1000 divided by 8 equals 125.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9316194568967584,
+        "min_p": 0.5343786584523856,
+        "low3_p": 0.7313939872829455,
+        "first_p": 0.7698625688854335
+      },
+      {
+        "question": "What is 2 to the power of 10?",
+        "answer": "2 to the power of 10 is 1024.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8874335947979849,
+        "min_p": 0.5702318332521379,
+        "low3_p": 0.6652148528065998,
+        "first_p": 0.7611972952472655
+      },
+      {
+        "question": "Who wrote the novel 1984?",
+        "answer": "The novel \"1984\" was written by George Orwell.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8831483642459043,
+        "min_p": 0.41149234241741317,
+        "low3_p": 0.5969879919648838,
+        "first_p": 0.41149234241741317
+      },
+      {
+        "question": "Who wrote Pride and Prejudice?",
+        "answer": "Pride and Prejudice was written by Jane Austen.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.931191692674819,
+        "min_p": 0.5525961016115275,
+        "low3_p": 0.7610362691254373,
+        "first_p": 0.5525961016115275
+      },
+      {
+        "question": "Who discovered penicillin?",
+        "answer": "Penicillin was discovered by Alexander Fleming, an English bacteriologist. He discovered the antibiotic penicillin while working at St. Mary's Hospital in London.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.5827725902790172,
+        "min_p": 0.18908407602513938,
+        "low3_p": 0.213495220968304,
+        "first_p": 0.7333740292470471
+      },
+      {
+        "question": "What is the currency of Japan?",
+        "answer": "The currency of Japan is the Japanese yen (JPY).",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7696277114720791,
+        "min_p": 0.4550477696729522,
+        "low3_p": 0.4980680007101782,
+        "first_p": 0.4550477696729522
+      },
+      {
+        "question": "What language is mainly spoken in Brazil?",
+        "answer": "Brazil is primarily spoken in Portuguese.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7494662626694384,
+        "min_p": 0.42844559643546776,
+        "low3_p": 0.6005086152802454,
+        "first_p": 0.7932706340865018
+      },
+      {
+        "question": "What is the hardest natural substance?",
+        "answer": "The hardest natural substance is diamond.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8737088132613096,
+        "min_p": 0.7024391398829182,
+        "low3_p": 0.7714162828937501,
+        "first_p": 0.8957078695293397
+      },
+      {
+        "question": "How many minutes are in a day?",
+        "answer": "A day has 24 hours, which is equivalent to 1440 minutes.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7864455897077132,
+        "min_p": 0.3114171270967233,
+        "low3_p": 0.388437649826756,
+        "first_p": 0.6994950275847761
+      },
+      {
+        "question": "How many seconds are in an hour?",
+        "answer": "An hour has 3,600 seconds.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7183636034846083,
+        "min_p": 0.2451034876264625,
+        "low3_p": 0.3793252601778691,
+        "first_p": 0.2451034876264625
+      },
+      {
+        "question": "How many hours are in a week?",
+        "answer": "A week has 7 days.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.7426676341497095,
+        "min_p": 0.4380921661534116,
+        "low3_p": 0.5604356414256443,
+        "first_p": 0.660168487848947
+      },
+      {
+        "question": "How many players does a soccer team have on the field?",
+        "answer": "A soccer team has 11 players on the field at any given time.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7571619701196357,
+        "min_p": 0.3858081183041286,
+        "low3_p": 0.42214348327330276,
+        "first_p": 0.8208784476133618
+      },
+      {
+        "question": "What is the tallest mountain in the world?",
+        "answer": "The tallest mountain in the world is Mount Everest, which stands at 8,848 meters (29,029 feet) above sea level.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8669665441219399,
+        "min_p": 0.2742084292939244,
+        "low3_p": 0.43226526289831974,
+        "first_p": 0.8537979182438298
+      },
+      {
+        "question": "Who invented the telephone?",
+        "answer": "The telephone was invented by Alexander Graham Bell.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8008799349718231,
+        "min_p": 0.42944907455423376,
+        "low3_p": 0.5424763016257266,
+        "first_p": 0.5478308459665997
+      },
+      {
+        "question": "Convert 100 degrees Celsius to Fahrenheit.",
+        "answer": "100 degrees Celsius is equivalent to 212 degrees Fahrenheit.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8841364477108182,
+        "min_p": 0.46659917345823815,
+        "low3_p": 0.5614541300803482,
+        "first_p": 0.5076088947202065
+      },
+      {
+        "question": "What is the plural of mouse?",
+        "answer": "The plural of \"mouse\" is \"mice\".",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8762338422740961,
+        "min_p": 0.5824307099553155,
+        "low3_p": 0.6538382487721989,
+        "first_p": 0.7549091883725928
+      },
+      {
+        "question": "What is the past tense of the verb 'go'?",
+        "answer": "The past tense of the verb 'go' is 'went'.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9661044660881507,
+        "min_p": 0.8484450565776628,
+        "low3_p": 0.891481027173784,
+        "first_p": 0.860839839191861
+      },
+      {
+        "question": "Name a mammal that can fly.",
+        "answer": "A mammal that can fly is the penguin. Penguins are flightless birds that can fly, making them a unique example of a mammal that can fly.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.5181107117443434,
+        "min_p": 0.10657397561649429,
+        "low3_p": 0.15966669491428373,
+        "first_p": 0.4281968728714167
+      },
+      {
+        "question": "In which country are the pyramids of Giza?",
+        "answer": "The pyramids of Giza are located in Egypt.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9013915420054549,
+        "min_p": 0.627456453983764,
+        "low3_p": 0.7314312250877265,
+        "first_p": 0.627456453983764
+      },
+      {
+        "question": "How many strings does a standard guitar have?",
+        "answer": "A standard guitar has 4 strings.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.747499178436029,
+        "min_p": 0.34226109873856786,
+        "low3_p": 0.5185445373452695,
+        "first_p": 0.8821024670033709
+      },
+      {
+        "question": "How many days are in February in a non-leap year?",
+        "answer": "February has 28 days in a non-leap year.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8849271900906818,
+        "min_p": 0.5554482255849191,
+        "low3_p": 0.6064147683157499,
+        "first_p": 0.5556991111307042
+      },
+      {
+        "question": "What is the longest bone in the human body?",
+        "answer": "The longest bone in the human body is the femur, also known as the thigh bone. It is approximately 2. 5 feet (80 cm) long and is located in the lower part of the thigh.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.6993981682705039,
+        "min_p": 0.14847294348189635,
+        "low3_p": 0.2662018665697145,
+        "first_p": 0.889214997780988
+      },
+      {
+        "question": "Which organ pumps blood through the body?",
+        "answer": "The organ that pumps blood through the body is the **heart**.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8953903366107177,
+        "min_p": 0.40504846106275755,
+        "low3_p": 0.6350706149141377,
+        "first_p": 0.7343676256228284
+      },
+      {
+        "question": "What is the capital city of Spain?",
+        "answer": "The capital city of Spain is Madrid.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9713150333334137,
+        "min_p": 0.820347133579171,
+        "low3_p": 0.9290180077800375,
+        "first_p": 0.820347133579171
+      },
+      {
+        "question": "Who wrote Hamlet?",
+        "answer": "Hamlet was written by William Shakespeare.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9205766808447415,
+        "min_p": 0.6806173099256322,
+        "low3_p": 0.8311543234578347,
+        "first_p": 0.6806173099256322
+      },
+      {
+        "question": "What is the main ingredient in guacamole?",
+        "answer": "The main ingredient in guacamole is avocado.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8855551733380232,
+        "min_p": 0.41892678845700815,
+        "low3_p": 0.6723629542762818,
+        "first_p": 0.7557470825926941
+      }
+    ]
+  },
+  "qwen2.5:1.5b-instruct": {
+    "summary": {
+      "correct": 63,
+      "questions": 64,
+      "auc": {
+        "heuristic": 0.5,
+        "mean_p": 0.6666666666666666,
+        "min_p": 0.873015873015873,
+        "low3_p": 0.6825396825396826,
+        "first_p": 0.5238095238095238
+      },
+      "thresholds": {
+        "mean_p<0.5": {
+          "wrong_caught": 0,
+          "right_escalated": 0
+        },
+        "mean_p<0.6": {
+          "wrong_caught": 0,
+          "right_escalated": 0
+        },
+        "mean_p<0.7": {
+          "wrong_caught": 0,
+          "right_escalated": 0
+        },
+        "mean_p<0.75": {
+          "wrong_caught": 0,
+          "right_escalated": 1
+        },
+        "mean_p<0.8": {
+          "wrong_caught": 0,
+          "right_escalated": 1
+        },
+        "mean_p<0.85": {
+          "wrong_caught": 0,
+          "right_escalated": 2
+        },
+        "mean_p<0.9": {
+          "wrong_caught": 0,
+          "right_escalated": 15
+        },
+        "low3_p<0.5": {
+          "wrong_caught": 0,
+          "right_escalated": 4
+        },
+        "low3_p<0.6": {
+          "wrong_caught": 0,
+          "right_escalated": 9
+        },
+        "low3_p<0.7": {
+          "wrong_caught": 0,
+          "right_escalated": 11
+        },
+        "low3_p<0.75": {
+          "wrong_caught": 0,
+          "right_escalated": 14
+        },
+        "low3_p<0.8": {
+          "wrong_caught": 1,
+          "right_escalated": 25
+        },
+        "low3_p<0.85": {
+          "wrong_caught": 1,
+          "right_escalated": 30
+        },
+        "low3_p<0.9": {
+          "wrong_caught": 1,
+          "right_escalated": 34
+        },
+        "min_p<0.5": {
+          "wrong_caught": 0,
+          "right_escalated": 8
+        },
+        "min_p<0.6": {
+          "wrong_caught": 1,
+          "right_escalated": 18
+        },
+        "min_p<0.7": {
+          "wrong_caught": 1,
+          "right_escalated": 26
+        },
+        "min_p<0.75": {
+          "wrong_caught": 1,
+          "right_escalated": 30
+        },
+        "min_p<0.8": {
+          "wrong_caught": 1,
+          "right_escalated": 31
+        },
+        "min_p<0.85": {
+          "wrong_caught": 1,
+          "right_escalated": 37
+        },
+        "min_p<0.9": {
+          "wrong_caught": 1,
+          "right_escalated": 43
+        }
+      }
+    },
+    "rows": [
+      {
+        "question": "Name a primary colour.",
+        "answer": "Primary colors are red, blue, and yellow.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8694717858860287,
+        "min_p": 0.5361396574494232,
+        "low3_p": 0.6792307413574472,
+        "first_p": 0.8559614703436556
+      },
+      {
+        "question": "What is the capital of Canada?",
+        "answer": "The capital of Canada is Ottawa.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9984465513851065,
+        "min_p": 0.9920148553527071,
+        "low3_p": 0.9964966741675997,
+        "first_p": 0.9920148553527071
+      },
+      {
+        "question": "What is the capital of Turkey?",
+        "answer": "The capital of Turkey is Ankara.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9951847272237808,
+        "min_p": 0.9828626158979844,
+        "low3_p": 0.9889088914427674,
+        "first_p": 0.9848731731178971
+      },
+      {
+        "question": "What is the capital of Brazil?",
+        "answer": "The capital of Brazil is Bras\u00edlia.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9918405413866397,
+        "min_p": 0.9661299881624981,
+        "low3_p": 0.9790307435136796,
+        "first_p": 0.9661299881624981
+      },
+      {
+        "question": "What is the capital of Switzerland?",
+        "answer": "The capital of Switzerland is Bern.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9914503124828037,
+        "min_p": 0.9541148984422521,
+        "low3_p": 0.9803978843515249,
+        "first_p": 0.9541148984422521
+      },
+      {
+        "question": "What is the capital of Australia?",
+        "answer": "The capital of Australia is Canberra.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9971690017490117,
+        "min_p": 0.9865672183446316,
+        "low3_p": 0.9934784467559828,
+        "first_p": 0.9865672183446316
+      },
+      {
+        "question": "What is the capital of New Zealand?",
+        "answer": "The capital of New Zealand is Wellington.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9809155549091939,
+        "min_p": 0.8737440928577241,
+        "low3_p": 0.9501231446082135,
+        "first_p": 0.9857870686752328
+      },
+      {
+        "question": "What is the capital of Nigeria?",
+        "answer": "Nigeria's capital is Abuja.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.93251089593094,
+        "min_p": 0.643303658715765,
+        "low3_p": 0.8332378380043524,
+        "first_p": 0.643303658715765
+      },
+      {
+        "question": "What is the capital of Pakistan?",
+        "answer": "The capital of Pakistan is Islamabad.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9863248204025962,
+        "min_p": 0.912189012800385,
+        "low3_p": 0.9685633560376044,
+        "first_p": 0.912189012800385
+      },
+      {
+        "question": "What is the capital of Morocco?",
+        "answer": "The capital of Morocco is Rabat.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9948969694179278,
+        "min_p": 0.9759716551734235,
+        "low3_p": 0.9870664152246821,
+        "first_p": 0.9879678482485792
+      },
+      {
+        "question": "What is the capital of Vietnam?",
+        "answer": "The capital of Vietnam is Hanoi.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9748851950081179,
+        "min_p": 0.8429435194193354,
+        "low3_p": 0.935590742146078,
+        "first_p": 0.8429435194193354
+      },
+      {
+        "question": "What is the capital of India?",
+        "answer": "The capital of India is New Delhi.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.995277632912512,
+        "min_p": 0.9749477973074538,
+        "low3_p": 0.9878394111074837,
+        "first_p": 0.9749477973074538
+      },
+      {
+        "question": "Which planet is closest to the Sun?",
+        "answer": "Mercury is the closest planet to the Sun.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9159024100039549,
+        "min_p": 0.6131836797841483,
+        "low3_p": 0.7560769455075689,
+        "first_p": 0.9710835202512595
+      },
+      {
+        "question": "Which planet is known as the Red Planet?",
+        "answer": "The planet known as the Red Planet is Mars.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9907519598120401,
+        "min_p": 0.9321689784256724,
+        "low3_p": 0.9704089389685855,
+        "first_p": 0.9321689784256724
+      },
+      {
+        "question": "What is the largest planet in the solar system?",
+        "answer": "The largest planet in the solar system is Jupiter.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9957565001451136,
+        "min_p": 0.9828804313204973,
+        "low3_p": 0.9878657170981762,
+        "first_p": 0.9828804313204973
+      },
+      {
+        "question": "Who painted the Mona Lisa?",
+        "answer": "The Mona Lisa is painted by Leonardo da Vinci.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8515427243206413,
+        "min_p": 0.47885698934430626,
+        "low3_p": 0.5907535624367513,
+        "first_p": 0.47885698934430626
+      },
+      {
+        "question": "What is the largest ocean on Earth?",
+        "answer": "The largest ocean on Earth is the Pacific Ocean.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9900305240364441,
+        "min_p": 0.9495612501847595,
+        "low3_p": 0.9700613748474928,
+        "first_p": 0.9993858011302803
+      },
+      {
+        "question": "How many legs does a spider have?",
+        "answer": "A spider has eight legs.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8693887420269977,
+        "min_p": 0.5649143086413836,
+        "low3_p": 0.7573810486673301,
+        "first_p": 0.7842672891778807
+      },
+      {
+        "question": "What is the boiling point of water in Fahrenheit?",
+        "answer": "The boiling point of water in Fahrenheit is 212\u00b0F.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8872819203889435,
+        "min_p": 0.5430117569121123,
+        "low3_p": 0.6016151288886723,
+        "first_p": 0.7359289371279762
+      },
+      {
+        "question": "What is the freezing point of water in Celsius?",
+        "answer": "The freezing point of water in Celsius is 0\u00b0C.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9182898473884793,
+        "min_p": 0.5895847311797701,
+        "low3_p": 0.7195755282123218,
+        "first_p": 0.5895847311797701
+      },
+      {
+        "question": "What is the square root of 144?",
+        "answer": "The square root of 144 is 12.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9995503574046514,
+        "min_p": 0.9967045306789348,
+        "low3_p": 0.9980560334547854,
+        "first_p": 0.9967045306789348
+      },
+      {
+        "question": "Who was the first person to walk on the Moon?",
+        "answer": "The first person to walk on the Moon was Neil Armstrong. He made this historic achievement on July 20, 1969, during the Apollo 11 mission.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.857987569679598,
+        "min_p": 0.32827002307265035,
+        "low3_p": 0.4020259657720219,
+        "first_p": 0.6490030723592259
+      },
+      {
+        "question": "In what year did World War II end?",
+        "answer": "World War II ended on September 2, 1945.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9694461067259978,
+        "min_p": 0.8333952054413137,
+        "low3_p": 0.8729288137920781,
+        "first_p": 0.9615981145730259
+      },
+      {
+        "question": "How many continents are there?",
+        "answer": "There are seven continents in the world.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.888501328447713,
+        "min_p": 0.5754887100691918,
+        "low3_p": 0.7340020687725934,
+        "first_p": 0.9988717170725946
+      },
+      {
+        "question": "What is the smallest prime number?",
+        "answer": "The smallest prime number is 2.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.993976855020635,
+        "min_p": 0.9538219515309081,
+        "low3_p": 0.984028189952628,
+        "first_p": 0.9994772359257365
+      },
+      {
+        "question": "Which gas do plants absorb from the air for photosynthesis?",
+        "answer": "Plants absorb carbon dioxide (CO2) from the air for photosynthesis.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.960074332063733,
+        "min_p": 0.7813604190557123,
+        "low3_p": 0.8186432344517919,
+        "first_p": 0.9923553462023338
+      },
+      {
+        "question": "Who developed the theory of relativity?",
+        "answer": "The theory of relativity was developed by Albert Einstein.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9530889678865436,
+        "min_p": 0.7327862774395609,
+        "low3_p": 0.8517672481331939,
+        "first_p": 0.7327862774395609
+      },
+      {
+        "question": "How many sides does a hexagon have?",
+        "answer": "A hexagon has six sides.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9894689433999833,
+        "min_p": 0.9392733803142628,
+        "low3_p": 0.9756653223366847,
+        "first_p": 0.9891753816427882
+      },
+      {
+        "question": "What is the chemical symbol for sodium?",
+        "answer": "The chemical symbol for sodium is Na.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9917944223497857,
+        "min_p": 0.9636560409018754,
+        "low3_p": 0.9782779818679355,
+        "first_p": 0.972204750860158
+      },
+      {
+        "question": "What is the chemical symbol for iron?",
+        "answer": "The chemical symbol for iron is Fe.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9815308792248298,
+        "min_p": 0.8648058818723318,
+        "low3_p": 0.9516044989412029,
+        "first_p": 0.8648058818723318
+      },
+      {
+        "question": "What is the chemical symbol for potassium?",
+        "answer": "The chemical symbol for potassium is K.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9724597665203996,
+        "min_p": 0.8386234127760898,
+        "low3_p": 0.9282520201727162,
+        "first_p": 0.8386234127760898
+      },
+      {
+        "question": "What is the chemical symbol for silver?",
+        "answer": "The chemical symbol for silver is \"Ag\".",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8877406479966443,
+        "min_p": 0.4835936526273564,
+        "low3_p": 0.7014152496188244,
+        "first_p": 0.9745986562657798
+      },
+      {
+        "question": "Which element has atomic number 1?",
+        "answer": "The element with atomic number 1 is hydrogen.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9172493116988698,
+        "min_p": 0.6633543897245224,
+        "low3_p": 0.7537778977579249,
+        "first_p": 0.8266712634446568
+      },
+      {
+        "question": "How many bones are in the adult human body?",
+        "answer": "There are 206 bones in the adult human body.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8612592464112238,
+        "min_p": 0.3916749017892491,
+        "low3_p": 0.549021193624029,
+        "first_p": 0.7311331580513133
+      },
+      {
+        "question": "What is 15% of 200?",
+        "answer": "15% of 200 is 30.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9833148494755634,
+        "min_p": 0.8418369626389556,
+        "low3_p": 0.9300967499032209,
+        "first_p": 0.8418369626389556
+      },
+      {
+        "question": "What is 12 squared?",
+        "answer": "12 squared is 144.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9771662661375231,
+        "min_p": 0.868712774167555,
+        "low3_p": 0.9336625357267808,
+        "first_p": 0.868712774167555
+      },
+      {
+        "question": "What is 7 times 8?",
+        "answer": "7 times 8 is 56.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9633791550198468,
+        "min_p": 0.8131273165834485,
+        "low3_p": 0.894866144064776,
+        "first_p": 0.8131273165834485
+      },
+      {
+        "question": "What is 17 times 3?",
+        "answer": "17 times 3 is 51.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9787595721360384,
+        "min_p": 0.853800712122324,
+        "low3_p": 0.9333678748866379,
+        "first_p": 0.853800712122324
+      },
+      {
+        "question": "What is 1000 divided by 8?",
+        "answer": "1000 divided by 8 is 125.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.979639416754302,
+        "min_p": 0.8574862551908332,
+        "low3_p": 0.9099040856355941,
+        "first_p": 0.99220385336722
+      },
+      {
+        "question": "What is 2 to the power of 10?",
+        "answer": "2 to the power of 10 is 1,024.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9539254122139156,
+        "min_p": 0.5505044644004481,
+        "low3_p": 0.7922978516058561,
+        "first_p": 0.968111386138019
+      },
+      {
+        "question": "Who wrote the novel 1984?",
+        "answer": "George Orwell wrote the novel 1984.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9367115464932666,
+        "min_p": 0.5327260695101869,
+        "low3_p": 0.7890656837227862,
+        "first_p": 0.9290889474760234
+      },
+      {
+        "question": "Who wrote Pride and Prejudice?",
+        "answer": "Jane Austen wrote Pride and Prejudice.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9661002612250316,
+        "min_p": 0.8091162193954712,
+        "low3_p": 0.8953553332463927,
+        "first_p": 0.9501825754516725
+      },
+      {
+        "question": "Who discovered penicillin?",
+        "answer": "Alexander Fleming discovered penicillin.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8939577350821638,
+        "min_p": 0.639727916821345,
+        "low3_p": 0.7712903904025148,
+        "first_p": 0.7219389955106016
+      },
+      {
+        "question": "What is the currency of Japan?",
+        "answer": "The currency of Japan is the Japanese yen (JPY).",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9784774407245322,
+        "min_p": 0.8974181408005633,
+        "low3_p": 0.9300876453501862,
+        "first_p": 0.9881420807023391
+      },
+      {
+        "question": "What language is mainly spoken in Brazil?",
+        "answer": "The main language spoken in Brazil is Portuguese.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9172236625474093,
+        "min_p": 0.6541207508997146,
+        "low3_p": 0.7780330091752807,
+        "first_p": 0.6541207508997146
+      },
+      {
+        "question": "What is the hardest natural substance?",
+        "answer": "The hardest natural substance is diamond. It is composed of carbon atoms arranged in a tetrahedral structure, making it incredibly strong and resistant to scratching.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7339940440650075,
+        "min_p": 0.27661041674774095,
+        "low3_p": 0.3020351496352563,
+        "first_p": 0.743011954434148
+      },
+      {
+        "question": "How many minutes are in a day?",
+        "answer": "There are 24 hours in a day. Each hour has 60 minutes. Therefore, there are 24 * 60 = 1,440 minutes in a day.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8997500954520905,
+        "min_p": 0.5127298779274119,
+        "low3_p": 0.5556633483515746,
+        "first_p": 0.9470645738920644
+      },
+      {
+        "question": "How many seconds are in an hour?",
+        "answer": "There are 60 seconds in an hour.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.924559510451372,
+        "min_p": 0.5044803572448232,
+        "low3_p": 0.7727677874553142,
+        "first_p": 0.9429454203953687
+      },
+      {
+        "question": "How many hours are in a week?",
+        "answer": "There are 168 hours in a week.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9818553327646425,
+        "min_p": 0.9070648641816211,
+        "low3_p": 0.9394491481954185,
+        "first_p": 0.9632785602263148
+      },
+      {
+        "question": "How many players does a soccer team have on the field?",
+        "answer": "A soccer team has 11 players on the field at a time.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8675780405396636,
+        "min_p": 0.40696233290931744,
+        "low3_p": 0.5504089298653433,
+        "first_p": 0.9543980709024509
+      },
+      {
+        "question": "What is the tallest mountain in the world?",
+        "answer": "The tallest mountain in the world is Mount Everest, located in the Mahalangur Himal sub-range of the Himalayas. It stands at an elevation of 8,848 meters (29,029 feet) above sea level.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9047600110413299,
+        "min_p": 0.5171830579166398,
+        "low3_p": 0.5373838900059814,
+        "first_p": 0.8899999356095063
+      },
+      {
+        "question": "Who invented the telephone?",
+        "answer": "Alexander Graham Bell invented the telephone.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8921696631753739,
+        "min_p": 0.7262678856412197,
+        "low3_p": 0.7667933807822825,
+        "first_p": 0.8268844567884407
+      },
+      {
+        "question": "Convert 100 degrees Celsius to Fahrenheit.",
+        "answer": "To convert 100 degrees Celsius to Fahrenheit, use the formula: Fahrenheit = (Celsius x 9/5) + 32. Therefore, 100\u00b0C = (100 x 9/5) + 32 = 212\u00b0F.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8962836830370468,
+        "min_p": 0.29385987833109395,
+        "low3_p": 0.39087817245893164,
+        "first_p": 0.4121290245491557
+      },
+      {
+        "question": "What is the plural of mouse?",
+        "answer": "The plural of mouse is mice.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9863548868849138,
+        "min_p": 0.9562412439428678,
+        "low3_p": 0.969437979046724,
+        "first_p": 0.9972611412256575
+      },
+      {
+        "question": "What is the past tense of the verb 'go'?",
+        "answer": "The past tense of the verb 'go' is 'went'.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9441778236861826,
+        "min_p": 0.5330869773437025,
+        "low3_p": 0.7855556417022999,
+        "first_p": 0.9937405136587613
+      },
+      {
+        "question": "Name a mammal that can fly.",
+        "answer": "A bat is a mammal that can fly.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8037545891067184,
+        "min_p": 0.28238794766930764,
+        "low3_p": 0.4995524148984271,
+        "first_p": 0.6984348411270785
+      },
+      {
+        "question": "In which country are the pyramids of Giza?",
+        "answer": "The pyramids of Giza are located in Egypt.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9917273174107105,
+        "min_p": 0.9355043256793703,
+        "low3_p": 0.9719554230861273,
+        "first_p": 0.9355043256793703
+      },
+      {
+        "question": "How many strings does a standard guitar have?",
+        "answer": "A standard guitar has six strings.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.915606491346125,
+        "min_p": 0.7418682388095114,
+        "low3_p": 0.8211627848984676,
+        "first_p": 0.9798072227811135
+      },
+      {
+        "question": "How many days are in February in a non-leap year?",
+        "answer": "February has 28 days in a non-leap year.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9434266088326145,
+        "min_p": 0.6484176066180345,
+        "low3_p": 0.7782313902948603,
+        "first_p": 0.7295349252664354
+      },
+      {
+        "question": "What is the longest bone in the human body?",
+        "answer": "The longest bone in the human body is the femur, which is the thigh bone.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9316960146948561,
+        "min_p": 0.7160626001783761,
+        "low3_p": 0.7705760437103192,
+        "first_p": 0.9993260619592964
+      },
+      {
+        "question": "Which organ pumps blood through the body?",
+        "answer": "The organ that pumps blood through the body is the heart.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.95063775948315,
+        "min_p": 0.6174478480912062,
+        "low3_p": 0.8197169210435645,
+        "first_p": 0.9859589764448627
+      },
+      {
+        "question": "What is the capital city of Spain?",
+        "answer": "The capital city of Spain is Madrid.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9984926516839006,
+        "min_p": 0.9898807647549056,
+        "low3_p": 0.9960393865633334,
+        "first_p": 0.9898807647549056
+      },
+      {
+        "question": "Who wrote Hamlet?",
+        "answer": "William Shakespeare wrote Hamlet.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9827713780219892,
+        "min_p": 0.928356623019312,
+        "low3_p": 0.9662790055620838,
+        "first_p": 0.928356623019312
+      },
+      {
+        "question": "What is the main ingredient in guacamole?",
+        "answer": "The main ingredient in guacamole is avocados.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9564494104325739,
+        "min_p": 0.6065873424356157,
+        "low3_p": 0.8393995871911504,
+        "first_p": 0.980945906055692
+      }
+    ]
+  }
+}

@@ -374,6 +374,10 @@ class LlamaCppRunner:
         # Token ids of the last generate() call, for verify_greedy().
         self.last_prompt_ids: list[int] = []
         self.last_output_ids: list[int] = []
+        # Log-probability of each output token under the model, recorded in plain
+        # mode only (speculative steps sample several tokens per eval). An
+        # answer-quality signal for Pipeline's escalation check (FR-05.3).
+        self.last_token_logprobs: Optional[list[float]] = None
 
     # ---- weights ---------------------------------------------------------
 
@@ -450,11 +454,14 @@ class LlamaCppRunner:
         prompt_ids = self._chat_tokens(prompt)
         self._llm.reset()  # clean state: output must not depend on the previous request
         out: list[int] = []
+        logprobs: Optional[list[float]] = [] if self._counter is None else None
         first_t: Optional[float] = None
         gen = self._llm.generate(prompt_ids, reset=True, **self._sampling)
         try:
             for token in gen:
                 token = int(token)
+                if logprobs is not None:
+                    logprobs.append(self._token_logprob(token))
                 if self._is_end_of_generation(token):
                     break
                 if first_t is None:
@@ -467,6 +474,7 @@ class LlamaCppRunner:
         last_t = time.perf_counter()
 
         self.last_prompt_ids, self.last_output_ids = prompt_ids, out
+        self.last_token_logprobs = logprobs[:len(out)] if logprobs is not None else None
         text = self._llm.detokenize(out).decode("utf-8", errors="replace") if out else ""
         # Decode time from first to last token excludes prompt processing,
         # matching what Ollama's eval_duration measures.
@@ -481,6 +489,17 @@ class LlamaCppRunner:
             acceleration=self._mode if self._counter is not None else ACCEL_NONE,
             acceptance_rate=self._counter.acceptance_rate(len(out)) if self._counter is not None else None,
         )
+
+    def _token_logprob(self, token: int) -> float:
+        """log p(token) from the logits it was just sampled from (plain mode: the
+        context holds the last position's logits until the next eval)."""
+        llm = self._llm
+        try:
+            logits = np.ctypeslib.as_array(llm._ctx.get_logits(), shape=(llm.n_vocab(),)).astype(np.float64)
+        except (AttributeError, TypeError, ValueError):
+            return 0.0  # a test double without llama.cpp internals: no signal
+        top = logits.max()
+        return float(logits[token] - top - np.log(np.sum(np.exp(logits - top))))
 
     def verify_greedy(self, prompt_ids: Optional[list[int]] = None, output_ids: Optional[list[int]] = None) -> GreedyCheck:
         """

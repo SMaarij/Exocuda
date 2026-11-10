@@ -181,6 +181,37 @@ def test_generation_stops_at_max_tokens_and_records_ids() -> None:
     assert runner.last_prompt_ids[0] == FakeLlama.BOS
 
 
+def test_plain_generation_records_token_logprobs() -> None:
+    import ctypes
+    import math
+
+    V = 64
+    logits = [0.0] * V
+    logits[5] = 2.0
+
+    class _Ctx:
+        def __init__(self) -> None:
+            self.buf = (ctypes.c_float * V)(*logits)
+
+        def get_logits(self):
+            return ctypes.cast(self.buf, ctypes.POINTER(ctypes.c_float))
+
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    built[0]._ctx, built[0].n_vocab = _Ctx(), lambda: V
+    runner.generate("hi", 3)
+    norm = math.log(math.exp(2.0) + V - 1)
+    assert runner.last_token_logprobs == pytest.approx([logits[t] - norm for t in runner.last_output_ids])
+
+
+def test_speculative_generation_records_no_token_logprobs() -> None:
+    runner, built = _runner()
+    runner.set_acceleration(ACCEL_DRAFT_MODEL)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    runner.generate("hi", 3)
+    assert runner.last_token_logprobs is None
+
+
 def test_generate_before_load_raises() -> None:
     with pytest.raises(RuntimeError):
         _runner()[0].generate("hi", 8)

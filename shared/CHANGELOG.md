@@ -478,6 +478,18 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.4.2] -- 2026-11-10 -- token-probability escalation for the small model
+
+### Changed (seam: additive)
+- `shared/types.py`: `BackendResult` gains an optional `logprobs: list[float]` (via a `total=False`
+  base TypedDict). Backends that do not set it are unaffected; Pipeline reads it with `.get()`.
+- `engine/execution/llamacpp_runner.py`: `last_token_logprobs` per plain-mode generation;
+  `LocalExecutionBackend` passes it as `logprobs`.
+- `engine/intelligence/pipeline.py`: `small_token_confidence_floor` (default 0.75): small-model answers
+  with a lower mean token probability go to the big backend. CLI `small_model_min_confidence`.
+- `scripts/calibrate_small_confidence.py` with main and holdout question sets. BENCHMARK_REPORT
+  Addendum 13; README recommends the shared 0.5B setup.
+
 ## [0.4.1] -- 2026-11-10 -- small model shared as the draft; better cache hits on rewordings
 
 ### Changed

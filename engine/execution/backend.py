@@ -229,7 +229,7 @@ class LocalExecutionBackend:
         # Fallback only matters for test doubles that never set output_text.
         text = sample.base.output_text or (sample.base.tokens_generated * "x")
 
-        return {
+        result: BackendResult = {
             "text":               text,
             "confidence":         sample.acceptance_rate,
             "speculative_active": sample.speculative_active,
@@ -237,6 +237,10 @@ class LocalExecutionBackend:
             "latency_ms":         round(wall_ms, 2),   # real wall-clock time
             "est_cost_usd":       0.0,                 # local is always free
         }
+        logprobs = getattr(self._runner, "last_token_logprobs", None)
+        if isinstance(logprobs, list) and logprobs:
+            result["logprobs"] = logprobs
+        return result
 
     def generate_stream(self, messages: list[Message]) -> Iterator[str]:
         """

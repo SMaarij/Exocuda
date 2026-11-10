@@ -254,6 +254,33 @@ def test_weak_small_model_answer_escalates_to_the_big_model(messages: list[Messa
     assert not pipeline.last_served_by_small
 
 
+class _WithLogprobs(FakeBackend):
+    def __init__(self, text: str, logprobs: list) -> None:
+        super().__init__(text=text)
+        self._logprobs = logprobs
+
+    def generate(self, messages):
+        return super().generate(messages) | {"logprobs": self._logprobs}
+
+
+@pytest.mark.parametrize("p, escalated", [(0.95, False), (0.6, True)])
+def test_small_answer_with_low_token_probability_escalates(messages: list[Message], p: float, escalated: bool) -> None:
+    import math
+
+    small = _WithLogprobs("An insect has two legs.", [math.log(p)] * 6)  # fluent, but unsure
+    pipeline = Pipeline(FakeBackend(text="An insect has six legs."), small_local_backend=small, router=_FixedRouter("local"))
+    result = pipeline.run(messages)
+    assert result["escalated"] is escalated
+    assert result["text"] == ("An insect has six legs." if escalated else "An insect has two legs.")
+
+
+def test_token_probability_check_can_be_turned_off(messages: list[Message]) -> None:
+    small = _WithLogprobs(LONG_ANSWER, [-2.0] * 6)
+    pipeline = Pipeline(FakeBackend(text="big"), small_local_backend=small, router=_FixedRouter("local"),
+                        small_token_confidence_floor=None)
+    assert pipeline.run(messages)["text"] == LONG_ANSWER
+
+
 def test_failing_small_model_falls_back_to_the_big_model(messages: list[Message]) -> None:
     pipeline = Pipeline(FakeBackend(text="big answer"), small_local_backend=FakeBackend(raise_error=True), router=_FixedRouter("local"))
     assert pipeline.run(messages)["text"] == "big answer"

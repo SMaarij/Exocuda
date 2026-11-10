@@ -75,6 +75,7 @@ class Pipeline:
         system_prompt: Optional[str] = None,
         uncached_tiers: tuple[str, ...] = ("self_hosted",),
         small_local_backend: Optional[ExecutionBackend] = None,
+        small_token_confidence_floor: Optional[float] = 0.75,
     ) -> None:
         self._backend = backend
         # Optional fast, small local model for queries the router labels
@@ -82,6 +83,11 @@ class Pipeline:
         # ones -- cloud_byok-labelled queries with no cloud configured, and
         # small-model answers that look weak. None keeps one local model.
         self._small_local_backend = small_local_backend
+        # Small-model answers whose mean token probability is below this go to
+        # `backend` too. 0.75 catches 7 of 11 wrong qwen2.5 0.5B answers to easy
+        # questions and re-asks 16 of 117 right ones
+        # (docs/benchmark/small_confidence_*.json, BENCHMARK_REPORT Addendum 13).
+        self._small_token_confidence_floor = small_token_confidence_floor
         self.last_served_by_small = False
         self._self_hosted_backend = self_hosted_backend
         self._cloud_byok_backend = cloud_byok_backend
@@ -127,8 +133,7 @@ class Pipeline:
 
         result, tier, escalated = self._execute(compressed, tier)
 
-        if self.last_served_by_small and self._confidence_floor is not None:
-            if estimate_local_confidence(result["text"]) < self._confidence_floor:
+        if self.last_served_by_small and self._small_answer_is_weak(result):
                 try:
                     result = self._backend.generate(compressed)
                     escalated = True
@@ -175,6 +180,16 @@ class Pipeline:
         if self._decision_log_path is not None:
             log_decision(result, self._decision_log_path)
         return result
+
+    def _small_answer_is_weak(self, result: BackendResult) -> bool:
+        """Text heuristic (hedging, too short) against confidence_floor, and, when the
+        backend reports token log-probabilities, their mean probability against
+        small_token_confidence_floor."""
+        if self._confidence_floor is not None and estimate_local_confidence(result["text"]) < self._confidence_floor:
+            return True
+        logprobs = result.get("logprobs")
+        floor = self._small_token_confidence_floor
+        return bool(logprobs) and floor is not None and estimate_local_confidence(result["text"], logprobs) < floor
 
     def run_stream(self, messages: list[Message]) -> Iterator[str]:
         """See module docstring's STREAMING LIMITATION note."""

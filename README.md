@@ -54,29 +54,25 @@ tell Cascade its prices.
 If you skip `cascade init`, the first `ask` runs the same one-time hardware check first
 (several minutes on a CPU) and says so.
 
-### Fastest setup (measured 1.8–2.2x on a mixed session, all answers correct)
+### Fastest setup (measured 1.65–2.11x on a mixed session, all answers correct, 5.9 GB peak RAM)
 
 ```bash
 cascade config set runner llamacpp
 cascade config set model qwen2.5-coder                 # 7B for hard questions
-cascade config set acceleration draft_model            # confidence drafting with qwen2.5-coder:0.5b
-cascade config set draft_model qwen2.5-coder:0.5b
-cascade config set small_model qwen2.5:1.5b-instruct   # fast model for easy questions
+cascade config set acceleration draft_model            # confidence drafting
+cascade config set small_model qwen2.5:0.5b-instruct   # easy questions; also the 7B's draft model
 ```
+
+The 0.5B model answers easy questions and drafts for the 7B, loaded once. When it is unsure of an
+answer (mean token probability below `small_model_min_confidence`, default 0.75) the 7B answers
+instead: on 128 checked easy questions that leaves 4 wrong answers, against 11 for the 0.5B alone
+and 6 for the 1.5B model (BENCHMARK_REPORT Addendum 13).
 
 The first `cascade ask` starts a background model server on 127.0.0.1 and loads the models
 (about a minute on a CPU laptop); after that, easy answers take about 2 seconds and repeated
 questions come back from the cache in well under one. The server exits after 10 idle minutes
 (`server.idle_minutes`) and frees the RAM; `cascade stop` frees it at once,
 `cascade config set server.auto off` disables it.
-
-**Low-RAM variant (1.65x, 5.9 GB peak instead of 7.0 GB):** use the 0.5B model for easy questions;
-it then also serves as the 7B's draft model, loaded once:
-
-```bash
-cascade config set small_model qwen2.5:0.5b-instruct
-cascade config unset draft_model
-```
 
 ### Answer length and the cache
 
@@ -209,7 +205,7 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Reworded questions answered from cache | ≥90% of exact | 42.9% (strict guard, threshold 0.92) | **not met** — traded for zero wrong answers |
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
-| **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **1.79–2.19x faster than the plain 7B** (two runs; 386 s → 216 s and 431 s → 197 s), median answer ~2 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting); low-RAM variant with the 0.5B shared as draft: 1.65x at 5.9 GB | |
+| **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **1.79–2.19x faster than the plain 7B** (two runs; 386 s → 216 s and 431 s → 197 s), median answer ~2 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting); 0.5B shared as draft with unsure answers re-asked: 1.65–2.11x at 5.9 GB, now the recommended setup | |
 | Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.69x on code/rewrite prompts**, 1.39x overall, 1.08x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, confidence drafting, 3 rounds); output verified lossless | met on grounded prompts, not yet overall |
 | RAM, 7B Q4_K_M via llama.cpp | – | 4.6 GB (was 7.2 GB with the model file memory-mapped); +0.75 GB with the draft model | |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |

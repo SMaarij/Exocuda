@@ -364,6 +364,15 @@ def test_generate_uses_real_output_text_when_runner_provides_it(tmp_path: Path) 
     assert result["text"] == "this is the real generated answer"
 
 
+def test_generate_passes_runner_token_logprobs_through(tmp_path: Path) -> None:
+    runner = _FakeRunnerWithRealText(tok_s=20.0)
+    profiler = HardwareProfiler(runner=runner, profile_path=_write_profile(tmp_path, tok_s=20.0))
+    backend = LocalExecutionBackend(runner=runner, profiler=profiler)
+    assert "logprobs" not in backend.generate(SAMPLE_MESSAGES)  # runner without the signal
+    runner.last_token_logprobs = [-0.1, -0.2]
+    assert backend.generate(SAMPLE_MESSAGES)["logprobs"] == [-0.1, -0.2]
+
+
 def test_generate_falls_back_to_placeholder_when_runner_has_no_output_text(tmp_path: Path) -> None:
     """FakeRunner (the default double used everywhere else in this file) never sets output_text -- confirms the fallback keeps the field a non-empty string, not silently empty."""
     result = _backend(tmp_path).generate(SAMPLE_MESSAGES)

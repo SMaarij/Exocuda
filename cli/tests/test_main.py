@@ -373,6 +373,12 @@ def test_small_model_of_the_same_family_is_the_default_draft(monkeypatch: pytest
     assert tags == ["qwen2.5:0.5b-instruct-q4_K_M", lr.DEFAULT_DRAFT_MODEL_TAG, "qwen2.5-coder:0.5b"]
 
 
+def test_small_confidence_floor_setting() -> None:
+    assert cli_main._small_confidence_floor({}) == 0.75
+    assert cli_main._small_confidence_floor({"small_model_min_confidence": "0.8"}) == 0.8
+    assert cli_main._small_confidence_floor({"small_model_min_confidence": "off"}) is None
+
+
 def test_server_auto_start_defaults_on_only_for_llamacpp() -> None:
     assert cli_main._server_settings({})[0] is False
     assert cli_main._server_settings({"runner": "llamacpp"})[0] is True

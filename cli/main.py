@@ -13,6 +13,8 @@ Config keys (set with `cascade config set KEY VALUE`):
     small_model           fast model for easy queries, e.g. qwen2.5:0.5b-instruct (default
                           off); the router sends hard ones to `model`. Same family as
                           `model` -> it is also the draft model, loaded once for both
+    small_model_min_confidence  re-ask `model` when the small model's mean token probability is
+                          below this (default 0.75; off disables)
     draft_model           draft tag for draft_model     (default: small_model when it is
                           the same family, else llama3.2:1b-instruct-q4_K_M)
     draft.p_min           stop drafting at the first token the draft model is less sure of
@@ -195,6 +197,15 @@ def build_small_local_backend(config: dict, main_backend):
                                  **_local_limits(config))
 
 
+def _small_confidence_floor(config: dict) -> Optional[float]:
+    """`small_model_min_confidence`: re-ask the big model when the small model's mean
+    token probability is below this (default 0.75; off disables)."""
+    value = _get(config, "small_model_min_confidence", 0.75)
+    if isinstance(value, str):
+        value = None if value.strip().lower() in ("", "off", "none", "false", "0") else float(value)
+    return float(value) if value else None
+
+
 def _draft_settings(config: dict) -> dict:
     """Default: confidence drafting (p_min 0.75, up to 16 tokens), the fastest mode in
     docs/benchmark/acceleration_qwen7b_pmin_3rounds.json. `draft.p_min off` falls back
@@ -248,6 +259,7 @@ def build_pipeline(decision_logging: bool = True):
     return Pipeline(
         backend=local,
         small_local_backend=build_small_local_backend(config, local),
+        small_token_confidence_floor=_small_confidence_floor(config),
         self_hosted_backend=SelfHostedBackend(**self_hosted) if self_hosted else None,
         cloud_byok_backend=CloudBYOKBackend(**byok) if byok and byok["api_key"] else None,
         compressor=ContextCompressor(embedder),

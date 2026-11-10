@@ -615,3 +615,38 @@ was faster this run (386 s vs 431 s), so every ratio is lower than in Addendum 1
   42.9% → **50.0%**, near-miss wrong answers still **0/19**.
 - The 1.5B stays the recommendation when RAM allows (Addendum 11's 0.5B miss on "Name a primary
   colour."); the shared 0.5B is the low-RAM setup.
+
+## Addendum 13 — re-ask the big model when the small model is unsure: the 0.5B beats the 1.5B on accuracy, 2026-11-10
+
+The small model's answer was escalated to the 7B only on a text heuristic (hedging phrases, very short
+answers). It never fired on a wrong answer: small models are fluently wrong ("An insect has two legs.").
+The llama.cpp runner now records the log-probability of each answer token in plain decoding (the
+logits it was sampled from are still in the context; no extra eval). `BackendResult` gains an optional
+`logprobs` field (FR-05.3's model-internal signal), and Pipeline re-asks the big model when the
+small model's mean token probability is below `small_token_confidence_floor` (CLI
+`small_model_min_confidence`, default 0.75).
+
+Calibration (`scripts/calibrate_small_confidence.py`): 64 easy questions with answer patterns picked
+the threshold; a second, disjoint set of 64 checked it (`docs/benchmark/small_confidence_*.json`).
+
+| | Wrong (main + holdout) | AUC, mean token probability | Re-asked at 0.75 |
+|---|---:|---:|---:|
+| qwen2.5 0.5B | 4 + 7 = 11/128 | 0.88 / 0.81 | 16 of 117 right answers; catches 7 of 11 wrong |
+| qwen2.5 1.5B | 1 + 5 = 6/128 | 0.67 / 0.87 | 2 of 122 right answers; catches 0 of 6 wrong |
+| text heuristic (either) | | 0.50 | catches nothing |
+
+The 0.5B with the check leaves **4 wrong of 128**, fewer than the 1.5B without it (6); the 1.5B is
+wrong more confidently, so the check rarely fires for it. (Addendum 11's "Name a primary colour."
+miss did not recur at temperature 0 in this harness.)
+
+Whole session with the check on (`docs/benchmark/system_session_escalation.json`):
+
+| Configuration | Session | Median | vs plain | Correct | Peak RAM | Cache / small / 7B | Re-asked |
+|---|---:|---:|---:|---:|---:|---|---:|
+| plain | 428 s | 9.7 s | 1.00x | 34/34 | 5.08 GB | 0 / 0 / 34 | – |
+| + 1.5B small model | 275 s | 3.1 s | 1.56x | 34/34 | 6.82 GB | 9 / 14 / 11 | 0 |
+| **+ 0.5B small model, shared as draft** | **203 s** | **1.3 s** | **2.11x** | 34/34 | **5.90 GB** | 9 / 12 / 13 | 2 |
+
+Run-to-run spread on this laptop is large (the 1.5B setup measured 2.19x, 1.79x and 1.56x in three
+sessions; the shared 0.5B 1.65x and 2.11x), so the two are about equally fast. The shared 0.5B is now
+the recommended setup: as accurate or better with the check, and 0.9–1.1 GB less RAM.

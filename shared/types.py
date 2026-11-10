@@ -103,7 +103,14 @@ class HardwareProfile(_HardwareProfileOptional):
     local_capable: bool
 
 
-class BackendResult(TypedDict):
+class _BackendResultOptional(TypedDict, total=False):
+    # Log-probability of each answer token, when the backend can see them
+    # (llama.cpp runner, plain decoding). FR-05.3's model-internal confidence
+    # signal; absent everywhere else, so existing backends are unaffected.
+    logprobs: list[float]
+
+
+class BackendResult(_BackendResultOptional):
     """
     The typed result any ExecutionBackend implementation (local or
     hosted) returns to Pipeline. Identical shape regardless of which tier

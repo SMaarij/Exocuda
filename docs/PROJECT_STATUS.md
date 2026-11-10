@@ -22,6 +22,12 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.4.2 — the small model re-asks the 7B when unsure; 0.5B setup recommended
+
+- Small-model answers with mean token probability below 0.75 go to the 7B. On 128 checked easy
+  questions the 0.5B then gets 4 wrong, fewer than the 1.5B (6) or the 0.5B alone (11).
+- Session: 2.11x faster than plain, 34/34 correct, 5.9 GB peak (Addendum 13).
+
 ## 0.4.1 — small model at no extra RAM; more cache hits on rewordings
 
 - The 0.5B small model doubles as the 7B's draft model, one instance in RAM: whole session 1.65x faster
