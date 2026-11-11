@@ -28,7 +28,9 @@ Config keys (set with `cascade config set KEY VALUE`):
     server.auto           keep models loaded between `cascade ask` calls in a background
                           server on 127.0.0.1 (default true for runner llamacpp)
     server.idle_minutes   the server exits after this long without a request (default 10)
-    server.port           (default 8765)
+    server.port           (default 8765; 11434 after `cascade install --as-ollama`)
+    ollama_upstream       where the real Ollama runs when Cascade has its port (set by
+                          `cascade install --as-ollama`: http://127.0.0.1:11435)
     byok.base_url         OpenAI-compatible root, e.g. https://api.openai.com
     byok.model            e.g. gpt-4o-mini
     byok.api_key_env      env var holding the key       (default OPENAI_API_KEY)
@@ -85,7 +87,10 @@ _ACCELERATION_LAYERS = {"none": "NONE", "prompt_lookup": "LOOKAHEAD", "draft_mod
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         return {}
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    if config.get("ollama_upstream"):  # `cascade install --as-ollama` moved the real Ollama
+        os.environ["CASCADE_OLLAMA_URL"] = config["ollama_upstream"]
+    return config
 
 
 def save_config(config: dict) -> None:
@@ -457,18 +462,25 @@ def serve(
     idle_minutes: float = typer.Option(None, help="Free the models' RAM after this long without a request."),
     keep_listening: bool = typer.Option(False, help="After idle, unload the models but keep serving (reload on demand) "
                                                     "instead of exiting."),
+    lazy: bool = typer.Option(False, help="Listen at once; load the models on the first request (login auto-start)."),
 ) -> None:
     """Keep the models loaded for `cascade ask` and for Ollama / OpenAI clients (see `cascade start`)."""
-    from cli import warm_server
+    import threading
+
+    from cli import autostart, warm_server
+    from engine.execution.model_runner import ollama_url
 
     config = load_config()
     _, default_port, default_idle = _server_settings(config)
     port = port or default_port
+    if config.get("ollama_upstream"):  # Cascade owns Ollama's port; it runs the real Ollama itself
+        threading.Thread(target=autostart.start_ollama, args=(config["ollama_upstream"],), daemon=True).start()
     server = warm_server.WarmServer(lambda: build_pipeline(decision_logging=True), config_path=CONFIG_PATH,
                                     idle_seconds=(idle_minutes or default_idle) * 60, port=port,
-                                    keep_listening=keep_listening, model_name=config.get("model", "llama3.2"))
-    typer.echo(f"Cascade model server on 127.0.0.1:{port}, loading models...")
-    server.serve_forever(load_in_background=True)
+                                    keep_listening=keep_listening, model_name=config.get("model", "llama3.2"),
+                                    upstream=ollama_url(), lazy=lazy)
+    typer.echo(f"Cascade model server on 127.0.0.1:{port}, " + ("models load on the first request" if lazy else "loading models..."))
+    server.serve_forever(load_in_background=not lazy)
 
 
 @app.command()
@@ -489,12 +501,23 @@ def start() -> None:
         if not warm_server.wait_ready(port):
             typer.secho(f"The server did not come up; see {CONFIG_PATH.parent / 'server.log'}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
+    _print_usage(port)
+    typer.echo("Stop it with:  cascade stop")
+
+
+def _print_usage(port: int) -> None:
+    from cli import autostart
+
     typer.echo(f"Cascade is running on http://127.0.0.1:{port}\n")
     typer.echo("Use it from any tool, unchanged:")
-    typer.echo(f"  Ollama clients:  OLLAMA_HOST=127.0.0.1:{port} in that terminal or app, then e.g.  ollama run qwen2.5-coder")
-    typer.echo("                   (not system-wide: the Ollama app itself listens on OLLAMA_HOST)")
+    if port == autostart.OLLAMA_PORT:
+        typer.echo("  Ollama clients:  nothing to set -- Cascade is on Ollama's own port. e.g.  ollama run qwen2.5-coder")
+        typer.echo(f"                   (other models, pull and list go to the real Ollama on {autostart.MOVED_OLLAMA_URL})")
+    else:
+        typer.echo(f"  Ollama clients:  OLLAMA_HOST=127.0.0.1:{port} in that terminal or app, then e.g.  ollama run qwen2.5-coder")
+        typer.echo("                   (not system-wide: the Ollama app itself listens on OLLAMA_HOST;")
+        typer.echo("                   `cascade install --as-ollama` makes even this unnecessary)")
     typer.echo(f"  OpenAI clients:  base URL http://127.0.0.1:{port}/v1   (any API key)")
-    typer.echo("Stop it with:  cascade stop")
 
 
 @app.command()
@@ -504,6 +527,107 @@ def stop() -> None:
 
     port = _server_settings(load_config())[1]
     typer.echo("Stopped." if warm_server.stop(port) else "No model server running.")
+
+
+@app.command()
+def install(
+    as_ollama: bool = typer.Option(False, "--as-ollama", help="Take Ollama's port 11434, so `ollama run` and Ollama "
+                                                              "apps use Cascade with no setting; the real Ollama "
+                                                              "moves to 11435 and runs every other model."),
+) -> None:
+    """
+    Start Cascade whenever you log in. It loads no model until a program asks for one and
+    unloads them after `server.idle_minutes`, so an idle machine holds no model in RAM.
+    `cascade uninstall` undoes everything.
+    """
+    from cli import autostart, warm_server
+
+    config = load_config()
+    old_port = _server_settings(config)[1]
+    if as_ollama:
+        config["server"] = dict(config.get("server") or {}, port=autostart.OLLAMA_PORT)
+        config["ollama_upstream"] = autostart.MOVED_OLLAMA_URL
+    else:
+        if config.get("ollama_upstream"):  # was --as-ollama: give Ollama its port back
+            _give_ollama_its_port_back(config)
+    save_config(config)
+    load_config()  # applies ollama_upstream to this process
+    port = _server_settings(config)[1]
+    if old_port != port:
+        warm_server.stop(old_port)
+
+    where = autostart.install_entry()
+    typer.echo(f"Cascade will start at login ({where}).")
+    if as_ollama:
+        step = autostart.set_aside_ollama_autostart()
+        if step and step.startswith("moved"):
+            typer.echo(f"Ollama: {step}.")
+        elif step:
+            typer.secho(f"One manual step: {step}.", fg=typer.colors.YELLOW)
+        if autostart.server_kind(f"http://127.0.0.1:{port}") == "ollama":
+            if os.name == "nt":
+                ended = autostart.stop_ollama_app()
+                typer.echo(f"Stopped the running Ollama app ({ended} processes); Cascade restarts Ollama on "
+                           f"{autostart.MOVED_OLLAMA_URL}.")
+                _wait_port_free(port)
+            else:
+                typer.secho(f"Ollama is still running on port {port}; Cascade takes the port once it is stopped.",
+                            fg=typer.colors.YELLOW)
+                raise typer.Exit(1)
+    if warm_server.health(port) is None:
+        warm_server.spawn(port, _server_settings(config)[2], log_path=CONFIG_PATH.parent / "server.log",
+                          keep_listening=True, lazy=True)  # what the login entry runs, now
+        if not warm_server.wait_ready(port, timeout=60):
+            typer.secho(f"Cascade did not start; see {CONFIG_PATH.parent / 'server.log'}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+    _print_usage(port)
+    typer.echo("Undo with:  cascade uninstall")
+
+
+def _wait_port_free(port: int, timeout: float = 15.0) -> None:
+    import time
+
+    from cli import autostart
+
+    deadline = time.monotonic() + timeout
+    while autostart.server_kind(f"http://127.0.0.1:{port}") is not None and time.monotonic() < deadline:
+        time.sleep(0.5)
+
+
+def _give_ollama_its_port_back(config: dict) -> None:
+    from cli import autostart, warm_server
+
+    warm_server.stop(_server_settings(config)[1])
+    autostart.stop_started_ollama()
+    config.pop("ollama_upstream", None)
+    os.environ.pop("CASCADE_OLLAMA_URL", None)
+    server = config.get("server") or {}
+    if server.get("port") == autostart.OLLAMA_PORT:
+        server.pop("port")
+        if server:
+            config["server"] = server
+        else:
+            config.pop("server", None)
+    link = autostart.restore_ollama_autostart()
+    if link is not None:
+        _wait_port_free(autostart.OLLAMA_PORT)  # Cascade has released Ollama's port
+        autostart.start_ollama_app(link)
+        typer.echo("Ollama's login shortcut is back, and the Ollama app is running again.")
+
+
+@app.command()
+def uninstall() -> None:
+    """Stop starting Cascade at login, stop it now, and give Ollama its port back."""
+    from cli import autostart, warm_server
+
+    config = load_config()
+    removed = autostart.remove_entry()
+    if config.get("ollama_upstream"):
+        _give_ollama_its_port_back(config)
+        save_config(config)
+    else:
+        warm_server.stop(_server_settings(config)[1])
+    typer.echo("Cascade no longer starts at login and is stopped." if removed else "Cascade was not set to start at login.")
 
 
 @app.command()

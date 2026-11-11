@@ -22,6 +22,12 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.6.0 — install once, use plain `ollama`
+
+- `cascade install --as-ollama`: Cascade starts at login on Ollama's port; `ollama run` and Ollama
+  apps use it with no setting, other models pass through to the real Ollama.
+- Idle machine: 0.02 GB before the first request, 0.65 GB after the idle unload.
+
 ## 0.5.1 — smaller working memory
 
 - The 7B's compute buffer is smaller (flash attention, n_ubatch 256): -0.15 GB at 2k context,

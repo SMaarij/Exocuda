@@ -75,7 +75,35 @@ questions come back from the cache in well under one. The server exits after 10 
 (`server.idle_minutes`) and frees the RAM; `cascade stop` frees it at once,
 `cascade config set server.auto off` disables it.
 
-### Use Cascade from the tools you already have
+### Install once, then just use your usual commands
+
+```bash
+cascade install --as-ollama
+```
+
+Cascade now starts whenever you log in and sits on Ollama's own port (11434), so `ollama run`,
+Ollama-based apps and anything else that talks to Ollama use Cascade **with no setting at all**:
+
+```bash
+ollama run qwen2.5-coder "What is a hash table?"   # answered by Cascade: cache, routing, drafting, less RAM
+ollama run llama3.2:3b                              # any other model: passed to the real Ollama, unchanged
+ollama pull / list / rm / ps                        # passed to the real Ollama
+```
+
+The real Ollama moves to port 11435, started by Cascade. Cascade answers its configured model family
+(`cascade config set model ...`) and passes every other request through untouched. It loads no model
+until a program asks for one and unloads them after `server.idle_minutes` (default 10), so an idle
+machine holds nothing in RAM: measured 0.02 GB before the first request, 6.29 GB with the 7B, the
+0.5B and the embedder loaded, 0.65 GB after the idle unload (BENCHMARK_REPORT Addendum 16).
+
+On Windows `cascade install --as-ollama` also sets aside Ollama's own login shortcut and stops the
+running Ollama app; on macOS and Linux it tells you the one step that needs your consent (removing
+Ollama from Login Items, or `sudo systemctl disable --now ollama`). `cascade uninstall` removes
+the login entry, stops Cascade and its Ollama, puts Ollama's shortcut back and restarts the Ollama
+app. Plain `cascade install` (without `--as-ollama`) starts Cascade at login on port 8765 and leaves
+Ollama alone.
+
+### Use Cascade from the tools you already have, without installing
 
 ```bash
 cascade start
@@ -99,8 +127,8 @@ client.chat.completions.create(model="any", messages=[{"role": "user", "content"
 ```
 
 Set `OLLAMA_HOST` per terminal or app, not system-wide: the Ollama app itself listens on that
-address, and Cascade still uses the real Ollama (port 11434) to download model files. Whatever model
-a client names, Cascade answers with its configured models. After `server.idle_minutes` without a
+address. Cascade answers its configured model family (and names Ollama doesn't have, such as
+`gpt-4o` from an OpenAI tool); other Ollama models, pulls and listings go to the real Ollama. After `server.idle_minutes` without a
 request it unloads the models to free their RAM, stays reachable, and reloads them on the next
 request; `cascade stop` ends it.
 

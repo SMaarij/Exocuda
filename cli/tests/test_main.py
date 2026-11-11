@@ -419,3 +419,61 @@ def test_llama_cpp_detection_runs_unpatched() -> None:
 
     real = importlib.reload(cli_main)._llama_cpp_available  # not the autouse fixture's stub
     assert isinstance(real(), bool)
+
+
+# ---- cascade install / uninstall (login entry, Ollama's port) ---------------------------
+
+
+@pytest.fixture
+def fake_autostart(monkeypatch: pytest.MonkeyPatch):
+    """Record what install/uninstall would do to the machine, without doing it."""
+    from cli import autostart, warm_server
+
+    done: list = []
+    monkeypatch.setattr(autostart, "install_entry", lambda: done.append("entry") or "the login items")
+    monkeypatch.setattr(autostart, "remove_entry", lambda: done.append("no entry") or True)
+    monkeypatch.setattr(autostart, "set_aside_ollama_autostart",
+                        lambda: done.append("ollama aside") or "moved Ollama's login shortcut")
+    monkeypatch.setattr(autostart, "restore_ollama_autostart", lambda: done.append("ollama back") or None)
+    monkeypatch.setattr(autostart, "stop_started_ollama", lambda: done.append("moved ollama stopped") or True)
+    monkeypatch.setattr(autostart, "server_kind", lambda url: None)
+    monkeypatch.setattr(warm_server, "stop", lambda port: done.append(f"stop {port}") or True)
+    monkeypatch.setattr(warm_server, "spawn", lambda port, idle, **kw: done.append(
+        f"spawn {port} lazy={kw.get('lazy')} keep={kw.get('keep_listening')}"))
+    monkeypatch.setattr(warm_server, "wait_ready", lambda port, timeout=0: True)
+    monkeypatch.delenv("CASCADE_OLLAMA_URL", raising=False)
+    yield done
+    import os
+    os.environ.pop("CASCADE_OLLAMA_URL", None)
+
+
+def test_install_registers_login_start_and_starts_lazily(fake_autostart) -> None:
+    result = runner.invoke(app, ["install"])
+    assert result.exit_code == 0, result.output
+    assert fake_autostart == ["entry", "spawn 8765 lazy=True keep=True"]
+    assert "OLLAMA_HOST=127.0.0.1:8765" in result.output and "cascade uninstall" in result.output
+
+
+def test_install_as_ollama_takes_port_11434_and_moves_ollama(fake_autostart) -> None:
+    import json
+    import os
+
+    result = runner.invoke(app, ["install", "--as-ollama"])
+    assert result.exit_code == 0, result.output
+    config = json.loads(cli_main.CONFIG_PATH.read_text())
+    assert config["server"]["port"] == 11434 and config["ollama_upstream"] == "http://127.0.0.1:11435"
+    assert os.environ["CASCADE_OLLAMA_URL"] == "http://127.0.0.1:11435"
+    assert fake_autostart == ["stop 8765", "entry", "ollama aside", "spawn 11434 lazy=True keep=True"]
+    assert "nothing to set" in result.output
+
+
+def test_uninstall_gives_ollama_its_port_back(fake_autostart) -> None:
+    import json
+
+    runner.invoke(app, ["config", "set", "model", "qwen2.5-coder"])
+    runner.invoke(app, ["install", "--as-ollama"])
+    fake_autostart.clear()
+    result = runner.invoke(app, ["uninstall"])
+    assert result.exit_code == 0, result.output
+    assert fake_autostart == ["no entry", "stop 11434", "moved ollama stopped", "ollama back"]
+    assert json.loads(cli_main.CONFIG_PATH.read_text()) == {"model": "qwen2.5-coder"}

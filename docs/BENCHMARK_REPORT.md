@@ -717,3 +717,27 @@ today; the comparison is the point.) The runner now loads every model with `flas
 n_ubatch=256`: **-0.15 GB at n_ctx 2048, -0.40 GB at 8192** for the 7B, more at longer contexts and for
 larger models, with identical output. Results: `docs/benchmark/memory_options_7b_*.json`,
 `docs/benchmark/working_memory_ab_*.json`.
+
+## Addendum 16 — installed once, used through plain `ollama`; RAM while idle, 2026-11-11
+
+`cascade install` registers a login entry that runs the model server with `keep_listening` and
+`lazy`; `--as-ollama` puts it on Ollama's port 11434 and runs the real Ollama on 11435. Requests for the
+configured family are answered by Cascade, everything else (other models, pull, list, rm, ps,
+embeddings) is streamed through to the real Ollama. Checked on the 4-core laptop with the real Ollama
+CLI 0.40.15 against the same lazy server (on a spare port, since adding a login entry was not done in
+the automated session; the entry and the port takeover are covered by unit tests):
+
+| Step | Result |
+|---|---|
+| `ollama list` | real Ollama's 13 models, 1.6 s |
+| `ollama run llama3.2:1b-instruct-q4_K_M ...` | answered by the real Ollama; `ollama ps` lists it next to Cascade's model |
+| first `ollama run qwen2.5-coder ...` | answered by Cascade, 76 s (loads 7B + 0.5B + embedder from disk) |
+| second question | answered by Cascade in under 1 s |
+
+Cascade server process, committed private bytes (working set in brackets):
+
+| State | Committed |
+|---|---:|
+| logged in, nothing asked yet | **0.02 GB** (0.03 GB) |
+| models loaded (7B + 0.5B + embedder) | 6.29 GB (5.42 GB) |
+| after `server.idle_minutes` (1 min in this test) | **0.65 GB** (0.19 GB) |

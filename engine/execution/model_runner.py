@@ -29,6 +29,14 @@ from typing import Optional, Protocol, runtime_checkable
 # stalls ~2s per request before falling back, since Ollama listens on IPv4.
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 
+
+def ollama_url() -> str:
+    """Where the real Ollama listens. `cascade install --as-ollama` gives Ollama's port to
+    Cascade and moves Ollama to another one, recorded in CASCADE_OLLAMA_URL."""
+    import os
+
+    return os.environ.get("CASCADE_OLLAMA_URL") or DEFAULT_OLLAMA_URL
+
 # What a runner actually did for one generation. Reported by the runner,
 # never assumed by the caller -- see AccelerationEngine.
 ACCEL_NONE = "none"
@@ -118,12 +126,12 @@ class OllamaReferenceModelRunner:
 
     def __init__(
         self,
-        api_base_url: str = DEFAULT_OLLAMA_URL,
+        api_base_url: Optional[str] = None,
         keep_alive: str = "10m",
         request_timeout_s: float = 300.0,
         pull_timeout_s: float = 1800.0,
     ) -> None:
-        self._api_base_url = api_base_url.rstrip("/")
+        self._api_base_url = (api_base_url or ollama_url()).rstrip("/")
         self._keep_alive = keep_alive
         self._request_timeout_s = request_timeout_s
         self._pull_timeout_s = pull_timeout_s

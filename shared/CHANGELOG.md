@@ -478,6 +478,22 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.6.0] -- 2026-11-11 -- install once, use plain `ollama`
+
+### Added
+- `cascade install [--as-ollama]` / `cascade uninstall` (`cli/autostart.py`): start Cascade at login
+  (Windows HKCU Run, macOS LaunchAgent, Linux systemd user unit or XDG autostart). `--as-ollama`
+  takes port 11434, runs the real Ollama on 11435 (`ollama_upstream`), and on Windows sets aside
+  Ollama's login shortcut (restored by uninstall).
+- `cascade serve --lazy`: listen at once, load models on the first request.
+- `cli/warm_server.py`: requests for other Ollama models, `/api/pull|push|create|copy|delete|embed*`
+  and unknown paths are streamed through to the real Ollama; `/api/tags`, `/api/version` come from
+  it and `/api/ps` merges both. `X-Cascade` header on every reply; a proxy loop answers 508.
+
+### Changed
+- `engine/execution/model_runner.py`: Ollama URL from `CASCADE_OLLAMA_URL` (`ollama_url()`),
+  default unchanged. No seam changes. BENCHMARK_REPORT Addendum 16.
+
 ## [0.5.1] -- 2026-11-11 -- smaller working memory
 
 ### Changed

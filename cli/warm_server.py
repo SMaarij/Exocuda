@@ -16,13 +16,20 @@ no change to the tool:
     OpenAI API   /v1/chat/completions /v1/models
                  -> base URL http://127.0.0.1:8765/v1, any API key
 
-Whatever model a client names, Cascade answers with its configured models
-(`cascade config show`) and echoes the requested name back.
+Requests for the configured model family (or for a name no Ollama model has, e.g.
+"gpt-4o" from an OpenAI tool) are answered by Cascade, which echoes the requested
+name back. Everything else -- other Ollama models, `ollama pull`, `ollama list`,
+embeddings -- is passed through unchanged to the real Ollama (`upstream`), so
+Cascade can sit on Ollama's own port 11434 (`cascade install --as-ollama`) and
+plain `ollama run` works with no setting at all.
 
 Idle behaviour: started by `cascade ask`, the server exits after
 `server.idle_minutes` without a request. Started with `cascade start`
 (keep_listening), it stays reachable and only unloads the models, freeing
 their RAM; the next request loads them again.
+
+With `lazy` (login auto-start) the server listens at once and loads the models
+on the first request, so an idle machine holds no model in RAM.
 
 It binds to 127.0.0.1 only and runs one request at a time (one model, one
 KV cache). Nothing here talks to the network beyond localhost (NFR-05).
@@ -32,6 +39,7 @@ Standard library only.
 from __future__ import annotations
 
 import gc
+import http.client
 import json
 import os
 import subprocess
@@ -40,6 +48,7 @@ import threading
 import time
 import traceback
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -51,6 +60,10 @@ DEFAULT_PORT = 8765
 DEFAULT_IDLE_MINUTES = 10
 HOST = "127.0.0.1"
 OLLAMA_API_VERSION = "0.40.15"  # what /api/version reports; Ollama clients only compare it
+CASCADE_HEADER = "X-Cascade"    # on every reply: tells a proxy loop (upstream = ourselves) apart
+# Ollama endpoints Cascade never answers itself: model management and embeddings.
+PASSTHROUGH_PATHS = ("/api/pull", "/api/push", "/api/create", "/api/copy", "/api/delete", "/api/embed",
+                     "/api/embeddings", "/api/blobs")
 
 
 class WarmServer:
@@ -59,8 +72,13 @@ class WarmServer:
 
     def __init__(self, build: Callable[[], object], config_path: Optional[Path] = None,
                  idle_seconds: float = DEFAULT_IDLE_MINUTES * 60, port: int = DEFAULT_PORT,
-                 keep_listening: bool = False, model_name: str = "cascade") -> None:
+                 keep_listening: bool = False, model_name: str = "cascade",
+                 upstream: Optional[str] = None, lazy: bool = False) -> None:
         self._build = build
+        # The real Ollama, for everything Cascade does not answer itself. Never our own port.
+        self.upstream = upstream.rstrip("/") if upstream and urllib.parse.urlsplit(upstream).port != port else None
+        self._upstream_models: tuple[float, set] = (-1e9, set())
+        self.lazy = lazy
         self._config_path = config_path
         self._idle_seconds = idle_seconds
         self._keep_listening = keep_listening
@@ -75,13 +93,42 @@ class WarmServer:
         self._pipeline = None
         self._config_mtime = self._mtime()
         self._last_activity = time.monotonic()
-        self.ready = False   # accepting questions (initial load done)
+        self.ready = lazy    # accepting questions (initial load done, or loads on demand)
         self.httpd = ThreadingHTTPServer((HOST, port), self._handler())
         self.httpd.handle_error = self._handle_error
 
     @property
     def loaded(self) -> bool:
         return self._pipeline is not None
+
+    # ---- which requests Cascade answers --------------------------------------------
+
+    def upstream_models(self) -> set:
+        """Model names the real Ollama has (cached 30 s); empty when it is unreachable."""
+        stamp, names = self._upstream_models
+        if self.upstream and time.monotonic() - stamp > 30:
+            try:
+                with urllib.request.urlopen(self.upstream + "/api/tags", timeout=2) as resp:
+                    names = {m.get("name", "") for m in json.loads(resp.read()).get("models", [])}
+            except (OSError, ValueError):
+                names = set()
+            self._upstream_models = (time.monotonic(), names)
+        return names
+
+    def answers(self, model: Optional[str], ollama_api: bool = False) -> bool:
+        """True when Cascade answers a request naming `model`; False to pass it to the real Ollama.
+        Cascade answers its own model family. Other names go to Ollama on the Ollama API (so a
+        missing model gets Ollama's own "pull it" reply); on the OpenAI API only names Ollama has
+        do, and anything else ("gpt-4o", "any") is answered by Cascade."""
+        if not model or not self.upstream:
+            return True
+        base = model.split(":", 1)[0].lower()
+        if base in ("cascade", self.model_name.split(":", 1)[0].lower()):
+            return True
+        if ollama_api:
+            return False
+        known = self.upstream_models()
+        return not (model in known or f"{model}:latest" in known)
 
     def _mtime(self) -> Optional[float]:
         try:
@@ -174,6 +221,56 @@ class WarmServer:
             def log_message(self, *args) -> None:  # quiet
                 pass
 
+            def end_headers(self) -> None:
+                self.send_header(CASCADE_HEADER, "1")
+                super().end_headers()
+
+            def _proxy(self, body: Optional[bytes] = None) -> None:
+                """Pass this request to the real Ollama and stream its reply back unchanged."""
+                if not server.upstream:
+                    self._reply(404, {"error": "not found"})
+                    return
+                url = urllib.parse.urlsplit(server.upstream)
+                headers = {k: v for k, v in self.headers.items()
+                           if k.lower() in ("content-type", "accept", "authorization", "user-agent")}
+                try:
+                    conn = http.client.HTTPConnection(url.hostname, url.port or 80, timeout=3600)
+                    conn.request(self.command, self.path, body=body, headers=headers)
+                    resp = conn.getresponse()
+                except OSError as exc:
+                    self._reply(502, {"error": f"Ollama is not reachable at {server.upstream} ({exc})"})
+                    return
+                if resp.getheader(CASCADE_HEADER):  # upstream is Cascade itself
+                    resp.close()
+                    self._reply(508, {"error": f"upstream {server.upstream} is Cascade, not Ollama"})
+                    return
+                self.send_response(resp.status)
+                for name in ("Content-Type", "Content-Length"):
+                    if resp.getheader(name):
+                        self.send_header(name, resp.getheader(name))
+                if not resp.getheader("Content-Length"):
+                    self.send_header("Connection", "close")
+                    self.close_connection = True
+                self.end_headers()
+                while True:  # chunk by chunk, so `ollama pull` progress streams through
+                    chunk = resp.read1(65536)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                conn.close()
+
+            def _upstream_json(self, path: str, raw: Optional[bytes] = None) -> Optional[dict]:
+                if not server.upstream:
+                    return None
+                try:
+                    req = urllib.request.Request(server.upstream + path, data=raw,
+                                                 headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        return None if resp.headers.get(CASCADE_HEADER) else json.loads(resp.read())
+                except (OSError, ValueError):
+                    return None
+
             def _reply(self, status: int, body: dict) -> None:
                 data = json.dumps(body).encode()
                 self.send_response(status)
@@ -200,29 +297,43 @@ class WarmServer:
                 elif path in ("", "/"):
                     self._reply(200, {"status": "Cascade is running"})
                 elif path == "/api/version":
-                    self._reply(200, {"version": OLLAMA_API_VERSION})
+                    self._reply(200, self._upstream_json("/api/version") or {"version": OLLAMA_API_VERSION})
                 elif path == "/api/tags":
-                    self._reply(200, {"models": [_ollama_model_entry(server.model_name)]})
+                    self._reply(200, self._upstream_json("/api/tags")
+                                or {"models": [_ollama_model_entry(server.model_name)]})
                 elif path == "/api/ps":
-                    self._reply(200, {"models": [_ollama_model_entry(server.model_name)] if server.loaded else []})
+                    ours = [_ollama_model_entry(server.model_name)] if server.loaded else []
+                    self._reply(200, {"models": ours + (self._upstream_json("/api/ps") or {}).get("models", [])})
                 elif path in ("/v1/models", "/models"):
                     self._reply(200, {"object": "list", "data": [
                         {"id": server.model_name, "object": "model", "created": 0, "owned_by": "cascade"}]})
                 else:
-                    self._reply(404, {"error": "not found"})
+                    self._proxy()
 
             def do_HEAD(self) -> None:  # `ollama` probes the server with HEAD /
                 self.send_response(200)
                 self.end_headers()
 
+            def do_DELETE(self) -> None:  # `ollama rm`
+                length = int(self.headers.get("Content-Length", 0))
+                self._proxy(self.rfile.read(length) if length else None)
+
             def do_POST(self) -> None:
                 length = int(self.headers.get("Content-Length", 0))
+                raw = self.rfile.read(length) if length else b""
+                path = self.path.split("?", 1)[0].rstrip("/")
+                if server.upstream and path.startswith(PASSTHROUGH_PATHS):
+                    self._proxy(raw)
+                    return
                 try:
-                    body = json.loads(self.rfile.read(length) or b"{}")
+                    body = json.loads(raw or b"{}")
                 except json.JSONDecodeError:
                     self._reply(400, {"error": "invalid JSON"})
                     return
-                path = self.path.split("?", 1)[0].rstrip("/")
+                if path in ("/api/chat", "/api/generate", "/v1/chat/completions", "/chat/completions",
+                            "/v1/completions", "/v1/embeddings") and not server.answers(body.get("model"), ollama_api=path.startswith("/api/")):
+                    self._proxy(raw)  # another Ollama model: the real Ollama runs it
+                    return
                 try:
                     if path == "/shutdown":
                         self._reply(200, {"stopping": True})
@@ -239,11 +350,16 @@ class WarmServer:
                     elif path == "/api/generate":
                         self._ollama_generate(body)
                     elif path == "/api/show":
-                        self._reply(200, _ollama_show(body.get("model") or body.get("name") or server.model_name))
+                        name = body.get("model") or body.get("name") or server.model_name
+                        if not server.answers(name, ollama_api=True):
+                            self._proxy(raw)  # Ollama's own reply; "not found" makes `ollama run` pull it
+                            return
+                        real = None if name.split(":", 1)[0].lower() == "cascade" else self._upstream_json("/api/show", raw)
+                        self._reply(200, real or _ollama_show(name))
                     elif path == "/api/pull":
-                        self._reply(200, {"status": "success"})  # Cascade manages its own models
+                        self._reply(200, {"status": "success"})  # no Ollama to pass it to
                     else:
-                        self._reply(404, {"error": "not found"})
+                        self._proxy(raw)
                 except Exception as exc:  # report, keep serving
                     traceback.print_exc()  # to ~/.cascade/server.log
                     self._reply(500, {"error": f"{type(exc).__name__}: {exc}"})
@@ -392,11 +508,13 @@ def stop(port: int = DEFAULT_PORT) -> bool:
 
 
 def spawn(port: int = DEFAULT_PORT, idle_minutes: float = DEFAULT_IDLE_MINUTES, log_path: Optional[Path] = None,
-          keep_listening: bool = False) -> None:
+          keep_listening: bool = False, lazy: bool = False) -> None:
     """Start `cascade serve` detached from this process."""
     cmd = [sys.executable, "-m", "cli.main", "serve", "--port", str(port), "--idle-minutes", str(idle_minutes)]
     if keep_listening:
         cmd.append("--keep-listening")
+    if lazy:
+        cmd.append("--lazy")
     out = open(log_path, "ab") if log_path else subprocess.DEVNULL
     kwargs: dict = {"stdin": subprocess.DEVNULL, "stdout": out, "stderr": out, "close_fds": True}
     if os.name == "nt":
