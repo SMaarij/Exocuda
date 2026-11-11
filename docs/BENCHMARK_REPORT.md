@@ -682,3 +682,38 @@ replaced by a one-row buffer at load (verify_greedy still re-creates a full one 
 -0.58 GB for the 7B and the 0.5B. The 7B alone now commits slightly less than Ollama's process, and
 the whole Cascade server holds 0.4 GB more working set than Ollama with the 7B alone while also
 holding the small model, the embedder and the cache.
+
+## Addendum 15 — a smaller working memory for the 7B, 2026-11-11
+
+On top of the fixed weights, a llama.cpp context holds the KV cache (grows with n_ctx) and a compute
+buffer (grows with n_ubatch). `scripts/benchmark_memory_options.py` runs each option in its own process
+(400- or 3000-token prompt, 64 greedy tokens) and reports committed private memory, which unlike the
+Windows working set is not trimmed by the OS. qwen2.5-coder 7B Q4_K_M, 4-core laptop:
+
+| Option | Committed, n_ctx 2048 | Committed, n_ctx 8192 (3000-token prompt) | Prompt time, 8192 | Same 64 tokens |
+|---|---:|---:|---:|---|
+| base (f16 KV, n_ubatch 512) | 5.15 GB | 5.74 GB | 221–229 s | – |
+| flash attention | – | 5.49 GB | 206 s | yes |
+| n_ubatch 256 | 5.00 GB | 5.46 GB | 189 s | yes |
+| **flash attention + n_ubatch 256** | **5.00 GB** | **5.34 GB** | 172–191 s | yes |
+| + q8_0 KV cache | 4.94 GB | 5.13 GB | 307 s | yes |
+| q8_0 K cache only | – | 5.63 GB | 257 s | yes |
+
+Speed on this machine varied a lot between runs today (the same 400-token prompt took 20–30 s), so
+every option was repeated; flash attention + n_ubatch 256 was never slower than base. A q8_0 KV cache
+saves another 0.2 GB but costs 12–44% prompt speed on this CPU, so it stays off.
+
+Speculative decoding with the new settings, run back to back against the old ones on the same day
+(`benchmark_acceleration.py`, confidence drafting p_min 0.75 k 16, greedy lossless check):
+
+| Settings | Decode speed-up | Violations |
+|---|---:|---:|
+| old | 1.36x | 0 |
+| **new** (flash attention + n_ubatch 256) | **1.38x** | 0 |
+| old, again | 1.35x | 0 |
+
+(The absolute speed-ups are below earlier days' 1.39–1.61x because the machine was slower overall
+today; the comparison is the point.) The runner now loads every model with `flash_attn=True,
+n_ubatch=256`: **-0.15 GB at n_ctx 2048, -0.40 GB at 8192** for the 7B, more at longer contexts and for
+larger models, with identical output. Results: `docs/benchmark/memory_options_7b_*.json`,
+`docs/benchmark/working_memory_ab_*.json`.

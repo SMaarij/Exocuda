@@ -478,6 +478,16 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.5.1] -- 2026-11-11 -- smaller working memory
+
+### Changed
+- `engine/execution/llamacpp_runner.py`: models load with flash attention and n_ubatch 256
+  (`WORKING_MEMORY_SETTINGS`): smaller compute buffer, same tokens, no slowdown; 7B -0.15 GB committed
+  at n_ctx 2048, -0.40 GB at 8192. KV cache stays f16 (q8_0 slows prompts 12-44% on CPU).
+  `CASCADE_LLAMA_SETTINGS` (JSON) overrides it for measurements. No seam changes.
+- `scripts/benchmark_memory_options.py`: per-option memory/speed/token-match benchmark.
+  BENCHMARK_REPORT Addendum 15.
+
 ## [0.5.0] -- 2026-11-10 -- drop-in for Ollama/OpenAI clients; fastest setup by default
 
 ### Added

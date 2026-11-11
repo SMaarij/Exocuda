@@ -413,6 +413,16 @@ def test_default_factory_loads_without_mmap_unless_asked(monkeypatch) -> None:
     assert [c["use_mmap"] for c in calls] == [False, True]
 
 
+def test_default_factory_uses_the_low_memory_working_settings(monkeypatch) -> None:
+    import engine.execution.llamacpp_runner as lr
+
+    calls = []
+    monkeypatch.setattr(lr, "Llama", lambda **kwargs: calls.append(kwargs) or object())
+    lr._default_llama_factory(512, None)("model.gguf", False)
+    assert (calls[0]["flash_attn"], calls[0]["n_ubatch"]) == (True, 256)
+    assert "type_k" not in calls[0]  # f16 KV cache: q8_0 costs prompt speed on CPU
+
+
 def test_default_factory_shares_one_plain_instance_per_file(monkeypatch) -> None:
     """The small backend's model and the same file as a draft are one instance in RAM."""
     import engine.execution.llamacpp_runner as lr

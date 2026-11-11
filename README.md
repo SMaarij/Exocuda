@@ -104,6 +104,9 @@ a client names, Cascade answers with its configured models. After `server.idle_m
 request it unloads the models to free their RAM, stays reachable, and reloads them on the next
 request; `cascade stop` ends it.
 
+Models load with flash attention and a smaller compute batch, which saves 0.15 GB at 2k context and 0.40 GB
+at 8k for the 7B with identical output (Addendum 15).
+
 Measured on a 4-core laptop: the 7B through Ollama alone holds 5.06 GB; Cascade holds 5.47 GB for the
 7B **plus** the 0.5B model and the embedding model, and answers repeated questions in 0.7 s and easy
 ones in about 2 s (BENCHMARK_REPORT Addendum 14).

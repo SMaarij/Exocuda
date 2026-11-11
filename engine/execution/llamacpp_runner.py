@@ -300,6 +300,13 @@ def _install_windowed_eval(llm: Any, window: int = OUTPUT_WINDOW) -> None:
 _SHARED_MODELS: "weakref.WeakValueDictionary[tuple, Any]" = weakref.WeakValueDictionary()
 
 
+WORKING_MEMORY_SETTINGS = {"flash_attn": True, "n_ubatch": 256}
+if os.environ.get("CASCADE_LLAMA_SETTINGS"):  # JSON override, for measuring alternatives
+    import json as _json
+
+    WORKING_MEMORY_SETTINGS = _json.loads(os.environ["CASCADE_LLAMA_SETTINGS"])
+
+
 def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool = False) -> LlamaFactory:
     def make(path: str, needs_all_logits: bool) -> Any:
         key = (os.path.realpath(path), n_ctx, n_threads, use_mmap)
@@ -315,8 +322,12 @@ def _default_llama_factory(n_ctx: int, n_threads: Optional[int], use_mmap: bool 
         # CPU-friendly layout, so with the file also memory-mapped the
         # weights sat in RAM twice (qwen2.5-coder 7B Q4_K_M: 7.2 GB resident
         # with mmap, 4.6 GB without -- BENCHMARK_REPORT Addendum 7).
+        # flash_attn + n_ubatch 256: smaller compute buffer, same output, no slowdown
+        # (7B: -0.15 GB committed at n_ctx 2048, -0.40 GB at 8192; prompt and decode speed
+        # within run-to-run noise; identical greedy tokens -- BENCHMARK_REPORT Addendum 15).
+        # The KV cache stays f16: q8_0 saves another ~0.2 GB but costs 12-44% prompt speed.
         llm = Llama(model_path=path, n_ctx=n_ctx, n_threads=n_threads, use_mmap=use_mmap,
-                    verbose=False, draft_model=placeholder)
+                    verbose=False, draft_model=placeholder, **WORKING_MEMORY_SETTINGS)
         # llama-cpp-python allocates a float32 logits buffer of n_ctx x n_vocab rows when
         # all logits are kept (qwen2.5 7B: 2048 x 152k = 1.24 GB) and n_batch rows
         # otherwise (0.31 GB). Neither the windowed eval nor plain decoding writes it
