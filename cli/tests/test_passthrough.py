@@ -221,14 +221,22 @@ def test_login_entry_runs_the_lazy_server_without_a_console() -> None:
 
 @pytest.mark.skipif(os.name != "nt", reason="HKCU Run key")
 def test_windows_login_entry_round_trip(monkeypatch) -> None:
-    monkeypatch.setattr(autostart, "APP_NAME", f"CascadeTest{os.getpid()}")
+    import winreg
+
+    test_key = rf"Software\CascadeTest{os.getpid()}"  # a throwaway key, never the real login list
+    monkeypatch.setattr(autostart, "RUN_KEY", test_key + r"\Run")
     try:
         assert not autostart.entry_installed()
-        autostart.install_entry(["python", "x.py", "run"])
+        autostart.install_entry(["python", "x.py", "run"])  # creates the key when it is missing
         assert autostart.entry_installed()
-    finally:
         assert autostart.remove_entry()
-    assert not autostart.entry_installed()
+        assert not autostart.entry_installed() and not autostart.remove_entry()
+    finally:
+        for key in (test_key + r"\Run", test_key):
+            try:
+                winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+            except FileNotFoundError:
+                pass
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Ollama's Startup shortcut is Windows-only")
