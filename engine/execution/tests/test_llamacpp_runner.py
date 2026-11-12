@@ -625,3 +625,104 @@ def test_runner_is_self_regulating_only_with_confidence_drafting() -> None:
     assert not confident.self_regulating
     confident.set_acceleration(ACCEL_DRAFT_MODEL)
     assert confident.self_regulating
+
+
+# ---- cost-aware draft length ------------------------------------------------------------
+
+
+def test_cost_aware_draft_rounds_up_to_a_cheap_batch() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    # p_min 0.75 would stop after [2, 3] (a 3-token batch, 1.74x); a 4-token batch costs
+    # only 1.55x, so the 50%-sure third token is worth verifying too.
+    llm = _ConfidenceLlm({1: 0.95, 2: 0.9, 3: 0.5})
+    assert list(ModelDraft(llm, k=16, verify_costs=CPU_VERIFY_COSTS)(np.array([0, 1], dtype=np.intc))) == [2, 3, 4]
+
+
+def test_cost_aware_draft_skips_drafting_when_verifying_costs_as_much_as_decoding() -> None:
+    linear = [0.0] + [float(n) for n in range(1, 18)]  # no batching benefit at all
+    llm = _ConfidenceLlm({}, vocab=64)
+    assert len(ModelDraft(llm, k=16, verify_costs=linear)(np.array([0, 1], dtype=np.intc))) == 0
+
+
+def test_cost_aware_draft_drafts_long_when_batches_are_almost_free() -> None:
+    flat = [0.0] + [1.0 + 0.01 * n for n in range(1, 18)]  # GPU-like
+    llm = _ConfidenceLlm({}, vocab=64)  # 90% sure of every token; drafting itself free
+    assert len(ModelDraft(llm, k=16, verify_costs=flat, draft_cost=0.0)(np.array([0, 1], dtype=np.intc))) == 16
+
+
+def test_cost_aware_draft_stops_drafting_once_no_longer_draft_can_win() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    llm = _ConfidenceLlm({t: 0.2 for t in range(64)}, vocab=64)
+    draft = ModelDraft(llm, k=16, verify_costs=CPU_VERIFY_COSTS)
+    assert len(draft(np.array([0, 1], dtype=np.intc))) == 0
+    assert len(llm.evaluated) == 1  # only the sync eval: no wasted draft steps
+
+
+def test_cost_aware_draft_needs_a_cost_for_every_batch_size() -> None:
+    with pytest.raises(ValueError):
+        ModelDraft(_ConfidenceLlm({}), k=16, verify_costs=[0.0, 1.0, 1.3])
+
+
+def test_runner_passes_verify_costs_to_the_draft() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    runner, built = _runner(draft_verify_costs=CPU_VERIFY_COSTS, max_draft_tokens=16, draft_tokens=16)
+    runner.set_acceleration(ACCEL_DRAFT_MODEL)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    assert built[0].draft_model._draft._verify_costs == list(CPU_VERIFY_COSTS)
+    assert runner.self_regulating
+
+
+def test_auto_verify_costs_fall_back_to_the_reference_table_without_a_real_model() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    runner, built = _runner(draft_verify_costs="auto", max_draft_tokens=16, draft_tokens=16)
+    runner.set_acceleration(ACCEL_DRAFT_MODEL)
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    assert built[0].draft_model._draft._verify_costs == list(CPU_VERIFY_COSTS)
+
+
+class _TimedLlm:
+    """Target fake whose eval of n tokens takes 1 + 0.1 n ticks of `clock`, with llama-cpp-python's KV API."""
+
+    def __init__(self) -> None:
+        self.clock = 0.0
+        self.n_tokens = 0
+        self.evals = 0
+        outer = self
+
+        class Ctx:
+            def kv_cache_clear(self) -> None:
+                outer.n_tokens = 0
+
+            def kv_cache_seq_rm(self, seq, start, end) -> None:
+                pass
+
+        self._ctx = Ctx()
+
+    def tokenize(self, text: bytes, add_bos: bool = True) -> list[int]:
+        return list(range(len(text.split())))
+
+    def eval(self, tokens) -> None:
+        self.evals += 1
+        self.n_tokens += len(tokens)
+        self.clock += 1.0 + 0.1 * len(tokens)
+
+
+def test_verify_costs_are_measured_once_per_model_and_machine(tmp_path, monkeypatch) -> None:
+    llm = _TimedLlm()
+    monkeypatch.setattr(llamacpp_runner.time, "perf_counter", lambda: llm.clock)
+    model = tmp_path / "model.gguf"
+    model.write_bytes(b"x" * 10)
+    cache = tmp_path / "verify_costs.json"
+    costs = llamacpp_runner.verify_costs_for(llm, str(model), 5, cache_path=cache)
+    assert len(costs) == 6 and costs[0] == 0.0 and costs[1] == 1.0
+    assert costs[5] == round(1.5 / 1.1, 3) and llm.n_tokens == 0  # context left empty for the next prompt
+    evals = llm.evals
+    assert llamacpp_runner.verify_costs_for(llm, str(model), 5, cache_path=cache) == costs
+    assert llm.evals == evals  # read from the cache, not measured again
+    model.write_bytes(b"x" * 20)  # a different model file: measured afresh
+    llamacpp_runner.verify_costs_for(llm, str(model), 5, cache_path=cache)
+    assert llm.evals > evals

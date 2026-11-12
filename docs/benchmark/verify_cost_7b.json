@@ -1,0 +1,46 @@
+{
+  "note": "one target eval of N tokens after a 300-token prompt, median of 5; scripts/benchmark_verify_cost.py; 4-core laptop CPU",
+  "coarse": {
+    "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "settings": {
+      "flash_attn": true,
+      "n_ubatch": 256
+    },
+    "ms": {
+      "1": 246.9,
+      "2": 335.4,
+      "3": 428.6,
+      "4": 392.3,
+      "5": 462.4,
+      "6": 563.2,
+      "7": 661.3,
+      "8": 741.3,
+      "9": 824.7,
+      "12": 934.5,
+      "16": 980.3,
+      "17": 1259.1
+    }
+  },
+  "fine": {
+    "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "settings": {
+      "flash_attn": true,
+      "n_ubatch": 256
+    },
+    "ms": {
+      "1": 255.5,
+      "4": 382.3,
+      "10": 892.7,
+      "11": 954.6,
+      "12": 911.5,
+      "13": 997.3,
+      "14": 1110.8,
+      "15": 1174.6,
+      "16": 1003.3,
+      "20": 1508.6,
+      "24": 1847.7,
+      "32": 2395.1,
+      "33": 2335.3
+    }
+  }
+}

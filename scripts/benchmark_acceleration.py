@@ -85,6 +85,12 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
             settings["lookup_tokens" if mode == "prompt_lookup" else "draft_tokens"] = int(option[2:])
         elif option.startswith("pause="):
             settings["max_draft_pause"] = int(option[6:])
+        elif option == "costauto":  # cost-aware, this machine's measured table (the CLI default)
+            settings["draft_verify_costs"] = "auto"
+        elif option == "cost":  # cost-aware draft length, CPU cost table
+            from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+            settings["draft_verify_costs"] = CPU_VERIFY_COSTS
         elif option.startswith("pmin="):
             settings["draft_p_min"] = float(option[5:])
         elif option.startswith("draft="):

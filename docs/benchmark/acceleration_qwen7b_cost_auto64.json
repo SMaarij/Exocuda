@@ -1,0 +1,555 @@
+{
+  "run_at": "2026-11-12T06:37:24.038798+00:00",
+  "machine": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel"
+  },
+  "model": "qwen2.5-coder:7b-instruct-q4_K_M",
+  "draft": "qwen2.5:0.5b-instruct",
+  "max_tokens": 128,
+  "draft_tokens": 4,
+  "lookup_tokens": 10,
+  "repeats": 2,
+  "use_mmap": false,
+  "runner": "llama-cpp-python (CPU build)",
+  "summary": {
+    "none": {
+      "grounded": {
+        "mean_decode_tok_s": 4.044,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 189.2,
+        "wall_speedup_vs_plain": 1.0,
+        "decode_speedup_per_round": [
+          1.0,
+          1.0
+        ],
+        "peak_rss_gb": 4.611,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "6/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 616
+      },
+      "open": {
+        "mean_decode_tok_s": 4.078,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 138.2,
+        "wall_speedup_vs_plain": 1.0,
+        "decode_speedup_per_round": [
+          1.0,
+          1.0
+        ],
+        "peak_rss_gb": 4.617,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "6/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 526
+      },
+      "all": {
+        "mean_decode_tok_s": 4.061,
+        "decode_speedup_vs_plain": 1.0,
+        "total_wall_s": 327.4,
+        "wall_speedup_vs_plain": 1.0,
+        "decode_speedup_per_round": [
+          1.0,
+          1.0
+        ],
+        "peak_rss_gb": 4.617,
+        "mean_acceptance_rate": null,
+        "outputs_identical_to_plain": "12/12",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 1142
+      }
+    },
+    "draft_model:costauto:k=16": {
+      "grounded": {
+        "mean_decode_tok_s": 7.408,
+        "decode_speedup_vs_plain": 1.832,
+        "total_wall_s": 123.6,
+        "wall_speedup_vs_plain": 1.531,
+        "decode_speedup_per_round": [
+          1.905,
+          1.761
+        ],
+        "peak_rss_gb": 5.115,
+        "mean_acceptance_rate": 0.872,
+        "outputs_identical_to_plain": "6/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 0,
+        "greedy_check_tokens": 616
+      },
+      "open": {
+        "mean_decode_tok_s": 5.024,
+        "decode_speedup_vs_plain": 1.232,
+        "total_wall_s": 115.3,
+        "wall_speedup_vs_plain": 1.198,
+        "decode_speedup_per_round": [
+          1.245,
+          1.22
+        ],
+        "peak_rss_gb": 5.12,
+        "mean_acceptance_rate": 0.468,
+        "outputs_identical_to_plain": "2/6",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 6,
+        "greedy_check_tokens": 550
+      },
+      "all": {
+        "mean_decode_tok_s": 6.216,
+        "decode_speedup_vs_plain": 1.531,
+        "total_wall_s": 239.0,
+        "wall_speedup_vs_plain": 1.37,
+        "decode_speedup_per_round": [
+          1.57,
+          1.492
+        ],
+        "peak_rss_gb": 5.12,
+        "mean_acceptance_rate": 0.67,
+        "outputs_identical_to_plain": "8/12",
+        "greedy_check_violations": 0,
+        "greedy_check_near_ties": 6,
+        "greedy_check_tokens": 1166
+      }
+    }
+  },
+  "per_prompt": {
+    "none": [
+      {
+        "round": 0,
+        "kind": "grounded",
+        "decode_tok_s": 3.699,
+        "wall_s": 40.94,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.604,
+        "text": "```python\ndef merge_sorted(a: list[int], b: list[int]) -> list[int]:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Parameters:\n    a (list[int]): The first sorted list.\n    b (list[int]): The second sorted list.\n\n    Returns:\n    list[int]: A new list containing all elements from both input lists, sorted.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i])\n            i += 1",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3883
+        }
+      },
+      {
+        "round": 0,
+        "kind": "grounded",
+        "decode_tok_s": 4.104,
+        "wall_s": 36.18,
+        "tokens": 119,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.607,
+        "text": "```python\ndef merge_sorted_arrays(array1, array2):\n    index1, index2, merged_array = 0, 0, []\n    while index1 < len(array1) and index2 < len(array2):\n        if array1[index1] <= array2[index2]:\n            merged_array.append(array1[index1])\n            index1 += 1\n        else:\n            merged_array.append(array2[index2])\n            index2 += 1\n    merged_array.extend(array1[index1:])\n    merged_array.extend(array2[index2:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 119,
+          "exact": 119,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3829
+        }
+      },
+      {
+        "round": 0,
+        "kind": "grounded",
+        "decode_tok_s": 4.085,
+        "wall_s": 19.96,
+        "tokens": 61,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.609,
+        "text": "Cascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.",
+        "greedy_check": {
+          "tokens": 61,
+          "exact": 61,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3993
+        }
+      },
+      {
+        "round": 0,
+        "kind": "open",
+        "decode_tok_s": 4.146,
+        "wall_s": 30.47,
+        "tokens": 118,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.61,
+        "text": "A hash table is a data structure that implements an associative array abstract data type, a structure that can map keys to values. A hash table uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found. The hash function is designed to distribute the keys uniformly across the array, minimizing collisions, which are instances where two different keys map to the same index. Hash tables provide fast access to data, allowing for average-case constant time complexity for search, insert, and delete operations, making them highly efficient for applications requiring quick data retrieval.",
+        "greedy_check": {
+          "tokens": 118,
+          "exact": 118,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.5291
+        }
+      },
+      {
+        "round": 0,
+        "kind": "open",
+        "decode_tok_s": 3.914,
+        "wall_s": 6.2,
+        "tokens": 17,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.612,
+        "text": "Waves crash and retreat,\nBlue horizon whispers secrets,\nOcean's breath so vast.",
+        "greedy_check": {
+          "tokens": 17,
+          "exact": 17,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3127
+        }
+      },
+      {
+        "round": 0,
+        "kind": "open",
+        "decode_tok_s": 4.18,
+        "wall_s": 32.47,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.614,
+        "text": "1. Use meaningful variable and function names: Variable and function names should be descriptive and meaningful. This will make it easier for others (and yourself) to understand what the code is doing. Avoid using generic names like \"x\" or \"data\" unless they are being used in a very specific context.\n\n2. Keep functions small and focused: Functions should be small and focused on doing one thing. This will make it easier to understand what the function is doing and to test it. If a function is doing too many things, consider breaking it up into smaller functions.\n\n3. Use comments and docstrings: Comments and docstrings are a",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4394
+        }
+      },
+      {
+        "round": 1,
+        "kind": "grounded",
+        "decode_tok_s": 4.143,
+        "wall_s": 36.79,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.608,
+        "text": "```python\ndef merge_sorted(a: list[int], b: list[int]) -> list[int]:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Parameters:\n    a (list[int]): The first sorted list.\n    b (list[int]): The second sorted list.\n\n    Returns:\n    list[int]: A new list containing all elements from both input lists, sorted.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i])\n            i += 1",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3883
+        }
+      },
+      {
+        "round": 1,
+        "kind": "grounded",
+        "decode_tok_s": 4.139,
+        "wall_s": 35.39,
+        "tokens": 119,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.61,
+        "text": "```python\ndef merge_sorted_arrays(array1, array2):\n    index1, index2, merged_array = 0, 0, []\n    while index1 < len(array1) and index2 < len(array2):\n        if array1[index1] <= array2[index2]:\n            merged_array.append(array1[index1])\n            index1 += 1\n        else:\n            merged_array.append(array2[index2])\n            index2 += 1\n    merged_array.extend(array1[index1:])\n    merged_array.extend(array2[index2:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 119,
+          "exact": 119,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3829
+        }
+      },
+      {
+        "round": 1,
+        "kind": "grounded",
+        "decode_tok_s": 4.095,
+        "wall_s": 19.99,
+        "tokens": 61,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.611,
+        "text": "Cascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.",
+        "greedy_check": {
+          "tokens": 61,
+          "exact": 61,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3993
+        }
+      },
+      {
+        "round": 1,
+        "kind": "open",
+        "decode_tok_s": 4.178,
+        "wall_s": 30.2,
+        "tokens": 118,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.613,
+        "text": "A hash table is a data structure that implements an associative array abstract data type, a structure that can map keys to values. A hash table uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found. The hash function is designed to distribute the keys uniformly across the array, minimizing collisions, which are instances where two different keys map to the same index. Hash tables provide fast access to data, allowing for average-case constant time complexity for search, insert, and delete operations, making them highly efficient for applications requiring quick data retrieval.",
+        "greedy_check": {
+          "tokens": 118,
+          "exact": 118,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.5291
+        }
+      },
+      {
+        "round": 1,
+        "kind": "open",
+        "decode_tok_s": 3.862,
+        "wall_s": 6.38,
+        "tokens": 17,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.615,
+        "text": "Waves crash and retreat,\nBlue horizon whispers secrets,\nOcean's breath so vast.",
+        "greedy_check": {
+          "tokens": 17,
+          "exact": 17,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3127
+        }
+      },
+      {
+        "round": 1,
+        "kind": "open",
+        "decode_tok_s": 4.186,
+        "wall_s": 32.45,
+        "tokens": 128,
+        "acceptance_rate": null,
+        "ran": "none",
+        "rss_gb": 4.617,
+        "text": "1. Use meaningful variable and function names: Variable and function names should be descriptive and meaningful. This will make it easier for others (and yourself) to understand what the code is doing. Avoid using generic names like \"x\" or \"data\" unless they are being used in a very specific context.\n\n2. Keep functions small and focused: Functions should be small and focused on doing one thing. This will make it easier to understand what the function is doing and to test it. If a function is doing too many things, consider breaking it up into smaller functions.\n\n3. Use comments and docstrings: Comments and docstrings are a",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4394
+        }
+      }
+    ],
+    "draft_model:costauto:k=16": [
+      {
+        "round": 0,
+        "kind": "grounded",
+        "decode_tok_s": 6.485,
+        "wall_s": 28.17,
+        "tokens": 128,
+        "acceptance_rate": 0.78,
+        "ran": "draft_model",
+        "rss_gb": 5.112,
+        "text": "```python\ndef merge_sorted(a: list[int], b: list[int]) -> list[int]:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Parameters:\n    a (list[int]): The first sorted list.\n    b (list[int]): The second sorted list.\n\n    Returns:\n    list[int]: A new list containing all elements from both input lists, sorted.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i])\n            i += 1",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3707
+        }
+      },
+      {
+        "round": 0,
+        "kind": "grounded",
+        "decode_tok_s": 8.087,
+        "wall_s": 21.54,
+        "tokens": 119,
+        "acceptance_rate": 0.91,
+        "ran": "draft_model",
+        "rss_gb": 5.112,
+        "text": "```python\ndef merge_sorted_arrays(array1, array2):\n    index1, index2, merged_array = 0, 0, []\n    while index1 < len(array1) and index2 < len(array2):\n        if array1[index1] <= array2[index2]:\n            merged_array.append(array1[index1])\n            index1 += 1\n        else:\n            merged_array.append(array2[index2])\n            index2 += 1\n    merged_array.extend(array1[index1:])\n    merged_array.extend(array2[index2:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 119,
+          "exact": 119,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3829
+        }
+      },
+      {
+        "round": 0,
+        "kind": "grounded",
+        "decode_tok_s": 8.076,
+        "wall_s": 13.3,
+        "tokens": 61,
+        "acceptance_rate": 0.926,
+        "ran": "draft_model",
+        "rss_gb": 5.115,
+        "text": "Cascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.",
+        "greedy_check": {
+          "tokens": 61,
+          "exact": 61,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4092
+        }
+      },
+      {
+        "round": 0,
+        "kind": "open",
+        "decode_tok_s": 5.683,
+        "wall_s": 24.92,
+        "tokens": 128,
+        "acceptance_rate": 0.528,
+        "ran": "draft_model",
+        "rss_gb": 5.117,
+        "text": "A hash table is a data structure that implements an associative array abstract data type, a structure that can map keys to values. A hash table uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found. This allows for average-case constant time complexity for lookups, insertions, and deletions. The hash function takes a key as input and returns an index into the array where the corresponding value is stored. The key must be hashable, meaning it can be converted into a hash value. Collisions, where two different keys hash to the same index, are handled through various",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 126,
+          "within_noise": 2,
+          "violations": 0,
+          "noise_tolerance": 0.7241
+        }
+      },
+      {
+        "round": 0,
+        "kind": "open",
+        "decode_tok_s": 3.918,
+        "wall_s": 7.03,
+        "tokens": 19,
+        "acceptance_rate": 0.316,
+        "ran": "draft_model",
+        "rss_gb": 5.118,
+        "text": "Waves crash and roar,\nBlue depths hold mysteries untold,\nOcean's breath so vast.",
+        "greedy_check": {
+          "tokens": 19,
+          "exact": 18,
+          "within_noise": 1,
+          "violations": 0,
+          "noise_tolerance": 0.4337
+        }
+      },
+      {
+        "round": 0,
+        "kind": "open",
+        "decode_tok_s": 5.632,
+        "wall_s": 25.01,
+        "tokens": 128,
+        "acceptance_rate": 0.559,
+        "ran": "draft_model",
+        "rss_gb": 5.12,
+        "text": "1. Use meaningful variable and function names: Variable and function names should be descriptive and meaningful. This will make it easier for others (and yourself) to understand what the code is doing. Avoid using generic names like \"x\" or \"data\" unless they are being used in a very specific context.\n\n2. Keep functions small and focused: Functions should be small and focused on doing one thing. This will make it easier to understand what the function is doing and to test it. If a function is doing too many things, consider breaking it up into smaller functions.\n\n3. Use comments and docstrings: Comments and docstrings are a",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4394
+        }
+      },
+      {
+        "round": 1,
+        "kind": "grounded",
+        "decode_tok_s": 7.196,
+        "wall_s": 24.19,
+        "tokens": 128,
+        "acceptance_rate": 0.78,
+        "ran": "draft_model",
+        "rss_gb": 5.095,
+        "text": "```python\ndef merge_sorted(a: list[int], b: list[int]) -> list[int]:\n    \"\"\"\n    Merge two sorted lists into a single sorted list.\n\n    Parameters:\n    a (list[int]): The first sorted list.\n    b (list[int]): The second sorted list.\n\n    Returns:\n    list[int]: A new list containing all elements from both input lists, sorted.\n    \"\"\"\n    i, j, out = 0, 0, []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i])\n            i += 1",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3707
+        }
+      },
+      {
+        "round": 1,
+        "kind": "grounded",
+        "decode_tok_s": 8.054,
+        "wall_s": 21.43,
+        "tokens": 119,
+        "acceptance_rate": 0.91,
+        "ran": "draft_model",
+        "rss_gb": 5.098,
+        "text": "```python\ndef merge_sorted_arrays(array1, array2):\n    index1, index2, merged_array = 0, 0, []\n    while index1 < len(array1) and index2 < len(array2):\n        if array1[index1] <= array2[index2]:\n            merged_array.append(array1[index1])\n            index1 += 1\n        else:\n            merged_array.append(array2[index2])\n            index2 += 1\n    merged_array.extend(array1[index1:])\n    merged_array.extend(array2[index2:])\n    return merged_array\n```",
+        "greedy_check": {
+          "tokens": 119,
+          "exact": 119,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.3829
+        }
+      },
+      {
+        "round": 1,
+        "kind": "grounded",
+        "decode_tok_s": 6.552,
+        "wall_s": 15.0,
+        "tokens": 61,
+        "acceptance_rate": 0.926,
+        "ran": "draft_model",
+        "rss_gb": 5.1,
+        "text": "Cascade routes each LLM request to the cheapest place that can answer it well: a local model on the user's own machine, the user's own cloud API key, or a hosted fallback. A semantic cache answers repeated questions instantly, and a context compressor trims long conversations before they are sent anywhere.",
+        "greedy_check": {
+          "tokens": 61,
+          "exact": 61,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4092
+        }
+      },
+      {
+        "round": 1,
+        "kind": "open",
+        "decode_tok_s": 5.351,
+        "wall_s": 26.43,
+        "tokens": 128,
+        "acceptance_rate": 0.528,
+        "ran": "draft_model",
+        "rss_gb": 5.09,
+        "text": "A hash table is a data structure that implements an associative array abstract data type, a structure that can map keys to values. A hash table uses a hash function to compute an index into an array of buckets or slots, from which the desired value can be found. This allows for average-case constant time complexity for lookups, insertions, and deletions. The hash function takes a key as input and returns an index into the array where the corresponding value is stored. The key must be hashable, meaning it can be converted into a hash value. Collisions, where two different keys hash to the same index, are handled through various",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 126,
+          "within_noise": 2,
+          "violations": 0,
+          "noise_tolerance": 0.7241
+        }
+      },
+      {
+        "round": 1,
+        "kind": "open",
+        "decode_tok_s": 3.868,
+        "wall_s": 7.25,
+        "tokens": 19,
+        "acceptance_rate": 0.316,
+        "ran": "draft_model",
+        "rss_gb": 5.1,
+        "text": "Waves crash and roar,\nBlue depths hold mysteries untold,\nOcean's breath so vast.",
+        "greedy_check": {
+          "tokens": 19,
+          "exact": 18,
+          "within_noise": 1,
+          "violations": 0,
+          "noise_tolerance": 0.4337
+        }
+      },
+      {
+        "round": 1,
+        "kind": "open",
+        "decode_tok_s": 5.694,
+        "wall_s": 24.7,
+        "tokens": 128,
+        "acceptance_rate": 0.559,
+        "ran": "draft_model",
+        "rss_gb": 5.102,
+        "text": "1. Use meaningful variable and function names: Variable and function names should be descriptive and meaningful. This will make it easier for others (and yourself) to understand what the code is doing. Avoid using generic names like \"x\" or \"data\" unless they are being used in a very specific context.\n\n2. Keep functions small and focused: Functions should be small and focused on doing one thing. This will make it easier to understand what the function is doing and to test it. If a function is doing too many things, consider breaking it up into smaller functions.\n\n3. Use comments and docstrings: Comments and docstrings are a",
+        "greedy_check": {
+          "tokens": 128,
+          "exact": 128,
+          "within_noise": 0,
+          "violations": 0,
+          "noise_tolerance": 0.4394
+        }
+      }
+    ]
+  }
+}

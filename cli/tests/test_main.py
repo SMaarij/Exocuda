@@ -316,8 +316,16 @@ def test_every_cache_setting_is_configurable(captured_pipeline: dict) -> None:
     assert cache_config.time_sensitive_patterns == ("\bstock\b",)
 
 
-def test_draft_settings_default_to_confidence_drafting() -> None:
-    assert cli_main._draft_settings({}) == {"draft_p_min": 0.75, "draft_tokens": 16, "adaptive_draft": False}
+def test_draft_settings_default_to_cost_aware_drafting() -> None:
+    assert cli_main._draft_settings({}) == {"draft_verify_costs": "auto", "draft_tokens": 16, "adaptive_draft": False}
+
+
+def test_draft_settings_policy_chooses_the_rule() -> None:
+    assert cli_main._draft_settings({"draft": {"policy": "p_min"}}) == {
+        "draft_p_min": 0.75, "draft_tokens": 16, "adaptive_draft": False}
+    assert cli_main._draft_settings({"draft": {"policy": "adaptive"}}) == {"adaptive_draft": True}
+    with pytest.raises(SystemExit):
+        cli_main._draft_settings({"draft": {"policy": "fastest"}})
 
 
 def test_draft_settings_p_min_off_falls_back_to_adaptive() -> None:

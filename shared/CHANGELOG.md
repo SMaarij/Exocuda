@@ -478,6 +478,21 @@ No seam changes (`Pipeline`, `ExecutionBackend` and the shared dataclasses are u
   list them). If none are present, it tries just the first level, so profiling downloads at
   most one model.
 
+## [0.7.0] -- 2026-11-12 -- 1.58x overall: cost-aware draft length
+
+### Added
+- `ModelDraft(verify_costs=..., draft_cost=0.1)`: picks the draft length that maximises expected
+  tokens per unit of the target's verify cost; `CPU_VERIFY_COSTS` reference table.
+- `LlamaCppRunner(draft_verify_costs="auto")`: measures the table once per model and machine
+  (`measure_verify_costs`, `verify_costs_for`), cached in `~/.cascade/verify_costs.json`.
+- `scripts/benchmark_verify_cost.py`; `benchmark_acceleration.py` modes `draft_model:cost` and
+  `draft_model:costauto`.
+
+### Changed
+- Default `draft.policy cost` (new setting: `cost | p_min | adaptive`). Configs that set `draft.p_min`
+  keep confidence drafting. 7B + 0.5B: 1.58x overall (was 1.39x), 1.88x grounded, 1.27x open;
+  greedy check 0 violations. BENCHMARK_REPORT Addendum 17.
+
 ## [0.6.0] -- 2026-11-11 -- install once, use plain `ollama`
 
 ### Added

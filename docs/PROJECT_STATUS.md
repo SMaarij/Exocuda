@@ -1,4 +1,4 @@
-# Cascade — Project Status (2026-11-05)
+# Cascade — Project Status (2026-11-12)
 
 Cascade is an MIT-licensed open-source project. This page says what works, what was verified live,
 and what's next. Measured numbers are in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md); the change
@@ -16,11 +16,16 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
-| NFR-01 | ≥1.5x acceleration | **Met on grounded prompts** (1.69x), not yet overall (1.39x) | confidence drafting, 3 interleaved rounds, verified lossless; open-ended prompts 1.08x |
+| NFR-01 | ≥1.5x acceleration | **Met overall** (1.58x; grounded 1.88x, open-ended 1.27x) | cost-aware draft length, per-machine verify costs, 2 interleaved rounds, verified lossless (Addendum 17) |
 | NFR-02 | cache hit <150 ms | Met (warm) | 55 ms median live; first lookup per process ~2.4 s (model load) |
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.7.0 — 1.58x overall
+
+- The 7B drafts as far as it pays: the draft length is chosen by what verifying it costs on this
+  machine (measured once, ~25 s on first load). 1.58x overall (was 1.39x), lossless.
 
 ## 0.6.0 — install once, use plain `ollama`
 

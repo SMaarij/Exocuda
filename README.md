@@ -62,8 +62,9 @@ cascade config set model qwen2.5-coder     # everything else below is automatic
 ```
 
 With llama-cpp-python installed, Cascade picks its fastest setup by itself: the llama.cpp runner,
-confidence drafting for the 7B, and for qwen2.5 models a 0.5B model that answers easy questions and
-also drafts for the 7B, loaded once. When the 0.5B is unsure of an answer (mean token probability
+cost-aware drafting for the 7B (the draft length is chosen by what verifying it costs on your
+machine, measured once on first load), and for qwen2.5 models a 0.5B model that answers easy
+questions and also drafts for the 7B, loaded once. When the 0.5B is unsure of an answer (mean token probability
 below `small_model_min_confidence`, default 0.75) the 7B answers instead: on 128 checked easy
 questions that leaves 4 wrong answers, against 11 for the 0.5B alone and 6 for the 1.5B model
 (BENCHMARK_REPORT Addendum 13). Any of it can be changed or switched off with `cascade config set`
@@ -271,7 +272,7 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
 | **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **1.79–2.19x faster than the plain 7B** (two runs; 386 s → 216 s and 431 s → 197 s), median answer ~2 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting); 0.5B shared as draft with unsure answers re-asked: 1.65–2.11x at 5.9 GB, now the recommended setup | |
-| Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.69x on code/rewrite prompts**, 1.39x overall, 1.08x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, confidence drafting, 3 rounds); output verified lossless | met on grounded prompts, not yet overall |
+| Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.58x overall**, 1.88x on code/rewrite prompts, 1.27x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, cost-aware draft length, 2 rounds); output verified lossless | met |
 | RAM, 7B Q4_K_M via llama.cpp | – | 4.6 GB (was 7.2 GB with the model file memory-mapped); +0.75 GB with the draft model | |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 

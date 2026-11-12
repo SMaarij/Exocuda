@@ -34,11 +34,15 @@ constructing a runner raises a clear error.
 from __future__ import annotations
 
 import inspect
+import json
 import os
+import platform
+import sys
 import time
 import weakref
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from pathlib import Path
+from typing import Any, Callable, Optional, Sequence
 
 import numpy as np
 import psutil
@@ -150,10 +154,23 @@ class ModelDraft(LlamaDraftModel):
     llama.cpp's own speculative decoding does (`--draft-p-min`, default
     0.75). `k` is then the longest draft. A step with no confident token
     drafts nothing and costs what plain decoding costs.
+
+    With `verify_costs` set (cost-aware drafting), the draft length is chosen by
+    what verifying it costs the target. `verify_costs[n]` is the cost of one
+    target eval of n tokens relative to one token; on a CPU it is far from flat
+    and not even monotonic (7B Q4_K_M, 4 cores: 4 tokens cost 1.55x one token
+    but 3 tokens 1.74x; 16 cost 3.95x, 15 cost 4.6x -- the weight kernels work
+    on groups of 4). The draft model drafts while the chance that its whole
+    draft is accepted (the product of its top probabilities) can still pay
+    for a longer batch, then keeps the length L that maximises the expected
+    tokens per unit of cost, (1 + E[accepted]) / (verify_costs[L + 1] +
+    draft_cost * L), where E[accepted] sums those running products; L = 0
+    (plain decoding) when nothing beats 1 / verify_costs[1].
     """
 
     def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16, max_pause: int = 0,
-                 p_min: Optional[float] = None) -> None:
+                 p_min: Optional[float] = None, verify_costs: Optional[Sequence[float]] = None,
+                 draft_cost: float = 0.1) -> None:
         self._llm = llm
         self._initial_k = k
         self._k = k
@@ -163,6 +180,10 @@ class ModelDraft(LlamaDraftModel):
         self._last_drafted = 0
         self._max_pause = max_pause
         self._p_min = p_min
+        self._verify_costs = list(verify_costs) if verify_costs is not None else None
+        if self._verify_costs is not None and len(self._verify_costs) < k + 2:
+            raise ValueError(f"verify_costs needs an entry for every batch size up to {k + 1}")
+        self._draft_cost = draft_cost
         self._pause = 0      # calls left to skip drafting
         self._backoff = 0    # length of the next pause
         self.history: list[int] = []  # draft length used per call, for inspection
@@ -197,6 +218,10 @@ class ModelDraft(LlamaDraftModel):
                 return np.array([], dtype=np.intc)
         self.history.append(self._k)
 
+        if self._verify_costs is not None:
+            out = self._cost_aware_draft(list(map(int, input_ids)))
+            self._last_drafted = len(out)
+            return np.array(out, dtype=np.intc)
         if self._p_min is not None:
             out = self._confident_draft(list(map(int, input_ids)))
             self._last_drafted = len(out)
@@ -214,9 +239,9 @@ class ModelDraft(LlamaDraftModel):
         self._last_drafted = len(out)
         return np.array(out, dtype=np.intc)
 
-    def _confident_draft(self, ids: list[int]) -> list[int]:
+    def _sync(self, ids: list[int]) -> None:
+        """Bring the draft's KV cache to `ids`, reusing the prefix it has already seen."""
         llm = self._llm
-        # Reuse the draft's KV cache for the prefix it has already seen.
         cached = np.asarray(llm.input_ids[: llm.n_tokens])
         m = min(len(cached), len(ids))
         same = cached[:m] == np.asarray(ids[:m])
@@ -224,6 +249,35 @@ class ModelDraft(LlamaDraftModel):
         n = min(n, len(ids) - 1)  # always evaluate at least the last token, for its logits
         llm.n_tokens = n
         llm.eval(ids[n:])
+
+    def _cost_aware_draft(self, ids: list[int]) -> list[int]:
+        costs, d = self._verify_costs, self._draft_cost
+        self._sync(ids)
+        out: list[int] = []
+        best_len, best_rate = 0, 1.0 / costs[1]
+        whole, expected = 1.0, 0.0  # P(every drafted token accepted), E[accepted]
+        while len(out) < self._k:
+            logits = self._last_logits()
+            token = int(np.argmax(logits))
+            whole *= 1.0 / float(np.sum(np.exp(logits - logits[token])))
+            out.append(token)
+            expected += whole
+            n = len(out)
+            rate = (1.0 + expected) / (costs[n + 1] + d * n)
+            if rate > best_rate:
+                best_len, best_rate = n, rate
+            # Stop once no longer draft could win, even if every further token were
+            # accepted with the current whole-draft probability.
+            if not any((1.0 + expected + whole * (m - n)) / (costs[m + 1] + d * m) > best_rate
+                       for m in range(n + 1, self._k + 1)):
+                break
+            if n < self._k:
+                self._llm.eval([token])
+        return out[:best_len]
+
+    def _confident_draft(self, ids: list[int]) -> list[int]:
+        llm = self._llm
+        self._sync(ids)
         out: list[int] = []
         while len(out) < self._k:
             logits = self._last_logits()
@@ -239,6 +293,87 @@ class ModelDraft(LlamaDraftModel):
     def _last_logits(self) -> np.ndarray:
         llm = self._llm
         return np.ctypeslib.as_array(llm._ctx.get_logits(), shape=(llm.n_vocab(),)).astype(np.float64)
+
+
+# Relative cost of one target eval of n tokens (index n; index 0 unused), measured
+# for qwen2.5-coder 7B Q4_K_M on a 4-core CPU (scripts/benchmark_verify_cost.py,
+# docs/benchmark/verify_cost_7b.json); the fallback when "auto" cannot measure.
+# Multiples of 4 are cheap: the repacked Q4_K kernels work on 4 rows at a time.
+CPU_VERIFY_COSTS = (0.0, 1.0, 1.36, 1.74, 1.55, 1.87, 2.28, 2.68, 3.0, 3.34, 3.49, 3.74, 3.57, 3.9, 4.35, 4.6,
+                    3.95, 5.1)
+
+VERIFY_COSTS_PATH = Path.home() / ".cascade" / "verify_costs.json"
+AUTO = "auto"
+
+
+def _verify_cost_key(llm: Any, path: str, n: int) -> str:
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = 0
+    threads = getattr(getattr(llm, "context_params", None), "n_threads", None)
+    version = getattr(sys.modules.get("llama_cpp"), "__version__", "?")
+    return "|".join(map(str, ("v2", os.path.basename(path), size, threads, platform.processor() or platform.machine(),
+                              os.cpu_count(), version, n)))
+
+
+def measure_verify_costs(llm: Any, n: int, repeats: int = 3) -> list[float]:
+    """Time one eval of 1..n tokens after a 256-token prefix, about a chat prompt (a shorter
+    one makes attention, and so verifying, look cheaper); KV cache rewound between runs,
+    and return each relative to one token, index 0 unused. Leaves the model's context empty."""
+    prefix = llm.tokenize(b"def merge_sorted(a, b):\n    out = []\n    i = j = 0\n" * 16)[:256]
+    filler = llm.tokenize(b" while i < len(a) and j < len(b): out.append(a[i]); i += 1", add_bos=False)
+    filler = (filler * (n // max(len(filler), 1) + 1))[:n]
+    try:
+        llm.n_tokens = 0
+        llm._ctx.kv_cache_clear()
+        llm.eval(prefix)
+        base = llm.n_tokens
+        llm.eval(filler[:4])  # warm the batch path
+        ms = []
+        for size in range(1, n + 1):
+            times = []
+            for _ in range(repeats):
+                llm.n_tokens = base
+                llm._ctx.kv_cache_seq_rm(-1, base, -1)
+                t0 = time.perf_counter()
+                llm.eval(filler[:size])
+                times.append(time.perf_counter() - t0)
+            ms.append(sorted(times)[len(times) // 2])
+    finally:
+        llm.n_tokens = 0
+        llm._ctx.kv_cache_clear()
+    return [0.0] + [round(t / ms[0], 3) for t in ms]
+
+
+def verify_costs_for(llm: Any, path: Optional[str], n: int, cache_path: Optional[Path] = None) -> list[float]:
+    """This model's verify-cost table on this machine: measured once (about half a
+    minute for a 7B on a 4-core CPU) and cached; CPU_VERIFY_COSTS if it cannot be measured."""
+    cache_path = cache_path or VERIFY_COSTS_PATH
+    fallback = list(CPU_VERIFY_COSTS[: n + 1]) + [CPU_VERIFY_COSTS[-1] * i / 17
+                                                    for i in range(len(CPU_VERIFY_COSTS), n + 1)]
+    if not path or not hasattr(llm, "_ctx"):
+        return fallback
+    key = _verify_cost_key(llm, path, n)
+    try:
+        cached = json.loads(cache_path.read_text())
+    except (OSError, ValueError):
+        cached = {}
+    if isinstance(cached.get(key), list) and len(cached[key]) == n + 1:
+        return cached[key]
+    print(f"cascade: measuring what verifying drafts costs {os.path.basename(path)} on this machine "
+          "(once, about half a minute)...", file=sys.stderr, flush=True)
+    try:
+        costs = measure_verify_costs(llm, n)
+    except Exception:  # noqa: BLE001 -- any failure: use the reference table
+        return fallback
+    cached[key] = costs
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(cached, indent=1))
+    except OSError:
+        pass
+    return costs
 
 
 # Positions whose logits a speculative eval keeps: the verification batch is the
@@ -358,6 +493,7 @@ class LlamaCppRunner:
         max_draft_tokens: int = 16,
         max_draft_pause: int = 0,
         draft_p_min: Optional[float] = None,
+        draft_verify_costs: Optional[Sequence[float] | str] = None,
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
@@ -378,6 +514,8 @@ class LlamaCppRunner:
             raise ValueError(f"draft length {longest} must be below {OUTPUT_WINDOW}")
         self._max_draft_pause = max_draft_pause
         self._draft_p_min = draft_p_min
+        self._draft_verify_costs = draft_verify_costs
+        self._resolved_verify_costs: Optional[list[float]] = None
         self._lookup_tokens = lookup_tokens
         self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads, use_mmap)
         self._mode = ACCEL_NONE
@@ -415,13 +553,23 @@ class LlamaCppRunner:
     def self_regulating(self) -> bool:
         """True when confidence drafting is active: unsure drafts are skipped per token, so
         AccelerationEngine should not step down on a low acceptance rate."""
-        return self._mode == ACCEL_DRAFT_MODEL and self._draft_p_min is not None
+        return self._mode == ACCEL_DRAFT_MODEL and (self._draft_p_min is not None
+                                                    or self._draft_verify_costs is not None)
+
+    def _verify_costs(self) -> Optional[Sequence[float]]:
+        """`draft_verify_costs="auto"`: this model's table on this machine, measured once."""
+        if self._draft_verify_costs != AUTO:
+            return self._draft_verify_costs
+        if self._resolved_verify_costs is None:
+            self._resolved_verify_costs = verify_costs_for(self._llm, self._model_path, self._draft_tokens + 1)
+        return self._resolved_verify_costs
 
     def _build(self) -> None:
         needs_all_logits = self._mode != ACCEL_NONE
         self._llm = None  # release the old model before loading the new one: never two copies at once
         self._llm = self._factory(self._model_path, needs_all_logits)
         self._llm_has_all_logits = needs_all_logits
+        self._resolved_verify_costs = None  # per model: re-read (or measure) its table
         self._install_draft()
 
     def _install_draft(self) -> None:
@@ -434,7 +582,7 @@ class LlamaCppRunner:
                 self._draft_llm = self._factory(self._resolve_path(self._draft_model_tag), False)
             self._counter = DraftCounter(ModelDraft(
                 self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens,
-                max_pause=self._max_draft_pause, p_min=self._draft_p_min
+                max_pause=self._max_draft_pause, p_min=self._draft_p_min, verify_costs=self._verify_costs()
             ))
         else:
             self._counter = None

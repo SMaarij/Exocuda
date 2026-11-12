@@ -741,3 +741,40 @@ Cascade server process, committed private bytes (working set in brackets):
 | logged in, nothing asked yet | **0.02 GB** (0.03 GB) |
 | models loaded (7B + 0.5B + embedder) | 6.29 GB (5.42 GB) |
 | after `server.idle_minutes` (1 min in this test) | **0.65 GB** (0.19 GB) |
+
+## Addendum 17 — cost-aware draft length: 1.58x overall on the 4-core laptop, 2026-11-12
+
+Confidence drafting stopped at the first token the 0.5B draft model was less than 75% sure of. On a
+CPU, the length it stopped at often cost the 7B more to verify than a longer one would have: verifying is
+compute-bound and the repacked Q4_K kernels work on 4 rows at a time. One target eval of N tokens after a
+300-token prompt (`scripts/benchmark_verify_cost.py`, `docs/benchmark/verify_cost_7b.json`):
+
+| N tokens | 1 | 2 | 3 | 4 | 5 | 8 | 9 | 12 | 15 | 16 | 17 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| cost vs 1 token | 1.00 | 1.36 | 1.74 | **1.55** | 1.87 | 3.00 | 3.34 | **3.57** | 4.60 | **3.95** | 5.10 |
+
+Cost-aware drafting (`ModelDraft(verify_costs=...)`) drafts while a longer draft could still pay for
+itself. It keeps the length L that maximises expected tokens per unit of cost,
+(1 + E[accepted]) / (cost[L+1] + 0.1 L), where E[accepted] is the sum of running products of the draft
+model's top probabilities. When nothing beats plain decoding, it drafts nothing. By default
+(`draft.policy cost`) the cost table is this model's on this machine. It is measured once on first load
+(16 evals after a 256-token prefix, about 25 s for the 7B) and cached in `~/.cascade/verify_costs.json`,
+keyed by model file, threads, CPU and llama.cpp version. A GPU's near-flat table yields long drafts with
+no code change.
+
+qwen2.5-coder 7B Q4_K_M + qwen2.5 0.5B draft, 12 prompts, 2 interleaved rounds, greedy check on every
+token:
+
+| Mode | Grounded | Open | **All** | Rounds (all) | Greedy check |
+|---|---:|---:|---:|---|---|
+| confidence drafting (p_min 0.75, previous default) | 1.74x | 1.05x | 1.39x | 1.40, 1.38 | 0 violations |
+| cost-aware, reference table | 1.98x | 1.21x | **1.59x** | 1.57, 1.60 | 0 violations |
+| cost-aware, table measured after a 64-token prefix | 1.83x | 1.23x | 1.53x | 1.57, 1.49 | 0 violations |
+| **cost-aware, measured table (shipped default)** | 1.88x | 1.27x | **1.58x** | 1.58, 1.58 | 0 violations |
+
+`acceleration_qwen7b_cost_aware.json` holds the first three rows run together.
+`acceleration_qwen7b_cost_auto64.json` and `acceleration_qwen7b_cost_auto.json` hold the other two,
+each with its own plain baseline. NFR-01 (≥1.5x) is now met overall on this CPU-only laptop, not just on
+grounded prompts. A short prefix makes attention, and so verifying, look cheaper than at real prompt
+lengths, so the shipped calibration uses 256 tokens. The few non-identical outputs are near-ties
+(top-two logits within measured noise), as in earlier addenda.

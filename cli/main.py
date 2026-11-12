@@ -19,11 +19,15 @@ Config keys (set with `cascade config set KEY VALUE`):
                           below this (default 0.75; off disables)
     draft_model           draft tag for draft_model     (default: small_model when it is
                           the same family, else llama3.2:1b-instruct-q4_K_M)
-    draft.p_min           stop drafting at the first token the draft model is less sure of
-                          than this (default 0.75, fastest in
-                          docs/benchmark/acceleration_qwen7b_pmin_3rounds.json); off disables
-    draft.adaptive        adapt draft length to acceptance (default true when p_min is off)
-    draft.tokens          draft tokens per step (default 16 with p_min, else 4)
+    draft.policy          cost | p_min | adaptive   (default cost: draft as long as the
+                          draft model's confidence pays for what verifying that many tokens
+                          costs the big model on this machine, measured once and cached in
+                          ~/.cascade/verify_costs.json; 1.59x vs 1.39x for p_min,
+                          docs/benchmark/acceleration_qwen7b_cost_aware.json)
+    draft.p_min           p_min policy: stop drafting at the first token the draft model is
+                          less sure of than this (default 0.75)
+    draft.adaptive        adapt draft length to acceptance (default true for policy adaptive)
+    draft.tokens          longest draft per step (default 16 for cost and p_min, else 4)
     draft.max_tokens      cap on the adaptive draft length (default 16)
     server.auto           keep models loaded between `cascade ask` calls in a background
                           server on 127.0.0.1 (default true for runner llamacpp)
@@ -248,14 +252,24 @@ def _small_confidence_floor(config: dict) -> Optional[float]:
 
 
 def _draft_settings(config: dict) -> dict:
-    """Default: confidence drafting (p_min 0.75, up to 16 tokens), the fastest mode in
-    docs/benchmark/acceleration_qwen7b_pmin_3rounds.json. `draft.p_min off` falls back
-    to adaptive length drafting."""
+    """Default: cost-aware drafting (up to 16 tokens, this machine's measured verify
+    costs), the fastest mode in docs/benchmark/acceleration_qwen7b_cost_aware.json.
+    `draft.policy p_min` uses confidence drafting; `adaptive` (or `draft.p_min off`
+    under p_min) adaptive length drafting."""
+    policy = str(_get(config, "draft.policy", "") or "").strip().lower()
     p_min = _get(config, "draft.p_min", DEFAULT_DRAFT_P_MIN)
     if isinstance(p_min, str):
         p_min = None if p_min.strip().lower() in ("", "off", "none", "false", "0") else float(p_min)
+    if not policy:  # an explicit draft.p_min (older configs) still means the p_min policy
+        policy = "p_min" if _get(config, "draft.p_min") not in (None, "") else "cost"
+    if policy not in ("cost", "p_min", "adaptive"):
+        raise SystemExit(f"draft.policy must be cost, p_min or adaptive, not {policy!r}")
     settings: dict = {}
-    if p_min:
+    if policy == "cost":
+        settings["draft_verify_costs"] = "auto"
+        settings["draft_tokens"] = 16
+        default_adaptive = False
+    elif policy == "p_min" and p_min:
         settings["draft_p_min"] = float(p_min)
         settings["draft_tokens"] = 16
         default_adaptive = False
