@@ -778,3 +778,25 @@ each with its own plain baseline. NFR-01 (≥1.5x) is now met overall on this CP
 grounded prompts. A short prefix makes attention, and so verifying, look cheaper than at real prompt
 lengths, so the shipped calibration uses 256 tokens. The few non-identical outputs are near-ties
 (top-two logits within measured noise), as in earlier addenda.
+
+## Addendum 18 — correcting the draft model's confidence online: rejected, 2026-11-19
+
+Open-ended prompts stay at about 1.25x. A diagnostic on 8 open-ended prompts not in the benchmark set
+shows the 0.5B draft model's top probability already predicts acceptance well: above 0.6 it matches;
+between 0.3 and 0.6 it is slightly cautious (about 40% claimed, about 50% accepted). Its measured cost per
+drafted token is 0.105 of a 7B step (0.1 assumed). So the limit is agreement: on uncertain open-ended
+tokens the 0.5B picks the 7B's token only about half the time.
+
+Tried anyway: track acceptance per confidence bin as the draft runs, and correct each probability by it
+(prior of 20 tokens at face value) before choosing the draft length. Same race as Addendum 17, 2 rounds
+(`acceleration_qwen7b_calibration_rejected.json`):
+
+| Mode | Grounded | Open | All | Greedy check |
+|---|---:|---:|---:|---|
+| cost-aware (shipped) | 1.90x | 1.24x | **1.57x** | 0 violations |
+| cost-aware + calibration | 1.92x | 1.15x | 1.53x | 2 violations |
+
+The correction lengthened drafts on open-ended text, where it then lost more to rejections. The longer
+batches also changed the 7B's floating-point results enough to flip 2 tokens beyond measured noise. Not
+shipped. The shipped default re-measured at 1.57x overall. A 1.5B draft model would agree more often, but
+each drafted token would cost about 2.5x as much and add 0.6 GB of RAM, so it was not pursued.

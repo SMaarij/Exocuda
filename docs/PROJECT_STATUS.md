@@ -1,4 +1,4 @@
-# Cascade — Project Status (2026-11-12)
+# Cascade — Project Status (2026-11-19)
 
 Cascade is an MIT-licensed open-source project. This page says what works, what was verified live,
 and what's next. Measured numbers are in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md); the change
@@ -10,7 +10,7 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 |---|---|---|---|
 | FR-01 | HardwareProfiler | Done, verified live | `cascade init`: local_capable, 4.5 tok/s, 0.55 GB measured |
 | FR-02 | ModelLadder (OOM step-down, real Ollama tags) | Done | unit tests; live load of `llama3.2:3b-instruct-q4_K_M` |
-| FR-03 | AccelerationEngine (layers, fallback, acceptance monitor) | Done and real; **not faster on CPU** | prompt lookup 0.60x, draft model 0.89x; off by default |
+| FR-03 | AccelerationEngine (layers, fallback, acceptance monitor) | Done, verified live | cost-aware draft model on by default: 1.58x overall on the CPU-only laptop, lossless (Addendum 17) |
 | FR-04 | ContextCompressor | Done | unit tests |
 | FR-05 | SemanticRouter (3-way) | Done | 89.2% held-out agreement; live routing to `local` and `cloud_byok` |
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
