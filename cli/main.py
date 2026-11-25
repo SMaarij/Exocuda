@@ -338,6 +338,9 @@ def _cache_config(config: dict):
         if field.name in settings:
             value = settings[field.name]
             overrides[field.name] = tuple(value) if isinstance(value, list) else value
+    floor = overrides.get("judge_floor")
+    if isinstance(floor, str):  # `cascade config set cache.judge_floor off` turns the cache's judge off
+        overrides["judge_floor"] = None if floor.strip().lower() in ("", "off", "none", "false") else float(floor)
     return CacheConfig(**overrides)
 
 

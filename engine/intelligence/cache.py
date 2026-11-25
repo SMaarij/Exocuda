@@ -32,7 +32,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
@@ -86,6 +86,11 @@ class CacheConfig:
     #   "off"     -- similarity alone.
     # Both modes also reject the same key terms in a different order.
     term_swap_guard: str = "strict"
+    # Candidates the threshold or the guard turn away but that are at least this similar are
+    # put to the judge (SemanticCache(judge=...)), a local model asked whether the two
+    # questions ask the same thing. None: no judge.
+    judge_floor: Optional[float] = 0.80
+    judge_threshold: float = 0.5
 
     def __post_init__(self) -> None:
         if self.term_swap_guard not in GUARD_MODES:
@@ -93,6 +98,11 @@ class CacheConfig:
     # Two words count as the same term if they share at least this many
     # leading letters and one is a prefix of the other ("current"/"currently").
     min_shared_prefix: int = 4
+
+
+# The fixed instruction comes first, so a model that keeps its prompt prefix computes it once.
+JUDGE_PROMPT = ("Do these two questions ask for exactly the same information, so that one correct answer "
+                "answers both? Reply yes or no.\n\nQuestion 1: {cached}\nQuestion 2: {new}")
 
 
 def is_cacheable(query: str, config: Optional[CacheConfig] = None) -> bool:
@@ -201,9 +211,13 @@ class SemanticCache:
         embedder: Embedder,
         db_path: Path = DEFAULT_DB_PATH,
         config: Optional[CacheConfig] = None,
+        judge: Optional[Callable[[str], Optional[float]]] = None,
     ) -> None:
         self._embedder = embedder
         self._config = config or CacheConfig()
+        # judge(prompt) -> P(yes) or None (cannot judge now); see CacheConfig.judge_floor.
+        self.judge = judge
+        self.judged = 0  # judge calls, for inspection
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(db_path)
         self._init_schema()
@@ -339,9 +353,10 @@ class SemanticCache:
 
         # Best match first; a candidate the term-swap guard rejects falls
         # through to the next one above the threshold.
-        for idx in np.argsort(-sims):
+        order = np.argsort(-sims)
+        for idx in order:
             if float(sims[idx]) < self._config.similarity_threshold:
-                return None
+                break
             row_id = self._ids[int(idx)]
             if term_swap_conflict(
                 query,
@@ -351,10 +366,23 @@ class SemanticCache:
                 self._config.term_swap_guard,
             ):
                 continue
-            self._hit_counts[row_id] += 1
-            self._conn.execute(
-                "UPDATE cache_entries SET hit_count = ? WHERE id = ?", (self._hit_counts[row_id], row_id)
-            )
-            self._conn.commit()
-            return self._responses[row_id]
+            return self._serve(row_id)
+        # Rewordings the threshold or the guard turned away ("which ocean is the biggest")
+        # look like near-misses ("...the smallest") to rules; a model tells them apart.
+        floor = self._config.judge_floor
+        if self.judge is None or floor is None or not len(order) or float(sims[order[0]]) < floor:
+            return None
+        row_id = self._ids[int(order[0])]
+        self.judged += 1
+        p_yes = self.judge(JUDGE_PROMPT.format(cached=self._queries.get(row_id, ""), new=query))
+        if p_yes is not None and p_yes >= self._config.judge_threshold:
+            return self._serve(row_id)
         return None
+
+    def _serve(self, row_id: int) -> str:
+        self._hit_counts[row_id] += 1
+        self._conn.execute(
+            "UPDATE cache_entries SET hit_count = ? WHERE id = ?", (self._hit_counts[row_id], row_id)
+        )
+        self._conn.commit()
+        return self._responses[row_id]

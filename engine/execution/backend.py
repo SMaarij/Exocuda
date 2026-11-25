@@ -257,6 +257,17 @@ class LocalExecutionBackend:
                 time.sleep(self._simulated_latency_ms / 1000 / 10)
             yield word + " "
 
+    def yes_probability(self, prompt: str) -> Optional[float]:
+        """P(yes) for a yes/no question to the loaded local model, or None when it can't
+        judge (not loaded yet, or a runner without yes_probability)."""
+        judge = getattr(self._runner, "yes_probability", None)
+        if self._loaded is None or not callable(judge):
+            return None
+        try:
+            return float(judge([{"role": "user", "content": prompt}]))
+        except Exception:
+            return None
+
     def release(self) -> None:
         """Unload the model now (the runner may save its state first); the next request reloads it."""
         if self._loaded is not None:

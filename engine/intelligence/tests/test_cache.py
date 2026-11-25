@@ -154,3 +154,41 @@ def test_lookup_updates_hit_count(tmp_path: Path) -> None:
     # match path, not the exact-prefix layer -- verified indirectly by
     # asserting no exception and a valid row exists.
     assert row is not None
+
+
+# ---- judged candidates ---------------------------------------------------------------
+
+
+class _VectorEmbedder:
+    """Fixed vectors: cosine("stored", "close") = 0.85, cosine("stored", "far") = 0.6."""
+
+    VECTORS = {"stored": [1.0, 0.0], "close": [0.85, 0.5268], "far": [0.6, 0.8]}
+
+    def embed(self, text: str) -> list[float]:
+        return self.VECTORS[text]
+
+    def embed_batch(self, texts):
+        return [self.embed(t) for t in texts]
+
+
+def _judged_cache(tmp_path: Path, judge) -> SemanticCache:
+    cache = SemanticCache(_VectorEmbedder(), db_path=tmp_path / "judged.sqlite3", judge=judge)
+    cache.write(_messages("stored"), "the stored answer")
+    return cache
+
+
+def test_a_close_match_the_judge_confirms_is_served(tmp_path: Path) -> None:
+    prompts: list[str] = []
+    cache = _judged_cache(tmp_path, lambda prompt: prompts.append(prompt) or 0.97)
+    assert cache.lookup(_messages("close")) == "the stored answer"
+    assert "Question 1: stored" in prompts[0] and "Question 2: close" in prompts[0]
+
+
+def test_a_close_match_the_judge_rejects_or_cannot_judge_is_a_miss(tmp_path: Path) -> None:
+    assert _judged_cache(tmp_path, lambda prompt: 0.02).lookup(_messages("close")) is None
+    assert _judged_cache(tmp_path / "b", lambda prompt: None).lookup(_messages("close")) is None
+
+
+def test_the_judge_is_not_asked_below_the_floor(tmp_path: Path) -> None:
+    cache = _judged_cache(tmp_path, lambda prompt: pytest.fail("judge asked about a distant question"))
+    assert cache.lookup(_messages("far")) is None and cache.judged == 0

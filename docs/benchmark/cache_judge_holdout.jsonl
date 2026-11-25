@@ -1,0 +1,80 @@
+{"a": "how many legs does a spider have", "b": "what number of legs do spiders have", "same": true}
+{"a": "what is the tallest mountain in the world", "b": "which mountain is the highest on earth", "same": true}
+{"a": "who invented the telephone", "b": "who was the inventor of the telephone", "same": true}
+{"a": "what is the largest ocean", "b": "which ocean is the biggest", "same": true}
+{"a": "how many hours are in a day", "b": "a day has how many hours", "same": true}
+{"a": "what is the square root of 81", "b": "what number squared gives 81", "same": true}
+{"a": "translate good morning into german", "b": "how do you say good morning in german", "same": true}
+{"a": "what language is spoken in brazil", "b": "which language do people in brazil speak", "same": true}
+{"a": "who painted the sistine chapel ceiling", "b": "which artist painted the ceiling of the sistine chapel", "same": true}
+{"a": "what is the freezing point of water in fahrenheit", "b": "at how many degrees fahrenheit does water freeze", "same": true}
+{"a": "how many sides does a hexagon have", "b": "what is the number of sides of a hexagon", "same": true}
+{"a": "what is the main ingredient in guacamole", "b": "guacamole is mostly made from what", "same": true}
+{"a": "what does dna stand for", "b": "what is dna short for", "same": true}
+{"a": "who discovered penicillin", "b": "penicillin was discovered by whom", "same": true}
+{"a": "what is the capital of canada", "b": "which city is canada's capital", "same": true}
+{"a": "convert 100 fahrenheit to celsius", "b": "what is 100 degrees fahrenheit in celsius", "same": true}
+{"a": "how do i reverse a list in python", "b": "what's the way to reverse a python list", "same": true}
+{"a": "what is the plural of goose", "b": "what's the plural form of the word goose", "same": true}
+{"a": "how many planets are in the solar system", "b": "what is the number of planets in our solar system", "same": true}
+{"a": "what is the hardest natural substance", "b": "which natural material is the hardest", "same": true}
+{"a": "who was the first person to walk on the moon", "b": "who first walked on the moon", "same": true}
+{"a": "what gas do plants absorb from the air", "b": "which gas do plants take in from the atmosphere", "same": true}
+{"a": "how many bones are in the adult human body", "b": "an adult human has how many bones", "same": true}
+{"a": "what is the longest river in africa", "b": "which river in africa is the longest", "same": true}
+{"a": "what is 7 times 8", "b": "what do you get when you multiply 7 by 8", "same": true}
+{"a": "define the word ephemeral", "b": "what is the meaning of ephemeral", "same": true}
+{"a": "what is the opposite of generous", "b": "give me an antonym of generous", "same": true}
+{"a": "how many minutes are in an hour", "b": "an hour contains how many minutes", "same": true}
+{"a": "what currency is used in japan", "b": "what is the currency of japan", "same": true}
+{"a": "what is the chemical symbol for sodium", "b": "which element symbol stands for sodium", "same": true}
+{"a": "how do you make a list comprehension in python", "b": "how do i write a python list comprehension", "same": true}
+{"a": "who wrote pride and prejudice", "b": "who is the author of pride and prejudice", "same": true}
+{"a": "what is the smallest prime number", "b": "which prime number is the smallest", "same": true}
+{"a": "what is the boiling point of water in kelvin", "b": "at what temperature in kelvin does water boil", "same": true}
+{"a": "what year did the titanic sink", "b": "in which year did the titanic go down", "same": true}
+{"a": "what is the largest desert in the world", "b": "which desert is the biggest on earth", "same": true}
+{"a": "how many strings does a standard guitar have", "b": "a normal guitar has how many strings", "same": true}
+{"a": "what is the speed of sound in air", "b": "how fast does sound travel through air", "same": true}
+{"a": "what is the capital of italy", "b": "italy's capital city is what", "same": true}
+{"a": "how many teeth does an adult human have", "b": "what is the number of teeth in an adult mouth", "same": true}
+{"a": "how many legs does a spider have", "b": "how many legs does an ant have", "same": false}
+{"a": "what is the tallest mountain in the world", "b": "what is the tallest mountain in africa", "same": false}
+{"a": "who invented the telephone", "b": "who invented the light bulb", "same": false}
+{"a": "what is the largest ocean", "b": "what is the smallest ocean", "same": false}
+{"a": "how many hours are in a day", "b": "how many hours are in a week", "same": false}
+{"a": "what is the square root of 81", "b": "what is the square root of 64", "same": false}
+{"a": "translate good morning into german", "b": "translate good night into german", "same": false}
+{"a": "what language is spoken in brazil", "b": "what language is spoken in argentina", "same": false}
+{"a": "who painted the sistine chapel ceiling", "b": "who designed the sistine chapel", "same": false}
+{"a": "what is the freezing point of water in fahrenheit", "b": "what is the boiling point of water in fahrenheit", "same": false}
+{"a": "how many sides does a hexagon have", "b": "how many sides does an octagon have", "same": false}
+{"a": "what is the main ingredient in guacamole", "b": "what is the main ingredient in hummus", "same": false}
+{"a": "what does dna stand for", "b": "what does rna stand for", "same": false}
+{"a": "who discovered penicillin", "b": "who discovered insulin", "same": false}
+{"a": "what is the capital of canada", "b": "what is the largest city in canada", "same": false}
+{"a": "convert 100 fahrenheit to celsius", "b": "convert 100 celsius to fahrenheit", "same": false}
+{"a": "how do i reverse a list in python", "b": "how do i sort a list in python", "same": false}
+{"a": "what is the plural of goose", "b": "what is the plural of moose", "same": false}
+{"a": "how many planets are in the solar system", "b": "how many moons does jupiter have", "same": false}
+{"a": "what is the hardest natural substance", "b": "what is the softest natural mineral", "same": false}
+{"a": "who was the first person to walk on the moon", "b": "who was the second person to walk on the moon", "same": false}
+{"a": "what gas do plants absorb from the air", "b": "what gas do plants release into the air", "same": false}
+{"a": "how many bones are in the adult human body", "b": "how many bones are in a baby's body", "same": false}
+{"a": "what is the longest river in africa", "b": "what is the longest river in south america", "same": false}
+{"a": "what is 7 times 8", "b": "what is 7 times 9", "same": false}
+{"a": "define the word ephemeral", "b": "define the word eternal", "same": false}
+{"a": "what is the opposite of generous", "b": "what is a synonym of generous", "same": false}
+{"a": "how many minutes are in an hour", "b": "how many seconds are in an hour", "same": false}
+{"a": "what currency is used in japan", "b": "what currency is used in china", "same": false}
+{"a": "what is the chemical symbol for sodium", "b": "what is the chemical symbol for potassium", "same": false}
+{"a": "how do you make a list comprehension in python", "b": "how do you make a dictionary comprehension in python", "same": false}
+{"a": "who wrote pride and prejudice", "b": "who wrote sense and sensibility", "same": false}
+{"a": "what is the smallest prime number", "b": "what is the largest prime number below 100", "same": false}
+{"a": "what is the boiling point of water in kelvin", "b": "what is the boiling point of ethanol in kelvin", "same": false}
+{"a": "what year did the titanic sink", "b": "what year was the titanic built", "same": false}
+{"a": "what is the largest desert in the world", "b": "what is the largest desert in asia", "same": false}
+{"a": "how many strings does a standard guitar have", "b": "how many strings does a bass guitar have", "same": false}
+{"a": "what is the speed of sound in air", "b": "what is the speed of sound in water", "same": false}
+{"a": "what is the capital of italy", "b": "what is the capital of spain", "same": false}
+{"a": "how many teeth does an adult human have", "b": "how many teeth does a child have", "same": false}

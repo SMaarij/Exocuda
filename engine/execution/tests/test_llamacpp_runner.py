@@ -1014,3 +1014,24 @@ def test_generate_streams_each_decoded_piece() -> None:
     assert pieces == ["one", "two", "three", "four", "five"]
     assert sample.output_text == "one two three four five"
     assert runner.streams is True
+
+
+def test_yes_probability_reads_the_yes_and_no_logits(monkeypatch) -> None:
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    llm = built[0]
+    yes, no = llm._id("yes"), llm._id("no")
+    for w in ("Yes", "No"):
+        llm._id(w)
+    llm.evaluated_ids = []
+    llm.n_tokens, llm.input_ids = 0, np.zeros(64, dtype=np.intc)
+
+    def eval_(ids):
+        llm.evaluated_ids.append(list(ids))
+        llm.n_tokens += len(ids)
+    llm.eval = eval_
+    logits = np.full(64, -10.0)
+    logits[yes], logits[no] = 2.0, 0.0
+    monkeypatch.setattr(runner, "_final_logits", lambda: logits)
+    p = runner.yes_probability([{"role": "user", "content": "same question?"}])
+    assert abs(p - 1 / (1 + np.exp(-2.0))) < 0.01 and llm.evaluated_ids

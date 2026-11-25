@@ -94,6 +94,10 @@ class Pipeline:
         self._cloud_byok_backend = cloud_byok_backend
         self._compressor = compressor
         self._cache = cache
+        # The cache asks the main local model whether a close-but-unsure match asks the same
+        # thing (CacheConfig.judge_floor). It judges only once that model is loaded.
+        if cache is not None and getattr(cache, "judge", None) is None and callable(getattr(backend, "yes_probability", None)):
+            cache.judge = backend.yes_probability
         self._router = router
         self._shadow_labeler = shadow_labeler
         self._confidence_floor = confidence_floor

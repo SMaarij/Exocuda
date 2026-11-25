@@ -1071,3 +1071,47 @@ the FP16 file with llama.cpp's quantizer (same run, 7B at 297 ms per token):
 4-bit weights cost about 3 points of agreement and are not measurably cheaper. Single-token times moved
 ±30% with background load: the shipped file measured 45 ms in one run and 30 ms in another. The shipped
 draft stays.
+
+
+## Addendum 24 — the cache asks the 7B about close matches: rewordings 22/55 → 54/55, still 0 wrong, 2026-11-25
+
+The cache served only about 40% of reworded questions: 8/15 fixture pairs, and 14/40 on a new held-out
+set of 40 rewordings and 40 near-misses (`cache_judge_holdout.jsonl`, written before any scoring). The
+similarity threshold was not the cause. The strict term-swap guard turned away 30 of the 33 rewordings
+it missed. It flags framing words ("does", "number of", "short for", "highest" for "tallest") as swaps,
+and flags any word-order change ("which ocean is the biggest") as a reversed conversion. The same guard
+catches 57 of 59 near-misses.
+
+Asking a model "do these two questions ask for exactly the same information?" and reading P(yes)
+against P(no) from one prompt evaluation (`scripts/analysis/cache_judge.py`):
+
+| Judge | Lowest P(yes), 55 rewordings | Highest P(yes), 59 near-misses |
+|---|---:|---:|
+| qwen2.5 0.5B | 0.54 | 0.89 ("10 miles to km" / "10 km to miles") |
+| qwen2.5 1.5B | 0.81 | 0.89 ("√144" / "√169") |
+| **qwen2.5-coder 7B (already loaded)** | **0.83** | **0.009** |
+
+The small models overlap and the 7B separates the two groups by a wide margin. So the cache now works
+like this:
+
+- A match at similarity ≥ 0.92 that passes the guard is served at once, as before.
+- Otherwise the best match at similarity ≥ 0.80 goes to the main local model
+  (`LocalExecutionBackend.yes_probability`, one prompt evaluation, no generation), with the guard's
+  verdict ignored. It is served when P(yes) ≥ 0.5.
+- The judge prompt starts with the fixed instruction, so its computed prefix is reused.
+- The model judges only once it is loaded; before that, the lookup behaves as before.
+
+End to end, with the real `SemanticCache` and the 7B in its served drafting mode
+(`scripts/analysis/cache_judge_live.py`, `cache_judge_live.json`):
+
+| | rewordings served | near-misses served | judge calls |
+|---|---:|---:|---:|
+| fixture (15 + 19) | 14/15 | **0/19** | 21 |
+| held out (40 + 40) | 40/40 | **0/40** | 53 |
+
+- The missed fixture pair is "who is the current prime minister of the uk": time-sensitive, so it is never
+  cached.
+- A judge call took 2.4 s median (4.3 s worst). A miss costs that on top of the normal answer, but a hit
+  replaces an answer that takes 2–40 s to generate.
+- `cache.judge_floor` set to None turns judging off. `scripts/run_benchmark.py` measures the cache
+  without a model, so its rewording number stays at the guard-only value.

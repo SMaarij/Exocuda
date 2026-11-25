@@ -169,3 +169,13 @@ def test_release_unloads_the_model_and_the_next_request_reloads_it(tmp_path) -> 
     assert runner.unloads == 1 and runner._loaded is None
     backend.generate([{"role": "user", "content": "again"}])
     assert runner._loaded is not None
+
+
+def test_yes_probability_needs_a_loaded_model_that_can_judge(tmp_path) -> None:
+    backend = _make_backend(tmp_path)
+    runner = backend._runner
+    assert backend.yes_probability("same?") is None  # nothing loaded
+    backend.generate([{"role": "user", "content": "hi"}])
+    assert backend.yes_probability("same?") is None  # this runner can't judge
+    runner.yes_probability = lambda messages: 0.9
+    assert backend.yes_probability("same?") == 0.9

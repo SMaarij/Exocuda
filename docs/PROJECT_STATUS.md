@@ -13,7 +13,7 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | FR-03 | AccelerationEngine (layers, fallback, acceptance monitor) | Done, verified live | cost-aware draft model plus lookup drafting on by default: 1.58x overall on the idle CPU-only laptop (Addendum 17); lookup adds +0.13x under load (Addendum 19); lossless |
 | FR-04 | ContextCompressor | Done | unit tests |
 | FR-05 | SemanticRouter (3-way) | Done | 89.2% held-out agreement; live routing to `local` and `cloud_byok` |
-| FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
+| FR-06 | SemanticCache | Done, verified live | 54/55 rewordings served, 0/59 near-misses (the 7B judges unsure matches, Addendum 24); 42.9% before |
 | FR-07 | Self-hosted Cascade server | Done, verified live locally | auth, quotas and streaming exercised against a real upstream |
 | FR-08 | CLI | Done | `init / ask / chat / stats / profile / doctor / config` |
 | NFR-01 | ≥1.5x acceleration | **Met overall** (1.58x; grounded 1.88x, open-ended 1.27x) | cost-aware draft length, per-machine verify costs, 2 interleaved rounds, verified lossless (Addendum 17) |
@@ -21,6 +21,12 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.11.0 — the cache understands rewordings
+
+- A close match the rules turn away ("which ocean is the biggest" after "what is the largest ocean") is
+  put to the main local model as a yes/no question (2.4 s median). Rewordings served: 54/55, was 22/55;
+  near-misses served: still 0/59.
 
 ## 0.10.1 — the CLI streams
 

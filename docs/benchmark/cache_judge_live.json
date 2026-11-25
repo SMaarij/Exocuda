@@ -1,0 +1,1161 @@
+{
+ "summary": {
+  "fixture": {
+   "rewordings_served": "14/15",
+   "near_misses_served": "0/19",
+   "judge_calls": 21
+  },
+  "holdout": {
+   "rewordings_served": "40/40",
+   "near_misses_served": "0/40",
+   "judge_calls": 53
+  },
+  "judge_latency_s": {
+   "median": 2.44,
+   "max": 4.29,
+   "calls": 74
+  }
+ },
+ "rows": [
+  {
+   "a": "what is the capital of france",
+   "b": "what's france's capital city",
+   "same": true,
+   "answer": "The capital of France is Paris.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.032,
+   "judged": 0
+  },
+  {
+   "a": "how do you spell definitely",
+   "b": "what's the correct spelling of definitely",
+   "same": true,
+   "answer": "D-E-F-I-N-I-T-E-L-Y.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.019,
+   "judged": 0
+  },
+  {
+   "a": "what is the boiling point of water in celsius",
+   "b": "at what celsius temperature does water boil",
+   "same": true,
+   "answer": "The boiling point of water is 100\u00b0C.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 4.32,
+   "judged": 1
+  },
+  {
+   "a": "who wrote romeo and juliet",
+   "b": "who is the author of romeo and juliet",
+   "same": true,
+   "answer": "William Shakespeare wrote Romeo and Juliet.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.022,
+   "judged": 0
+  },
+  {
+   "a": "convert 10 miles to kilometers",
+   "b": "how many kilometers is 10 miles",
+   "same": true,
+   "answer": "10 miles is equivalent to approximately 16.09 kilometers.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.041,
+   "judged": 0
+  },
+  {
+   "a": "what does the word ubiquitous mean",
+   "b": "can you define the word ubiquitous",
+   "same": true,
+   "answer": "The word \"ubiquitous\" means being present or found everywhere at the same time.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 2.367,
+   "judged": 1
+  },
+  {
+   "a": "what year did world war two end",
+   "b": "in what year did world war 2 come to an end",
+   "same": true,
+   "answer": "World War II ended in 1945.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.031,
+   "judged": 0
+  },
+  {
+   "a": "give me a synonym for happy",
+   "b": "what's another word for happy",
+   "same": true,
+   "answer": "Elated.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 2.726,
+   "judged": 1
+  },
+  {
+   "a": "explain how photosynthesis works",
+   "b": "can you describe how photosynthesis functions",
+   "same": true,
+   "answer": "Photosynthesis is the process by which plants, algae, and some bacteria convert light energy from the sun into chemical energy in the form of glucose. This process involves the absorption of carbon dioxide and water, followed by the conversion of light energy into ATP and NADPH, which are then used to produce glucose and oxygen.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 2.6,
+   "judged": 1
+  },
+  {
+   "a": "what is 15 times 4",
+   "b": "what's the product of 15 and 4",
+   "same": true,
+   "answer": "60",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 2.889,
+   "judged": 1
+  },
+  {
+   "a": "what's the capital of japan",
+   "b": "which city is the capital of japan",
+   "same": true,
+   "answer": "Tokyo is the capital of Japan.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.048,
+   "judged": 0
+  },
+  {
+   "a": "who is the current prime minister of the uk",
+   "b": "who currently serves as uk prime minister",
+   "same": true,
+   "answer": "Rishi Sunak.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 0.0,
+   "judged": 0
+  },
+  {
+   "a": "what is the chemical formula for water",
+   "b": "how is water represented chemically",
+   "same": true,
+   "answer": "H2O.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 2.415,
+   "judged": 1
+  },
+  {
+   "a": "how many continents are there",
+   "b": "what is the total number of continents",
+   "same": true,
+   "answer": "There are 7 continents: Africa, Antarctica, Asia, Australia, Europe, North America, and South America.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 0.034,
+   "judged": 0
+  },
+  {
+   "a": "what is the speed of light",
+   "b": "how fast does light travel",
+   "same": true,
+   "answer": "The speed of light is approximately 299,792,458 meters per second.",
+   "set": "fixture",
+   "served": true,
+   "lookup_s": 1.77,
+   "judged": 1
+  },
+  {
+   "a": "what's the boiling point of water in fahrenheit",
+   "b": "what is the boiling point of water in celsius",
+   "same": false,
+   "answer": "The boiling point of water is 212\u00b0F at standard atmospheric pressure.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.589,
+   "judged": 1
+  },
+  {
+   "a": "what's 15 times 4",
+   "b": "what's 15 times 5",
+   "same": false,
+   "answer": "60.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 1.865,
+   "judged": 1
+  },
+  {
+   "a": "what's the capital of japan",
+   "b": "what's the capital of china",
+   "same": false,
+   "answer": "Tokyo.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 1.684,
+   "judged": 1
+  },
+  {
+   "a": "who wrote romeo and juliet",
+   "b": "who wrote hamlet",
+   "same": false,
+   "answer": "William Shakespeare.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "convert 5 kilograms to pounds",
+   "b": "convert 5 pounds to kilograms",
+   "same": false,
+   "answer": "5 kilograms is approximately 11 pounds.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 1.874,
+   "judged": 1
+  },
+  {
+   "a": "what year did the berlin wall fall",
+   "b": "what year was the berlin wall built",
+   "same": false,
+   "answer": "The Berlin Wall fell on November 9, 1989.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.065,
+   "judged": 1
+  },
+  {
+   "a": "convert 10 miles to kilometers",
+   "b": "convert 10 kilometers to miles",
+   "same": false,
+   "answer": "10 miles is approximately equal to 16.09 kilometers.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.967,
+   "judged": 1
+  },
+  {
+   "a": "what is the speed of light",
+   "b": "what is the speed of sound",
+   "same": false,
+   "answer": "The speed of light is approximately 299,792,458 meters per second (m/s) or 186,282 miles per second (mi/s) in a vacuum.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "what does the word ubiquitous mean",
+   "b": "what does the word ambiguous mean",
+   "same": false,
+   "answer": "The word \"ubiquitous\" means being present or found everywhere at the same time.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "what is the chemical formula for water",
+   "b": "what is the chemical formula for salt",
+   "same": false,
+   "answer": "The chemical formula for water is H2O.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.826,
+   "judged": 1
+  },
+  {
+   "a": "how many days are in a leap year",
+   "b": "how many days are in a regular year",
+   "same": false,
+   "answer": "There are 366 days in a leap year.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.918,
+   "judged": 1
+  },
+  {
+   "a": "what is the freezing point of water in celsius",
+   "b": "what is the freezing point of water in kelvin",
+   "same": false,
+   "answer": "The freezing point of water in Celsius is 0\u00b0C.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 3.179,
+   "judged": 1
+  },
+  {
+   "a": "what's 12 divided by 3",
+   "b": "what's 12 divided by 4",
+   "same": false,
+   "answer": "4.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.69,
+   "judged": 1
+  },
+  {
+   "a": "what's the population of canada",
+   "b": "what's the population of australia",
+   "same": false,
+   "answer": "According to the 2021 census, Canada's population is approximately 38.2 million people.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 1.885,
+   "judged": 1
+  },
+  {
+   "a": "how do i convert celsius to fahrenheit",
+   "b": "how do i convert fahrenheit to celsius",
+   "same": false,
+   "answer": "To convert Celsius to Fahrenheit, use the formula: \u00b0F = (\u00b0C \u00d7 9/5) + 32.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.241,
+   "judged": 1
+  },
+  {
+   "a": "what is the largest planet in the solar system",
+   "b": "what is the smallest planet in the solar system",
+   "same": false,
+   "answer": "Jupiter is the largest planet in our solar system.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 2.299,
+   "judged": 1
+  },
+  {
+   "a": "who painted the mona lisa",
+   "b": "who painted the starry night",
+   "same": false,
+   "answer": "Leonardo da Vinci painted the Mona Lisa.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 0.007,
+   "judged": 0
+  },
+  {
+   "a": "what's the square root of 144",
+   "b": "what's the square root of 169",
+   "same": false,
+   "answer": "The square root of 144 is 12.",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 0.01,
+   "judged": 0
+  },
+  {
+   "a": "how do you say hello in spanish",
+   "b": "how do you say hello in french",
+   "same": false,
+   "answer": "You say \"hola\" (OH-lah).",
+   "set": "fixture",
+   "served": false,
+   "lookup_s": 1.872,
+   "judged": 1
+  },
+  {
+   "a": "how many legs does a spider have",
+   "b": "what number of legs do spiders have",
+   "same": true,
+   "answer": "a spider has eight legs.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.369,
+   "judged": 1
+  },
+  {
+   "a": "what is the tallest mountain in the world",
+   "b": "which mountain is the highest on earth",
+   "same": true,
+   "answer": "the tallest mountain in the world is the Mount Everest, which stands at 8,848 meters (29,029 feet) above sea level.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 3.176,
+   "judged": 1
+  },
+  {
+   "a": "who invented the telephone",
+   "b": "who was the inventor of the telephone",
+   "same": true,
+   "answer": "Alexander Graham Bell invented the telephone.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.02,
+   "judged": 0
+  },
+  {
+   "a": "what is the largest ocean",
+   "b": "which ocean is the biggest",
+   "same": true,
+   "answer": "the largest ocean is the Pacific Ocean.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.307,
+   "judged": 1
+  },
+  {
+   "a": "how many hours are in a day",
+   "b": "a day has how many hours",
+   "same": true,
+   "answer": "A day has 24 hours.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 3.068,
+   "judged": 1
+  },
+  {
+   "a": "what is the square root of 81",
+   "b": "what number squared gives 81",
+   "same": true,
+   "answer": "the square root of 81 is 9.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 3.122,
+   "judged": 1
+  },
+  {
+   "a": "translate good morning into german",
+   "b": "how do you say good morning in german",
+   "same": true,
+   "answer": "good morning is pronounced as /\u02c8\u0261o\u028ad \u02c8m\u0254\u02d0n/.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.63,
+   "judged": 1
+  },
+  {
+   "a": "what language is spoken in brazil",
+   "b": "which language do people in brazil speak",
+   "same": true,
+   "answer": "Brazil is spoken in Portuguese.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.067,
+   "judged": 1
+  },
+  {
+   "a": "who painted the sistine chapel ceiling",
+   "b": "which artist painted the ceiling of the sistine chapel",
+   "same": true,
+   "answer": "The Sistine Chapel ceiling was painted by Michelangelo.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.024,
+   "judged": 0
+  },
+  {
+   "a": "what is the freezing point of water in fahrenheit",
+   "b": "at how many degrees fahrenheit does water freeze",
+   "same": true,
+   "answer": "the freezing point of water in fahrenheit is 32 degrees Fahrenheit.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.216,
+   "judged": 1
+  },
+  {
+   "a": "how many sides does a hexagon have",
+   "b": "what is the number of sides of a hexagon",
+   "same": true,
+   "answer": "A hexagon has six sides.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.435,
+   "judged": 1
+  },
+  {
+   "a": "what is the main ingredient in guacamole",
+   "b": "guacamole is mostly made from what",
+   "same": true,
+   "answer": "avocado is the main ingredient in guacamole.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.234,
+   "judged": 1
+  },
+  {
+   "a": "what does dna stand for",
+   "b": "what is dna short for",
+   "same": true,
+   "answer": "DNA stands for deoxyribonucleic acid.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 1.817,
+   "judged": 1
+  },
+  {
+   "a": "who discovered penicillin",
+   "b": "penicillin was discovered by whom",
+   "same": true,
+   "answer": "penicillin was discovered by Alexander Fleming in 1928. penicillin was discovered by Alexander Fleming in 1928. penicillin was discovered by Alexander Fleming in 1928. penicillin was discovered by Alexander Fleming in 1928. penicillin was",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.02,
+   "judged": 1
+  },
+  {
+   "a": "what is the capital of canada",
+   "b": "which city is canada's capital",
+   "same": true,
+   "answer": "The capital of Canada is Ottawa.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.021,
+   "judged": 0
+  },
+  {
+   "a": "convert 100 fahrenheit to celsius",
+   "b": "what is 100 degrees fahrenheit in celsius",
+   "same": true,
+   "answer": "100 degrees Fahrenheit is equal to 37.8 degrees Celsius.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.023,
+   "judged": 0
+  },
+  {
+   "a": "how do i reverse a list in python",
+   "b": "what's the way to reverse a python list",
+   "same": true,
+   "answer": "To reverse a list in Python, you can use the `[::-1]` slicing technique. This technique creates a new list that contains the elements of the original list in reverse order. Here's how you can do it:\n\n1. **Create the original list**: For example, let's say you have a list of",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.023,
+   "judged": 0
+  },
+  {
+   "a": "what is the plural of goose",
+   "b": "what's the plural form of the word goose",
+   "same": true,
+   "answer": "a goose is a duck. A duck is a duck.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.027,
+   "judged": 0
+  },
+  {
+   "a": "how many planets are in the solar system",
+   "b": "what is the number of planets in our solar system",
+   "same": true,
+   "answer": "there are 8 planets in the solar system. they are: mercury, venus, earth, mars, jupiter, saturn, uranus, and neptune.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.031,
+   "judged": 0
+  },
+  {
+   "a": "what is the hardest natural substance",
+   "b": "which natural material is the hardest",
+   "same": true,
+   "answer": "diamond is the hardest natural substance.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.691,
+   "judged": 1
+  },
+  {
+   "a": "who was the first person to walk on the moon",
+   "b": "who first walked on the moon",
+   "same": true,
+   "answer": "Neil Armstrong became the first person to walk on the moon. He stepped onto the moon's surface on July 20, 1969. Armstrong and Buzz Aldrin, who had been on the moon before, walked on the moon's surface together.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.077,
+   "judged": 0
+  },
+  {
+   "a": "what gas do plants absorb from the air",
+   "b": "which gas do plants take in from the atmosphere",
+   "same": true,
+   "answer": "plants absorb carbon dioxide from the air.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.882,
+   "judged": 1
+  },
+  {
+   "a": "how many bones are in the adult human body",
+   "b": "an adult human has how many bones",
+   "same": true,
+   "answer": "The adult human body has 206 bones.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.783,
+   "judged": 1
+  },
+  {
+   "a": "what is the longest river in africa",
+   "b": "which river in africa is the longest",
+   "same": true,
+   "answer": "the longest river in africa is the Nile. it is 6,650 km (4,130 mi) long. it starts in the highlands of the northwestern part of the country of egypt and flows through the desert of egypt, the nile delta, and the desert of sa",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.863,
+   "judged": 1
+  },
+  {
+   "a": "what is 7 times 8",
+   "b": "what do you get when you multiply 7 by 8",
+   "same": true,
+   "answer": "7 times 8 is 56.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.993,
+   "judged": 1
+  },
+  {
+   "a": "define the word ephemeral",
+   "b": "what is the meaning of ephemeral",
+   "same": true,
+   "answer": "Ephemeral means \"lasting for a short time.\"",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.022,
+   "judged": 0
+  },
+  {
+   "a": "what is the opposite of generous",
+   "b": "give me an antonym of generous",
+   "same": true,
+   "answer": "generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 1.985,
+   "judged": 1
+  },
+  {
+   "a": "how many minutes are in an hour",
+   "b": "an hour contains how many minutes",
+   "same": true,
+   "answer": "1 hour is 60 minutes.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.04,
+   "judged": 0
+  },
+  {
+   "a": "what currency is used in japan",
+   "b": "what is the currency of japan",
+   "same": true,
+   "answer": "Japanese yen (JPY) is the official currency of Japan.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.021,
+   "judged": 0
+  },
+  {
+   "a": "what is the chemical symbol for sodium",
+   "b": "which element symbol stands for sodium",
+   "same": true,
+   "answer": "The chemical symbol for sodium is Na.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 1.736,
+   "judged": 1
+  },
+  {
+   "a": "how do you make a list comprehension in python",
+   "b": "how do i write a python list comprehension",
+   "same": true,
+   "answer": "a list comprehension in Python is a concise way to create a new list based on an existing list and a function. Here's a step-by-step guide:\n\n1. Define the existing list.\n2. Write a function that takes the existing list and a function as arguments.\n3. Use the function to create a new list",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.023,
+   "judged": 0
+  },
+  {
+   "a": "who wrote pride and prejudice",
+   "b": "who is the author of pride and prejudice",
+   "same": true,
+   "answer": "John Steinbeck wrote \"Pride and Prejudice\" (1937).",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.022,
+   "judged": 0
+  },
+  {
+   "a": "what is the smallest prime number",
+   "b": "which prime number is the smallest",
+   "same": true,
+   "answer": "the smallest prime number is 2.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 1.815,
+   "judged": 1
+  },
+  {
+   "a": "what is the boiling point of water in kelvin",
+   "b": "at what temperature in kelvin does water boil",
+   "same": true,
+   "answer": "boiling point of water is 100 degrees Celsius.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.34,
+   "judged": 1
+  },
+  {
+   "a": "what year did the titanic sink",
+   "b": "in which year did the titanic go down",
+   "same": true,
+   "answer": "the titanic sank on april 15, 1912.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 3.072,
+   "judged": 1
+  },
+  {
+   "a": "what is the largest desert in the world",
+   "b": "which desert is the biggest on earth",
+   "same": true,
+   "answer": "the largest desert in the world is the Gobi Desert. it is located in the northern part of China.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 3.218,
+   "judged": 1
+  },
+  {
+   "a": "how many strings does a standard guitar have",
+   "b": "a normal guitar has how many strings",
+   "same": true,
+   "answer": "a standard guitar has 4 strings.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 4.176,
+   "judged": 1
+  },
+  {
+   "a": "what is the speed of sound in air",
+   "b": "how fast does sound travel through air",
+   "same": true,
+   "answer": "the speed of sound in air is approximately 343 meters per second.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.64,
+   "judged": 1
+  },
+  {
+   "a": "what is the capital of italy",
+   "b": "italy's capital city is what",
+   "same": true,
+   "answer": "rome",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 0.021,
+   "judged": 0
+  },
+  {
+   "a": "how many teeth does an adult human have",
+   "b": "what is the number of teeth in an adult mouth",
+   "same": true,
+   "answer": "an adult human has 32 teeth.",
+   "set": "holdout",
+   "served": true,
+   "lookup_s": 2.852,
+   "judged": 1
+  },
+  {
+   "a": "how many legs does a spider have",
+   "b": "how many legs does an ant have",
+   "same": false,
+   "answer": "a spider has eight legs.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.352,
+   "judged": 1
+  },
+  {
+   "a": "what is the tallest mountain in the world",
+   "b": "what is the tallest mountain in africa",
+   "same": false,
+   "answer": "the tallest mountain in the world is the Mount Everest, which stands at 8,848 meters (29,029 feet) above sea level.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.037,
+   "judged": 1
+  },
+  {
+   "a": "who invented the telephone",
+   "b": "who invented the light bulb",
+   "same": false,
+   "answer": "Alexander Graham Bell invented the telephone.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "what is the largest ocean",
+   "b": "what is the smallest ocean",
+   "same": false,
+   "answer": "the largest ocean is the Pacific Ocean.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.007,
+   "judged": 0
+  },
+  {
+   "a": "how many hours are in a day",
+   "b": "how many hours are in a week",
+   "same": false,
+   "answer": "A day has 24 hours.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 1.905,
+   "judged": 1
+  },
+  {
+   "a": "what is the square root of 81",
+   "b": "what is the square root of 64",
+   "same": false,
+   "answer": "the square root of 81 is 9.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.009,
+   "judged": 0
+  },
+  {
+   "a": "translate good morning into german",
+   "b": "translate good night into german",
+   "same": false,
+   "answer": "good morning is pronounced as /\u02c8\u0261o\u028ad \u02c8m\u0254\u02d0n/.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 1.693,
+   "judged": 1
+  },
+  {
+   "a": "what language is spoken in brazil",
+   "b": "what language is spoken in argentina",
+   "same": false,
+   "answer": "Brazil is spoken in Portuguese.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "who painted the sistine chapel ceiling",
+   "b": "who designed the sistine chapel",
+   "same": false,
+   "answer": "The Sistine Chapel ceiling was painted by Michelangelo.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.007,
+   "judged": 1
+  },
+  {
+   "a": "what is the freezing point of water in fahrenheit",
+   "b": "what is the boiling point of water in fahrenheit",
+   "same": false,
+   "answer": "the freezing point of water in fahrenheit is 32 degrees Fahrenheit.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.689,
+   "judged": 1
+  },
+  {
+   "a": "how many sides does a hexagon have",
+   "b": "how many sides does an octagon have",
+   "same": false,
+   "answer": "A hexagon has six sides.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.024,
+   "judged": 0
+  },
+  {
+   "a": "what is the main ingredient in guacamole",
+   "b": "what is the main ingredient in hummus",
+   "same": false,
+   "answer": "avocado is the main ingredient in guacamole.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.009,
+   "judged": 0
+  },
+  {
+   "a": "what does dna stand for",
+   "b": "what does rna stand for",
+   "same": false,
+   "answer": "DNA stands for deoxyribonucleic acid.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "who discovered penicillin",
+   "b": "who discovered insulin",
+   "same": false,
+   "answer": "penicillin was discovered by Alexander Fleming in 1928. penicillin was discovered by Alexander Fleming in 1928. penicillin was discovered by Alexander Fleming in 1928. penicillin was discovered by Alexander Fleming in 1928. penicillin was",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.011,
+   "judged": 0
+  },
+  {
+   "a": "what is the capital of canada",
+   "b": "what is the largest city in canada",
+   "same": false,
+   "answer": "The capital of Canada is Ottawa.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.924,
+   "judged": 1
+  },
+  {
+   "a": "convert 100 fahrenheit to celsius",
+   "b": "convert 100 celsius to fahrenheit",
+   "same": false,
+   "answer": "100 degrees Fahrenheit is equal to 37.8 degrees Celsius.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 3.658,
+   "judged": 1
+  },
+  {
+   "a": "how do i reverse a list in python",
+   "b": "how do i sort a list in python",
+   "same": false,
+   "answer": "To reverse a list in Python, you can use the `[::-1]` slicing technique. This technique creates a new list that contains the elements of the original list in reverse order. Here's how you can do it:\n\n1. **Create the original list**: For example, let's say you have a list of",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "what is the plural of goose",
+   "b": "what is the plural of moose",
+   "same": false,
+   "answer": "a goose is a duck. A duck is a duck.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "how many planets are in the solar system",
+   "b": "how many moons does jupiter have",
+   "same": false,
+   "answer": "there are 8 planets in the solar system. they are: mercury, venus, earth, mars, jupiter, saturn, uranus, and neptune.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "what is the hardest natural substance",
+   "b": "what is the softest natural mineral",
+   "same": false,
+   "answer": "diamond is the hardest natural substance.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.008,
+   "judged": 0
+  },
+  {
+   "a": "who was the first person to walk on the moon",
+   "b": "who was the second person to walk on the moon",
+   "same": false,
+   "answer": "Neil Armstrong became the first person to walk on the moon. He stepped onto the moon's surface on July 20, 1969. Armstrong and Buzz Aldrin, who had been on the moon before, walked on the moon's surface together.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 3.116,
+   "judged": 1
+  },
+  {
+   "a": "what gas do plants absorb from the air",
+   "b": "what gas do plants release into the air",
+   "same": false,
+   "answer": "plants absorb carbon dioxide from the air.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.484,
+   "judged": 1
+  },
+  {
+   "a": "how many bones are in the adult human body",
+   "b": "how many bones are in a baby's body",
+   "same": false,
+   "answer": "The adult human body has 206 bones.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.3,
+   "judged": 1
+  },
+  {
+   "a": "what is the longest river in africa",
+   "b": "what is the longest river in south america",
+   "same": false,
+   "answer": "the longest river in africa is the Nile. it is 6,650 km (4,130 mi) long. it starts in the highlands of the northwestern part of the country of egypt and flows through the desert of egypt, the nile delta, and the desert of sa",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.021,
+   "judged": 1
+  },
+  {
+   "a": "what is 7 times 8",
+   "b": "what is 7 times 9",
+   "same": false,
+   "answer": "7 times 8 is 56.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.24,
+   "judged": 1
+  },
+  {
+   "a": "define the word ephemeral",
+   "b": "define the word eternal",
+   "same": false,
+   "answer": "Ephemeral means \"lasting for a short time.\"",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 0.007,
+   "judged": 0
+  },
+  {
+   "a": "what is the opposite of generous",
+   "b": "what is a synonym of generous",
+   "same": false,
+   "answer": "generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous is the opposite of generous",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 1.637,
+   "judged": 1
+  },
+  {
+   "a": "how many minutes are in an hour",
+   "b": "how many seconds are in an hour",
+   "same": false,
+   "answer": "1 hour is 60 minutes.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.385,
+   "judged": 1
+  },
+  {
+   "a": "what currency is used in japan",
+   "b": "what currency is used in china",
+   "same": false,
+   "answer": "Japanese yen (JPY) is the official currency of Japan.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.991,
+   "judged": 1
+  },
+  {
+   "a": "what is the chemical symbol for sodium",
+   "b": "what is the chemical symbol for potassium",
+   "same": false,
+   "answer": "The chemical symbol for sodium is Na.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.678,
+   "judged": 1
+  },
+  {
+   "a": "how do you make a list comprehension in python",
+   "b": "how do you make a dictionary comprehension in python",
+   "same": false,
+   "answer": "a list comprehension in Python is a concise way to create a new list based on an existing list and a function. Here's a step-by-step guide:\n\n1. Define the existing list.\n2. Write a function that takes the existing list and a function as arguments.\n3. Use the function to create a new list",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 3.153,
+   "judged": 1
+  },
+  {
+   "a": "who wrote pride and prejudice",
+   "b": "who wrote sense and sensibility",
+   "same": false,
+   "answer": "John Steinbeck wrote \"Pride and Prejudice\" (1937).",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.66,
+   "judged": 1
+  },
+  {
+   "a": "what is the smallest prime number",
+   "b": "what is the largest prime number below 100",
+   "same": false,
+   "answer": "the smallest prime number is 2.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.584,
+   "judged": 1
+  },
+  {
+   "a": "what is the boiling point of water in kelvin",
+   "b": "what is the boiling point of ethanol in kelvin",
+   "same": false,
+   "answer": "boiling point of water is 100 degrees Celsius.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.619,
+   "judged": 1
+  },
+  {
+   "a": "what year did the titanic sink",
+   "b": "what year was the titanic built",
+   "same": false,
+   "answer": "the titanic sank on april 15, 1912.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.042,
+   "judged": 1
+  },
+  {
+   "a": "what is the largest desert in the world",
+   "b": "what is the largest desert in asia",
+   "same": false,
+   "answer": "the largest desert in the world is the Gobi Desert. it is located in the northern part of China.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 1.934,
+   "judged": 1
+  },
+  {
+   "a": "how many strings does a standard guitar have",
+   "b": "how many strings does a bass guitar have",
+   "same": false,
+   "answer": "a standard guitar has 4 strings.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.133,
+   "judged": 1
+  },
+  {
+   "a": "what is the speed of sound in air",
+   "b": "what is the speed of sound in water",
+   "same": false,
+   "answer": "the speed of sound in air is approximately 343 meters per second.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.624,
+   "judged": 1
+  },
+  {
+   "a": "what is the capital of italy",
+   "b": "what is the capital of spain",
+   "same": false,
+   "answer": "rome",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.038,
+   "judged": 1
+  },
+  {
+   "a": "how many teeth does an adult human have",
+   "b": "how many teeth does a child have",
+   "same": false,
+   "answer": "an adult human has 32 teeth.",
+   "set": "holdout",
+   "served": false,
+   "lookup_s": 2.582,
+   "judged": 1
+  }
+ ]
+}

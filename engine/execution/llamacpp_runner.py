@@ -1067,6 +1067,41 @@ class LlamaCppRunner:
             acceptance_rate=self._counter.acceptance_rate(len(out)) if self._counter is not None else None,
         )
 
+    def yes_probability(self, prompt: str | list[dict]) -> float:
+        """P(the reply starts with yes) against no, from one evaluation of the prompt in the
+        chat template -- a yes/no judgement without generating. Reuses the prompt prefix
+        it shares with the cache (and saved caches) like generate()."""
+        if self._llm is None:
+            raise RuntimeError("No model loaded -- call load() first.")
+        llm = self._llm
+        ids = self._chat_tokens(prompt)
+        slots = kv_slots_for(llm, self._kv_slot_tokens) if self._reuse_prefix else None
+        if slots is not None:
+            slots.switch(llm, ids)
+        n = min(_kv_lcp(llm.input_ids[: llm.n_tokens], ids), len(ids) - 1) if self._reuse_prefix else 0
+        llm.n_tokens = n
+        llm.eval(ids[n:])
+        logits = self._final_logits()
+        words = self._yes_no_tokens()
+        yes = np.logaddexp.reduce(logits[words[0]])
+        no = np.logaddexp.reduce(logits[words[1]])
+        return float(1.0 / (1.0 + np.exp(no - yes)))
+
+    def _yes_no_tokens(self) -> tuple[list[int], list[int]]:
+        cached = getattr(self, "_yes_no", None)
+        if cached is None:
+            first = lambda w: int(self._llm.tokenize(w.encode(), add_bos=False)[0])  # noqa: E731
+            cached = self._yes_no = ([first("yes"), first("Yes")], [first("no"), first("No")])
+        return cached
+
+    def _final_logits(self) -> np.ndarray:
+        llm = self._llm
+        ctx = getattr(getattr(llm, "_ctx", None), "ctx", None)
+        if llama_cpp is not None and ctx is not None:
+            ptr = llama_cpp.llama_get_logits_ith(ctx, -1)
+            return np.ctypeslib.as_array(ptr, shape=(llm.n_vocab(),)).astype(np.float64)
+        return np.asarray(llm.scores[llm.n_tokens - 1], dtype=np.float64)  # test doubles
+
     def _token_logprob(self, token: int) -> float:
         """log p(token) from the logits it was just sampled from (plain mode: the
         context holds the last position's logits until the next eval)."""

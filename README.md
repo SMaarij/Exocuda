@@ -268,7 +268,7 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 |---|---|---|---|
 | Router agreement on held-out queries | ≥85% | 89.2% (37 hand-labelled queries) | met |
 | Wrong answers served from cache (19 near-miss pairs) | 0 | 0/19 (4/19 before the 0.3.1 guard) | met |
-| Reworded questions answered from cache | ≥90% of exact | 42.9% (strict guard, threshold 0.92) | **not met** — traded for zero wrong answers |
+| Reworded questions answered from cache | ≥90% of exact | **54/55** rewordings (14/15 fixture — the 15th is time-sensitive and never cached — and 40/40 held out) with 0/59 near-misses served: the main local model judges close-but-unsure matches, 2.4 s median (0.11.0); 42.9% before | met |
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
 | **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **1.79–2.19x faster than the plain 7B** (two runs; 386 s → 216 s and 431 s → 197 s), median answer ~2 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting); 0.5B shared as draft with unsure answers re-asked: 1.65–2.11x at 5.9 GB, now the recommended setup | |

@@ -514,3 +514,9 @@ def test_chat_streams_through_the_server_and_keeps_the_history(monkeypatch: pyte
     assert "cascade: answer 1" in result.stdout and "cascade: answer 2" in result.stdout
     assert seen[1] == [{"role": "user", "content": "one"}, {"role": "assistant", "content": "answer 1"},
                        {"role": "user", "content": "two"}]
+
+
+def test_cache_judge_can_be_turned_off_from_the_config() -> None:
+    assert cli_main._cache_config({}).judge_floor == 0.80
+    assert cli_main._cache_config({"cache": {"judge_floor": "off"}}).judge_floor is None
+    assert cli_main._cache_config({"cache": {"judge_floor": "0.85"}}).judge_floor == 0.85

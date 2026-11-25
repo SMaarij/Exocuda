@@ -345,3 +345,17 @@ def test_small_model_answers_are_not_streamed() -> None:
     pipeline = Pipeline(_StreamingBackend(), small_local_backend=small, small_token_confidence_floor=None)
     pipeline.run([{"role": "user", "content": "What is 2+2?"}], on_text=pieces.append)
     assert pipeline.last_served_by_small and pieces == []
+
+
+def test_the_cache_judges_with_the_main_local_model(tmp_path) -> None:
+    from engine.intelligence.cache import SemanticCache
+    from engine.intelligence.tests.fakes import FakeEmbedder
+
+    class _Judging(FakeBackend):
+        def yes_probability(self, prompt):
+            return 0.9
+
+    backend = _Judging()
+    cache = SemanticCache(FakeEmbedder(), db_path=tmp_path / "c.sqlite3")
+    Pipeline(backend, cache=cache)
+    assert cache.judge == backend.yes_probability
