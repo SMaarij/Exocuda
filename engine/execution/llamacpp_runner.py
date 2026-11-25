@@ -129,6 +129,11 @@ class DraftCounter:
         return min(1.0, accepted / self.drafted)
 
 
+LOOKUP_MIN_MATCH = 3     # shortest repeated n-gram whose continuation is drafted
+LOOKUP_MAX_MATCH = 8
+LOOKUP_PRIOR = (5.0, 10.0)  # (accepted, judged) assumed before any lookup draft is judged
+
+
 class ModelDraft(LlamaDraftModel):
     """
     Layer 3 draft: greedy `k` tokens from a small model, reusing its KV cache
@@ -166,11 +171,19 @@ class ModelDraft(LlamaDraftModel):
     tokens per unit of cost, (1 + E[accepted]) / (verify_costs[L + 1] +
     draft_cost * L), where E[accepted] sums those running products; L = 0
     (plain decoding) when nothing beats 1 / verify_costs[1].
+
+    Lookup drafting (`lookup`, cost-aware only) comes first: when the last 3-8
+    tokens already appeared earlier in the prompt or output -- code being
+    edited, text being rewritten, an earlier answer being revised -- the tokens
+    that followed them are the draft, at no draft-model cost (prompt lookup,
+    as in SuffixDecoding and llama.cpp's ngram drafts). How far to trust a copy
+    is learned per match length from how far the sequence advanced; when no
+    copy pays, the draft model drafts as above.
     """
 
     def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16, max_pause: int = 0,
                  p_min: Optional[float] = None, verify_costs: Optional[Sequence[float]] = None,
-                 draft_cost: float = 0.1) -> None:
+                 draft_cost: float = 0.1, lookup: bool = True) -> None:
         self._llm = llm
         self._initial_k = k
         self._k = k
@@ -184,6 +197,13 @@ class ModelDraft(LlamaDraftModel):
         if self._verify_costs is not None and len(self._verify_costs) < k + 2:
             raise ValueError(f"verify_costs needs an entry for every batch size up to {k + 1}")
         self._draft_cost = draft_cost
+        # Lookup drafting (cost-aware only): when the text just written already appeared
+        # earlier in the prompt or output, its continuation is the draft, at no draft-model
+        # cost. Per-token acceptance is learned per match length.
+        self._lookup = lookup
+        self.lookup_stats = {n: list(LOOKUP_PRIOR) for n in range(LOOKUP_MIN_MATCH, LOOKUP_MAX_MATCH + 1)}
+        self._judge: Optional[tuple[int, int, int]] = None  # (match length, drafted, sequence length)
+        self.lookup_drafts = 0  # calls answered by lookup, for inspection
         self._pause = 0      # calls left to skip drafting
         self._backoff = 0    # length of the next pause
         self.history: list[int] = []  # draft length used per call, for inspection
@@ -219,7 +239,13 @@ class ModelDraft(LlamaDraftModel):
         self.history.append(self._k)
 
         if self._verify_costs is not None:
-            out = self._cost_aware_draft(list(map(int, input_ids)))
+            ids = list(map(int, input_ids))
+            self._judge_lookup(len(ids))
+            out = self._lookup_draft(ids) if self._lookup else []
+            if out:
+                self.lookup_drafts += 1
+            else:
+                out = self._cost_aware_draft(ids)
             self._last_drafted = len(out)
             return np.array(out, dtype=np.intc)
         if self._p_min is not None:
@@ -249,6 +275,54 @@ class ModelDraft(LlamaDraftModel):
         n = min(n, len(ids) - 1)  # always evaluate at least the last token, for its logits
         llm.n_tokens = n
         llm.eval(ids[n:])
+
+    def _judge_lookup(self, length: int) -> None:
+        """The target kept (sequence advance - 1) of the last lookup draft's tokens."""
+        if self._judge is None:
+            return
+        n, drafted, at = self._judge
+        self._judge = None
+        if length <= at:  # a new request
+            return
+        accepted = min(drafted, length - at - 1)
+        stats = self.lookup_stats[n]
+        stats[0] += accepted
+        stats[1] += accepted + (accepted < drafted)  # tokens after the first rejection: unknown
+
+    def _lookup_draft(self, ids: list[int]) -> list[int]:
+        """The continuation of the most recent earlier occurrence of the longest repeated
+        suffix (LOOKUP_MIN_MATCH..LOOKUP_MAX_MATCH tokens), cut to the cost-aware length
+        for its learned per-token acceptance; [] when no match pays."""
+        arr = np.asarray(ids)
+        size = len(arr)
+        for n in range(min(LOOKUP_MAX_MATCH, size - 1), LOOKUP_MIN_MATCH - 1, -1):
+            suffix = arr[size - n:]
+            # windows starting at i, for i < size - n (an earlier occurrence, not the suffix itself)
+            hits = np.ones(size - n, dtype=bool)
+            for j in range(n):
+                hits &= arr[j: size - n + j] == suffix[j]
+            starts = np.flatnonzero(hits)
+            if not len(starts):
+                continue
+            start = int(starts[-1]) + n
+            continuation = ids[start: start + self._k]
+            if not continuation:
+                continue
+            accepted, judged = self.lookup_stats[n]
+            rho = accepted / judged
+            costs = self._verify_costs
+            best_len, best_rate, whole, expected = 0, 1.0 / costs[1], 1.0, 0.0
+            for length in range(1, len(continuation) + 1):
+                whole *= rho
+                expected += whole
+                rate = (1.0 + expected) / costs[length + 1]
+                if rate > best_rate:
+                    best_len, best_rate = length, rate
+            if best_len:
+                self._judge = (n, best_len, size)
+                return continuation[:best_len]
+            return []
+        return []
 
     def _cost_aware_draft(self, ids: list[int]) -> list[int]:
         costs, d = self._verify_costs, self._draft_cost
@@ -303,6 +377,7 @@ CPU_VERIFY_COSTS = (0.0, 1.0, 1.36, 1.74, 1.55, 1.87, 2.28, 2.68, 3.0, 3.34, 3.4
                     3.95, 5.1)
 
 VERIFY_COSTS_PATH = Path.home() / ".cascade" / "verify_costs.json"
+MODEL_PATHS_PATH = Path.home() / ".cascade" / "model_paths.json"  # Ollama tag -> GGUF file
 AUTO = "auto"
 
 
@@ -494,14 +569,18 @@ class LlamaCppRunner:
         max_draft_pause: int = 0,
         draft_p_min: Optional[float] = None,
         draft_verify_costs: Optional[Sequence[float] | str] = None,
+        draft_lookup: bool = True,
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
         use_mmap: bool = False,
         llama_factory: Optional[LlamaFactory] = None,
         temperature: Optional[float] = None,
+        reuse_prefix: bool = True,
     ) -> None:
         self._temperature = temperature
+        self._reuse_prefix = reuse_prefix
+        self.last_prompt_s: Optional[float] = None  # time to the first token of the last generate()
         if llama_factory is None and Llama is None:
             raise RuntimeError("LlamaCppRunner needs llama-cpp-python: pip install llama-cpp-python")
         self._ollama = ollama or OllamaReferenceModelRunner()
@@ -516,6 +595,7 @@ class LlamaCppRunner:
         self._draft_p_min = draft_p_min
         self._draft_verify_costs = draft_verify_costs
         self._resolved_verify_costs: Optional[list[float]] = None
+        self._draft_lookup = draft_lookup
         self._lookup_tokens = lookup_tokens
         self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads, use_mmap)
         self._mode = ACCEL_NONE
@@ -542,6 +622,23 @@ class LlamaCppRunner:
         return self._ollama.local_models()
 
     def _resolve_path(self, tag: str) -> str:
+        # A GGUF found before loads without Ollama (it may be stopped, or restarting).
+        try:
+            known = json.loads(MODEL_PATHS_PATH.read_text())
+        except (OSError, ValueError):
+            known = {}
+        if isinstance(known.get(tag), str) and os.path.isfile(known[tag]):
+            return known[tag]
+        path = self._resolve_path_from_ollama(tag)
+        known[tag] = path
+        try:
+            MODEL_PATHS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            MODEL_PATHS_PATH.write_text(json.dumps(known, indent=1))
+        except OSError:
+            pass
+        return path
+
+    def _resolve_path_from_ollama(self, tag: str) -> str:
         if tag not in self._ollama.local_models():
             self._ollama._request("/api/pull", {"model": tag, "stream": False}, timeout=1800)
         path = self._ollama.model_file_path(tag)
@@ -582,7 +679,8 @@ class LlamaCppRunner:
                 self._draft_llm = self._factory(self._resolve_path(self._draft_model_tag), False)
             self._counter = DraftCounter(ModelDraft(
                 self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens,
-                max_pause=self._max_draft_pause, p_min=self._draft_p_min, verify_costs=self._verify_costs()
+                max_pause=self._max_draft_pause, p_min=self._draft_p_min, verify_costs=self._verify_costs(),
+                lookup=self._draft_lookup
             ))
         else:
             self._counter = None
@@ -618,7 +716,13 @@ class LlamaCppRunner:
             self._counter.reset()
 
         prompt_ids = self._chat_tokens(prompt)
-        self._llm.reset()  # clean state: output must not depend on the previous request
+        if not self._reuse_prefix:
+            self._llm.reset()
+        # Otherwise llama-cpp-python keeps the KV cache of the longest prefix this prompt
+        # shares with the previous request (system prompt, earlier turns) and evaluates only
+        # the rest. Same arithmetic, so the output is the same up to the floating-point noise
+        # verify_greedy() measures (where the prefill is split differently).
+        prompt_start = time.perf_counter()
         out: list[int] = []
         logprobs: Optional[list[float]] = [] if self._counter is None else None
         first_t: Optional[float] = None
@@ -632,6 +736,7 @@ class LlamaCppRunner:
                     break
                 if first_t is None:
                     first_t = time.perf_counter()
+                    self.last_prompt_s = first_t - prompt_start
                 out.append(token)
                 if len(out) >= max_tokens:
                     break

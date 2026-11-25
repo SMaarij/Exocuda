@@ -7,6 +7,8 @@ injected fake Llama (NFR-09: no model, no llama.cpp call).
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -100,6 +102,11 @@ def test_prompt_lookup_unavailable_without_llama_cpp(monkeypatch) -> None:
     assert runner.set_acceleration(ACCEL_PROMPT_LOOKUP) is False
 
 
+@pytest.fixture(autouse=True)
+def _model_paths_in_tmp(tmp_path, monkeypatch):
+    monkeypatch.setattr(llamacpp_runner, "MODEL_PATHS_PATH", tmp_path / "model_paths.json")
+
+
 def _runner(**kwargs):
     built: list[FakeLlama] = []
 
@@ -163,9 +170,18 @@ def test_temperature_overrides_only_temperature() -> None:
     assert built2[0].last_kwargs == llamacpp_runner._chat_sampling_defaults()
 
 
-def test_every_generation_starts_from_a_clean_state() -> None:
-    # The same prompt must not depend on what was asked before it.
+def test_generations_keep_the_shared_prompt_prefix_by_default() -> None:
+    # llama-cpp-python reuses the KV cache of the prefix shared with the previous request.
     runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    runner.generate("first question", 8)
+    runner.generate("second question", 8)
+    assert built[0].resets == 0
+    assert runner.last_prompt_s is not None
+
+
+def test_reuse_prefix_off_starts_every_generation_from_a_clean_state() -> None:
+    runner, built = _runner(reuse_prefix=False)
     runner.load("llama3.2", "3b-instruct-q4_K_M")
     runner.generate("first question", 8)
     runner.generate("second question", 8)
@@ -726,3 +742,55 @@ def test_verify_costs_are_measured_once_per_model_and_machine(tmp_path, monkeypa
     model.write_bytes(b"x" * 20)  # a different model file: measured afresh
     llamacpp_runner.verify_costs_for(llm, str(model), 5, cache_path=cache)
     assert llm.evals > evals
+
+
+def test_lookup_drafts_the_continuation_of_repeated_text_without_the_draft_model() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    llm = _ConfidenceLlm({}, vocab=64)
+    draft = ModelDraft(llm, k=16, verify_costs=CPU_VERIFY_COSTS)
+    draft.lookup_stats[3] = [95.0, 100.0]  # lookup drafts after 3-token matches were 95% accepted
+    ids = [9, 10, 11, 12, 13, 14, 15, 16, 30, 9, 10, 11]  # "9 10 11" seen before, followed by 12 13 ...
+    out = list(draft(np.array(ids, dtype=np.intc)))
+    assert len(out) >= 3 and out == [12, 13, 14, 15, 16, 30, 9, 10, 11][: len(out)] and draft.lookup_drafts == 1
+    assert llm.evaluated == []  # the draft model never ran
+
+
+def test_lookup_learns_from_how_far_the_sequence_advanced() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    draft = ModelDraft(_ConfidenceLlm({}, vocab=64), k=16, verify_costs=CPU_VERIFY_COSTS)
+    draft.lookup_stats[3] = [90.0, 100.0]
+    ids = [9, 10, 11, 12, 13, 14, 15, 16, 30, 9, 10, 11]
+    out = list(draft(np.array(ids, dtype=np.intc)))
+    draft(np.array(ids + out[:2] + [40], dtype=np.intc))  # target kept 2 drafts, then its own token
+    assert draft.lookup_stats[3] == [92.0, 103.0]
+
+
+def test_lookup_falls_back_to_the_draft_model_when_copies_do_not_pay() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    llm = _ConfidenceLlm({}, vocab=64)
+    draft = ModelDraft(llm, k=16, verify_costs=CPU_VERIFY_COSTS)
+    draft.lookup_stats[3] = [1.0, 100.0]  # copies after 3-token matches are almost never kept
+    ids = [9, 10, 11, 12, 13, 14, 15, 16, 30, 9, 10, 11]
+    out = list(draft(np.array(ids, dtype=np.intc)))
+    assert draft.lookup_drafts == 0 and out[:1] == [12] and llm.evaluated  # drafted by the model
+    off = ModelDraft(_ConfidenceLlm({}, vocab=64), k=16, verify_costs=CPU_VERIFY_COSTS, lookup=False)
+    off.lookup_stats[3] = [99.0, 100.0]
+    off(np.array(ids, dtype=np.intc))
+    assert off.lookup_drafts == 0
+
+
+def test_a_model_found_before_loads_without_ollama(tmp_path) -> None:
+    gguf = tmp_path / "model.gguf"
+    gguf.write_bytes(b"x")
+    llamacpp_runner.MODEL_PATHS_PATH.write_text(json.dumps({"llama3.2:3b-instruct-q4_K_M": str(gguf)}))
+
+    class DownOllama:
+        def local_models(self):
+            raise AssertionError("Ollama was asked")
+
+    runner = LlamaCppRunner(ollama=DownOllama(), llama_factory=lambda path, all_logits: FakeLlama(path, all_logits))
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    assert runner._model_path == str(gguf)

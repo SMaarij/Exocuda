@@ -1,4 +1,4 @@
-# Cascade — Project Status (2026-11-19)
+# Cascade — Project Status (2026-11-25)
 
 Cascade is an MIT-licensed open-source project. This page says what works, what was verified live,
 and what's next. Measured numbers are in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md); the change
@@ -10,7 +10,7 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 |---|---|---|---|
 | FR-01 | HardwareProfiler | Done, verified live | `cascade init`: local_capable, 4.5 tok/s, 0.55 GB measured |
 | FR-02 | ModelLadder (OOM step-down, real Ollama tags) | Done | unit tests; live load of `llama3.2:3b-instruct-q4_K_M` |
-| FR-03 | AccelerationEngine (layers, fallback, acceptance monitor) | Done, verified live | cost-aware draft model on by default: 1.58x overall on the CPU-only laptop, lossless (Addendum 17) |
+| FR-03 | AccelerationEngine (layers, fallback, acceptance monitor) | Done, verified live | cost-aware draft model plus lookup drafting on by default: 1.58x overall on the idle CPU-only laptop (Addendum 17); lookup adds +0.13x under load (Addendum 19); lossless |
 | FR-04 | ContextCompressor | Done | unit tests |
 | FR-05 | SemanticRouter (3-way) | Done | 89.2% held-out agreement; live routing to `local` and `cloud_byok` |
 | FR-06 | SemanticCache | Done, verified live | 0/19 wrong answers on near-miss pairs; 42.9% of rewordings served (strict guard) |
@@ -21,6 +21,14 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-03 | graceful degradation | Met | failed or over-quota remote tiers fall back to local |
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
+
+## 0.8.0 — reuse what is already computed
+
+- Conversations keep the 7B's computed prompt prefix: from turn 2 on, the first token arrives in about
+  4 s instead of about 42 s (677-token system prompt), with unchanged output.
+- Lookup drafting: text already in the context is offered as a free draft when it pays. On a busy
+  laptop: 1.49x overall vs 1.36x without it, open-ended 1.24x vs 1.08x, lossless (Addendum 19).
+- Models found once load without Ollama running (`~/.cascade/model_paths.json`).
 
 ## 0.7.0 — 1.58x overall
 

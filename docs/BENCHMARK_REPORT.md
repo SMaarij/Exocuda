@@ -800,3 +800,54 @@ The correction lengthened drafts on open-ended text, where it then lost more to 
 batches also changed the 7B's floating-point results enough to flip 2 tokens beyond measured noise. Not
 shipped. The shipped default re-measured at 1.57x overall. A 1.5B draft model would agree more often, but
 each drafted token would cost about 2.5x as much and add 0.6 GB of RAM, so it was not pursued.
+
+## Addendum 19 — reusing what is already computed: prompt prefix and lookup drafting, 2026-11-25
+
+**Where Cascade stands against other tools (published numbers, not re-measured here):**
+
+| Tool or method | Hardware | Claimed speed-up |
+|---|---|---|
+| llama.cpp speculative decoding ([InventiveHQ](https://inventivehq.com/blog/speculative-decoding-llama-cpp)) | CPU | about 1.7–2x on code and math, about 1.0x on chat |
+| LM Studio speculative decoding ([LM Studio](https://lmstudio.ai/blog/lmstudio-v0.3.10)) | Apple MLX / GPU | 1.5–3x claimed, 1.71x shown |
+| SuffixDecoding ([arXiv 2411.04975](https://arxiv.org/abs/2411.04975)) | GPU, agent workloads | 1.8–4.5x |
+| SubTernary ([arXiv 2610.28671](https://arxiv.org/abs/2610.28671)) | CPU | 1.35x over llama.cpp speculative |
+| **Cascade 0.8.0** (this addendum) | 4-core CPU laptop, under load | **1.74x code/rewrite, 1.24x open-ended, 1.49x overall**, lossless |
+
+On chat-like prompts, CPU speculative decoding usually gives no gain. Cascade 0.8.0 gives 1.24x there.
+
+**Prompt prefix reuse.** llama-cpp-python keeps the KV cache of the longest prompt prefix it has
+already computed. Since fa79720, Cascade had wiped that cache before every request. The "state leak"
+that commit fixed turned out to be floating-point noise from splitting the prefill differently, not a
+leak. Each conversation turn repeats every earlier turn, so in a chat with a 677-token system prompt the
+7B was re-reading the whole history every turn. Keeping the prefix brings time to first token from turn 2
+on down from about 42 s to 4.2 s. Output is unchanged: greedy check, 0 violations. `reuse_prefix: false`
+restores the old behaviour.
+
+**Prefill threads.** Prompt reading runs at about 18 tok/s and is compute-bound. More threads than
+physical cores did not help, so nothing changed there.
+
+**Lookup drafting.** SuffixDecoding and llama.cpp's n-gram modes take the draft from text already in the
+context, at no draft cost. Cascade now does the same:
+
+- It finds the latest earlier occurrence of the last 3–8 tokens in the prompt plus the output so far.
+- It offers what followed as the draft.
+- It learns per match length how often such drafts are kept, starting from 5 of 10.
+- It drafts only as many tokens as pay off at this machine's measured verify costs; otherwise the 0.5B
+  drafts as before.
+
+Same race as Addendum 17, 2 rounds (`acceleration_qwen7b_lookup.json`). The laptop was busy with other
+work, so absolute speeds are lower than in Addendum 17:
+
+| Mode | Grounded | Open | All | Greedy check |
+|---|---:|---:|---:|---|
+| cost-aware draft model (0.7.0) | 1.64x | 1.08x | 1.36x | 0 violations |
+| **+ lookup drafting (0.8.0)** | **1.74x** | **1.24x** | **1.49x** | 0 violations |
+
+The gain was noisy across rounds. On grounded prompts, round 1 favoured 0.7.0 (1.42x vs 1.68x) and round 2
+favoured lookup strongly (2.07x vs 1.59x). The first, interrupted run of this race also had lookup ahead on
+every prompt. Output was identical to plain decoding on 10 of 12 prompts for both drafting modes; the
+other 2 differ only at measured near-ties. RAM is unchanged (5.10 GB). Lookup is on by default;
+`draft_lookup: false` turns it off.
+
+Also new: the Ollama tag → GGUF path is cached in `~/.cascade/model_paths.json`, so a model found once
+loads even when Ollama is not running.

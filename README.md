@@ -272,7 +272,8 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | Cache-hit latency (live) | <150 ms | 55 ms median, 78 ms worst | met |
 | Median answer time, 67 live requests | – | 4.7 s (was 23.7 s before the default system prompt) | |
 | **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **1.79–2.19x faster than the plain 7B** (two runs; 386 s → 216 s and 431 s → 197 s), median answer ~2 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting); 0.5B shared as draft with unsure answers re-asked: 1.65–2.11x at 5.9 GB, now the recommended setup | |
-| Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.58x overall**, 1.88x on code/rewrite prompts, 1.27x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, cost-aware draft length, 2 rounds); output verified lossless | met |
+| Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.58x overall**, 1.88x on code/rewrite prompts, 1.27x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, cost-aware draft length, 2 rounds); output verified lossless. 0.8.0 adds lookup drafting: on a busy laptop 1.49x vs 1.36x without it, open-ended 1.24x vs 1.08x (CPU llama.cpp speculative is usually ~1.0x on chat) | met |
+| Time to first token, later chat turns | – | ~4 s instead of ~42 s (computed prompt prefix kept, 677-token system prompt) | |
 | RAM, 7B Q4_K_M via llama.cpp | – | 4.6 GB (was 7.2 GB with the model file memory-mapped); +0.75 GB with the draft model | |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 
