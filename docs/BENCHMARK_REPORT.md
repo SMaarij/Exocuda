@@ -1168,3 +1168,43 @@ replay was right and the input was wrong.
 On a 4-core laptop the cores are not free to share: the 7B's batch eval uses the hyperthreads, and
 concurrent drafting is a net loss. `shadow_draft` stays off. A machine with more physical cores than
 the 7B uses could behave differently.
+
+## Addendum 26 — layer skipping (self-speculative drafts from the 7B itself): rejected, 2026-11-26
+
+**Idea.** Speed up the 7B's own decoding by skipping some of its layers on easy tokens. A version that
+changes the output would break the lossless guarantee. The lossless version is self-speculative
+decoding: the 7B with layers skipped drafts tokens, and the full 7B verifies them. Prior work includes
+[LayerSkip](https://arxiv.org/abs/2404.16710), [SWIFT](https://arxiv.org/abs/2410.06916) and
+[CLaSp](https://arxiv.org/abs/2505.24196), which reports 1.3–1.6x on GPUs.
+
+**Break-even acceptance.** On a CPU, a draft's cost scales with the bytes it reads. Fitting the
+measured verify-cost table to the shipped results gives the 0.5B a per-token acceptance of 0.895 on
+grounded prompts and 0.562 on open-ended ones, at a cost of 0.13 of a 7B step. A layer-skipped 7B that
+keeps a fraction f of its bytes ties with the 0.5B when its acceptance is:
+
+| kept bytes | grounded | open |
+|---|---:|---:|
+| 60% | > 0.999 (impossible) | 0.936 |
+| 50% | > 0.999 | 0.873 |
+| 40% | > 0.999 | 0.802 |
+| 30% | > 0.999 | 0.724 |
+
+**Measured.** `scripts/analysis/layer_skip_acceptance.py` writes GGUFs that keep only some of the 7B's 28
+blocks. On the 7B's own greedy outputs, it measures how often the truncated model's next token equals
+the 7B's, and the truncated model's decode cost (`layer_skip_acceptance.json`):
+
+| kept layers | cost | code agreement | open agreement |
+|---|---:|---:|---:|
+| 28 (full, sanity check) | 1.00 | 0.998 | 0.990 |
+| 17, spread | 0.61 | 0.557 | 0.281 |
+| 17, last middle dropped | 0.69 | 0.153 | 0.136 |
+| 14, spread | 0.55 | 0.205 | 0.244 |
+| 11, spread | 0.52 | 0.053 | 0.118 |
+
+Qwen2.5-Coder-7B at Q4_K_M has little depth to spare: dropping 11 of 28 blocks already gives 0.28 on
+open text, against 0.94 needed. GPU papers skip about 40–50% of layers in larger models (LLaMA-2-13B,
+40 layers), where the draft's speed comes from compute that a CPU's bandwidth limit doesn't reward
+the same way. A finer search over sub-layers (attention or MLP alone) would have to close a gap of
+roughly 3x in agreement and is not pursued.
+
+On this hardware the 0.5B stays the better draft, and layer skipping is rejected.
