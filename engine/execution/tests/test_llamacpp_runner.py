@@ -1035,3 +1035,55 @@ def test_yes_probability_reads_the_yes_and_no_logits(monkeypatch) -> None:
     monkeypatch.setattr(runner, "_final_logits", lambda: logits)
     p = runner.yes_probability([{"role": "user", "content": "same question?"}])
     assert abs(p - 1 / (1 + np.exp(-2.0))) < 0.01 and llm.evaluated_ids
+
+
+# ---- shadow drafting ------------------------------------------------------------------
+
+
+def test_shadow_drafts_match_sequential_drafts_and_reuse_work_made_ahead() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    conf = {t: 0.97 for t in range(64)}
+    plain = ModelDraft(_ConfidenceLlm(conf, vocab=64), k=8, verify_costs=CPU_VERIFY_COSTS, lookup=False)
+    shadow = ModelDraft(_ConfidenceLlm(conf, vocab=64), k=8, verify_costs=CPU_VERIFY_COSTS, lookup=False, shadow=True)
+    try:
+        ids = [0, 1]
+        for _ in range(3):  # the target keeps every draft and adds its own (predicted) token
+            a = list(plain(np.array(ids, dtype=np.intc)))
+            b = list(shadow(np.array(ids, dtype=np.intc)))
+            assert a == b and a
+            ids = ids + a + [(a[-1] + 1) % 64]
+        assert shadow._shadow.resyncs == 0  # never had to start over
+        assert shadow._shadow.ready_tokens > 0  # later calls found drafts already made
+    finally:
+        shadow.finish()
+    assert shadow._shadow._thread is None
+
+
+def test_shadow_restarts_after_a_rejection() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    draft = ModelDraft(_ConfidenceLlm({t: 0.97 for t in range(64)}, vocab=64), k=8, verify_costs=CPU_VERIFY_COSTS,
+                       lookup=False, shadow=True)
+    try:
+        first = list(draft(np.array([0, 1], dtype=np.intc)))
+        assert first[0] == 2
+        out = list(draft(np.array([0, 1, 40], dtype=np.intc)))  # the target rejected the draft and wrote 40
+        assert out and out[0] == 41 and draft._shadow.resyncs == 1
+    finally:
+        draft.finish()
+
+
+def test_shadow_keeps_drafting_after_every_ready_token_was_used() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    draft = ModelDraft(_ConfidenceLlm({t: 0.97 for t in range(64)}, vocab=64), k=4, verify_costs=CPU_VERIFY_COSTS,
+                       lookup=False, shadow=True)
+    try:
+        ids = [0, 1]
+        for _ in range(5):
+            out = list(draft(np.array(ids, dtype=np.intc)))
+            assert out
+            ids = ids + out + [(out[-1] + 1) % 64]  # all accepted, chain fully consumed each time
+    finally:
+        draft.finish()

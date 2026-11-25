@@ -1121,3 +1121,50 @@ On the 34-question session with the full setup, the result stays **34/34** corre
 (`system_session_cache_judge.json`). The new hit is "What's the biggest planet in the solar system?",
 judged a rewording of "Name the largest planet in our solar system" and served in 2.3 s. All three
 near-miss questions were answered fresh.
+
+## Addendum 25 — shadow drafting (draft on the spare hyperthreads while the 7B verifies): refuted live, 2026-11-26
+
+**Idea.** Prior CPU work on speculative decoding gives all cores to whichever model is running. If the
+7B's verify is bound by memory bandwidth, the SMT siblings of its cores sit idle. The 0.5B could then
+extend its own greedy chain on them while the 7B verifies, and drafts would be ready without waiting. We
+found no prior art for placing the draft on SMT threads.
+
+A first measurement looked promising (`scripts/analysis/concurrent_draft.py`, `concurrent_draft.json`):
+
+- A 4-token verify took 542 ms alone and 558 ms with the 0.5B on 2 threads beside it.
+- The 0.5B drafted about 6 tokens per verify.
+
+An exact replay then predicted +17–20% on code and +2.5% on open-ended text over the shipped
+sequential drafting (`scripts/analysis/shadow_draft_sim.py`).
+
+**Implementation.** `ShadowDrafter` in `engine/execution/llamacpp_runner.py` is a background thread:
+
+- It runs on 2 threads while the 7B computes and on 4 threads while the 7B waits for a draft.
+- It hands over the ready part of its chain using the same cost-aware rule as sequential drafting.
+- It re-syncs after a rejection.
+- The option is `shadow_draft`, default off.
+
+**Live race** (7B Q4_K_M, 2 interleaved rounds, `shadow_race.json`): lossless, but slower.
+
+| mode | grounded | open | all | acceptance |
+|---|---:|---:|---:|---:|
+| shipped cost-aware drafting | 1.86x | 1.12x | **1.49x** | 0.725 |
+| shadow drafting | 1.76x | 0.98x | 1.38x | 0.642 |
+
+**Why it failed.** The first measurement pinned the 7B's `n_threads_batch` to 4. The runner leaves it
+at llama-cpp-python's default of all logical threads (8 here), and every multi-token verify is a batch
+eval, so the SMT siblings were never idle. At the real settings (`concurrent_draft_realistic.py`):
+
+- The 0.5B on 2 threads slows the 7B's verifies by 14–36%. For example, a 4-token verify goes from
+  384 to 436 ms, and a 1-token verify from 237 to 322 ms.
+- In that time the 0.5B drafts only about 10 tokens/s, about 4 per verify.
+- Pinning batch threads to 4 makes the 7B's lone verify slower (4 tokens: 439 ms) and still leaves a
+  29% slowdown under load.
+
+Re-running the replay with the measured costs (a 1.2–1.3x verify slowdown, a draft token costing 0.4 of
+a 7B step) gives −0 to −5% on code and −10 to −17% on open-ended text. That matches the race, so the
+replay was right and the input was wrong.
+
+On a 4-core laptop the cores are not free to share: the 7B's batch eval uses the hyperthreads, and
+concurrent drafting is a net loss. `shadow_draft` stays off. A machine with more physical cores than
+the 7B uses could behave differently.

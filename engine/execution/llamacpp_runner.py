@@ -42,6 +42,7 @@ import json
 import os
 import platform
 import sys
+import threading
 import time
 import weakref
 from collections import OrderedDict
@@ -371,6 +372,146 @@ def spill_kv(llm: Any) -> None:
         except Exception:  # never fail an unload or an exit over a cache
             pass
 
+SHADOW_THREADS = 2       # draft threads while the target computes (its SMT siblings sit idle)
+SHADOW_FAST_THREADS = 4  # draft threads while the target waits for a draft
+SHADOW_MIN_WHOLE = 0.01  # stop running ahead once the whole chain is this unlikely
+
+
+def _set_threads(llm: Any, n: int) -> None:
+    ctx = getattr(getattr(llm, "_ctx", None), "ctx", None)
+    if llama_cpp is not None and ctx is not None:
+        llama_cpp.llama_set_n_threads(ctx, n, n)
+
+
+class ShadowDrafter:
+    """
+    Runs the draft model *while* the target verifies (shadow drafting).
+
+    On a CPU the target's decode is bound by memory bandwidth, so the SMT siblings of its
+    cores sit idle: a 0.5B on 2 of them barely slows the 7B (4-token verify +3%) and drafts
+    ~6 tokens per verify (docs/benchmark/concurrent_draft.json). A background thread keeps
+    extending the draft's own greedy chain from the latest committed text, on SHADOW_THREADS
+    threads while the target computes and SHADOW_FAST_THREADS while it waits. Each draft call
+    takes the part of the chain that continues what the target committed; a call that finds
+    the chain wrong (a rejection) restarts it from the committed text. Drafts are verified as
+    always, so the output is unchanged.
+
+    EXPERIMENTAL, off by default: measured live it is slower on a 4-core laptop (1.38x vs 1.49x).
+    The target's batch evals already use the SMT threads, so the concurrent draft slows each
+    verify by 14-36% (BENCHMARK_REPORT Addendum 25).
+    """
+
+    def __init__(self, owner: "ModelDraft", max_ahead: int) -> None:
+        self._owner = owner
+        self._max_ahead = max_ahead
+        self._cond = threading.Condition()
+        self._base: list[int] = []     # committed text the chain continues
+        self._chain: list[int] = []
+        self._probs: list[float] = []
+        self._pending: Optional[list[int]] = None  # re-sync request
+        self._waiting = False
+        self._stop = False
+        self._error: Optional[BaseException] = None
+        self._thread: Optional[threading.Thread] = None
+        self.resyncs = 0
+        self.ready_tokens = 0   # draft tokens that were already made when a call came (inspection)
+
+    # -- main thread ---------------------------------------------------------------------
+    def start(self, ids: list[int]) -> None:
+        with self._cond:
+            self._pending, self._base, self._stop = list(ids), list(ids), False
+        self._thread = threading.Thread(target=self._run, daemon=True, name="cascade-shadow-draft")
+        self._thread.start()
+
+    def finish(self) -> None:
+        if self._thread is None:
+            return
+        with self._cond:
+            self._stop = True
+            self._cond.notify_all()
+        self._thread.join()
+        self._thread = None
+        _set_threads(self._owner._llm, SHADOW_FAST_THREADS)
+
+    def draft(self, ids: list[int], choose: Callable[[list[float], bool], Optional[int]]) -> list[int]:
+        """Draft tokens continuing `ids`. `choose(probs, more_coming)` returns the draft length
+        to use, or None to wait for more tokens."""
+        if self._thread is None:
+            self.start(ids)
+        with self._cond:
+            if self._error is not None:
+                raise self._error
+            n = len(self._base)
+            k = len(ids) - n
+            if self._pending is not None and self._pending == ids:
+                pass  # the drafter has not started on this text yet: nothing to change
+            elif self._pending is None and k >= 0 and ids[:n] == self._base and ids[n:] == self._chain[:k]:
+                self._base, self._chain, self._probs = list(ids), self._chain[k:], self._probs[k:]
+            else:
+                self._pending, self._base, self._chain, self._probs = list(ids), list(ids), [], []
+                self.resyncs += 1
+            self._cond.notify_all()
+            self.ready_tokens += len(self._chain)
+            self._waiting = True
+            try:
+                while True:
+                    full = len(self._chain) >= self._max_ahead or self._idle()
+                    length = choose(list(self._probs), not full)
+                    if length is not None:
+                        return list(self._chain[:length])
+                    self._cond.wait(timeout=1.0)
+                    if self._error is not None:
+                        raise self._error
+            finally:
+                self._waiting = False
+
+    def _idle(self) -> bool:
+        whole = 1.0
+        for p in self._probs:
+            whole *= p
+        return self._pending is None and bool(self._probs) and whole < SHADOW_MIN_WHOLE
+
+    # -- background thread ---------------------------------------------------------------
+    def _run(self) -> None:
+        owner, llm = self._owner, self._owner._llm
+        threads = None
+        try:
+            while True:
+                with self._cond:
+                    while not self._stop and self._pending is None and (
+                            len(self._chain) >= self._max_ahead or self._idle()):
+                        self._cond.wait()
+                    if self._stop:
+                        return
+                    pending, self._pending = self._pending, None
+                    if pending is None and not self._chain:
+                        # every draft token was used: catch up on the target's own token (cheap,
+                        # the draft's cache already holds the rest)
+                        pending = list(self._base)
+                    want = SHADOW_FAST_THREADS if self._waiting else SHADOW_THREADS
+                    last = self._chain[-1] if self._chain else None
+                if want != threads:
+                    _set_threads(llm, want)
+                    threads = want
+                if pending is not None:
+                    owner._sync(pending)
+                else:
+                    llm.eval([last])
+                logits = owner._last_logits()
+                token = int(np.argmax(logits))
+                p = 1.0 / float(np.sum(np.exp(logits - logits[token])))
+                with self._cond:
+                    # keep the token only if the text it continues is still the current one
+                    current = pending is None or pending == self._base
+                    if self._pending is None and not self._stop and current:
+                        self._chain.append(token)
+                        self._probs.append(p)
+                        self._cond.notify_all()
+        except BaseException as exc:  # surfaced on the next draft call
+            with self._cond:
+                self._error = exc
+                self._cond.notify_all()
+
 
 class ModelDraft(LlamaDraftModel):
     """
@@ -423,7 +564,8 @@ class ModelDraft(LlamaDraftModel):
 
     def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16, max_pause: int = 0,
                  p_min: Optional[float] = None, verify_costs: Optional[Sequence[float]] = None,
-                 draft_cost: float = 0.1, lookup: bool = True, lookup_history: bool = True) -> None:
+                 draft_cost: float = 0.1, lookup: bool = True, lookup_history: bool = True,
+                 shadow: bool = False) -> None:
         self._llm = llm
         self._initial_k = k
         self._k = k
@@ -442,6 +584,8 @@ class ModelDraft(LlamaDraftModel):
         # cost. Per-token acceptance is learned per match length.
         self._lookup = lookup
         self._lookup_history = lookup_history
+        # Shadow drafting (cost-aware only): the draft model runs while the target verifies.
+        self._shadow = ShadowDrafter(self, k) if shadow and verify_costs is not None else None
         self.lookup_stats = {n: list(LOOKUP_PRIOR) for n in range(LOOKUP_MIN_MATCH, LOOKUP_MAX_MATCH + 1)}
         self.history_stats = {n: list(LOOKUP_PRIOR) for n in range(LOOKUP_MIN_MATCH, LOOKUP_MAX_MATCH + 1)}
         self._judge: Optional[tuple[dict, int, int, int]] = None  # (stats, match length, drafted, sequence length)
@@ -489,6 +633,8 @@ class ModelDraft(LlamaDraftModel):
             out = self._lookup_draft(ids) if self._lookup else []
             if out:
                 self.lookup_drafts += 1
+            elif self._shadow is not None:
+                out = self._shadow.draft(ids, self._cost_aware_length)
             else:
                 out = self._cost_aware_draft(ids)
             self._last_drafted = len(out)
@@ -627,6 +773,31 @@ class ModelDraft(LlamaDraftModel):
             if n < self._k:
                 self._llm.eval([token])
         return out[:best_len]
+
+    def _cost_aware_length(self, probs: list[float], more_coming: bool) -> Optional[int]:
+        """The cost-aware length for draft tokens with these probabilities, or None while a
+        longer draft (still being made) could beat every length available now -- the same
+        rule _cost_aware_draft applies token by token."""
+        costs, d = self._verify_costs, self._draft_cost
+        best_len, best_rate = 0, 1.0 / costs[1]
+        whole, expected = 1.0, 0.0
+        for n, p in enumerate(probs[: self._k], start=1):
+            whole *= p
+            expected += whole
+            rate = (1.0 + expected) / (costs[n + 1] + d * n)
+            if rate > best_rate:
+                best_len, best_rate = n, rate
+        n = min(len(probs), self._k)
+        if more_coming and n < self._k and any(
+                (1.0 + expected + whole * (m - n)) / (costs[m + 1] + d * m) > best_rate
+                for m in range(n + 1, self._k + 1)):
+            return None
+        return best_len
+
+    def finish(self) -> None:
+        """End of a target generation: stop the shadow drafter (it shares the draft model)."""
+        if self._shadow is not None:
+            self._shadow.finish()
 
     def _confident_draft(self, ids: list[int]) -> list[int]:
         llm = self._llm
@@ -850,6 +1021,7 @@ class LlamaCppRunner:
         draft_verify_costs: Optional[Sequence[float] | str] = None,
         draft_lookup: bool = True,
         draft_lookup_history: bool = True,
+        shadow_draft: bool = False,
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
@@ -884,6 +1056,7 @@ class LlamaCppRunner:
         self._resolved_verify_costs: Optional[list[float]] = None
         self._draft_lookup = draft_lookup
         self._draft_lookup_history = draft_lookup_history
+        self._shadow_draft = shadow_draft
         self._lookup_tokens = lookup_tokens
         self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads, use_mmap)
         self._mode = ACCEL_NONE
@@ -968,7 +1141,7 @@ class LlamaCppRunner:
             self._counter = DraftCounter(ModelDraft(
                 self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens,
                 max_pause=self._max_draft_pause, p_min=self._draft_p_min, verify_costs=self._verify_costs(),
-                lookup=self._draft_lookup, lookup_history=self._draft_lookup_history,
+                lookup=self._draft_lookup, lookup_history=self._draft_lookup_history, shadow=self._shadow_draft,
             ))
         else:
             self._counter = None
@@ -1048,6 +1221,9 @@ class LlamaCppRunner:
                     break
         finally:
             gen.close()
+            finish = getattr(getattr(self._counter, "_draft", None), "finish", None)
+            if callable(finish):
+                finish()  # stop a shadow drafter before anything else uses the draft model
         last_t = time.perf_counter()
 
         self.last_prompt_ids, self.last_output_ids = prompt_ids, out

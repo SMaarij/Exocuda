@@ -68,8 +68,8 @@ for prompt, answer, kind in pairs:
     probs /= probs.sum(axis=1, keepdims=True)
     order = np.argsort(-probs, axis=1)[:, :4]
     group = "open" if "open" in kind else "code"
-    seqs.append({"group": group, "target": out, "top": order[:, :2].tolist(),
-                 "p": np.take_along_axis(probs, order[:, :2], axis=1).tolist()})
+    seqs.append({"group": group, "prompt": list(map(int, ids)), "target": out, "top": order[:, :4].tolist(),
+                 "p": np.take_along_axis(probs, order[:, :4], axis=1).tolist()})
     for j, tok in enumerate(out):
         p1 = probs[j, order[j, 0]]
         b = next(i for i in range(len(bins) - 1) if bins[i] <= p1 < bins[i + 1])

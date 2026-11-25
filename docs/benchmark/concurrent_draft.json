@@ -1,0 +1,27 @@
+{
+ "7B 4 threads + 0.5B 0": {
+  "verify4_ms": 542.3,
+  "draft_tokens_per_verify": 0.0,
+  "draft_ms": null
+ },
+ "7B 4 threads + 0.5B 1": {
+  "verify4_ms": 463.6,
+  "draft_tokens_per_verify": 5.12,
+  "draft_ms": 94.5
+ },
+ "7B 4 threads + 0.5B 2": {
+  "verify4_ms": 557.9,
+  "draft_tokens_per_verify": 5.92,
+  "draft_ms": 65.1
+ },
+ "7B 4 threads + 0.5B 4": {
+  "verify4_ms": 566.5,
+  "draft_tokens_per_verify": 3.72,
+  "draft_ms": 146.8
+ },
+ "7B 3 threads + 0.5B 1": {
+  "verify4_ms": 650.3,
+  "draft_tokens_per_verify": 6.8,
+  "draft_ms": 95.6
+ }
+}
