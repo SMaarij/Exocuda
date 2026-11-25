@@ -1115,3 +1115,9 @@ End to end, with the real `SemanticCache` and the 7B in its served drafting mode
   replaces an answer that takes 2–40 s to generate.
 - `cache.judge_floor` set to None turns judging off. `scripts/run_benchmark.py` measures the cache
   without a model, so its rewording number stays at the guard-only value.
+
+On the 34-question session with the full setup, the result stays **34/34** correct and the session takes
+**189 s** (225 s in Addendum 21). The cache served 10 questions (9 before), the 0.5B 11 and the 7B 13
+(`system_session_cache_judge.json`). The new hit is "What's the biggest planet in the solar system?",
+judged a rewording of "Name the largest planet in our solar system" and served in 2.3 s. All three
+near-miss questions were answered fresh.

@@ -1,0 +1,435 @@
+{
+  "max_tokens": 256,
+  "big_model": "qwen2.5-coder",
+  "draft_model": "qwen2.5-coder:0.5b",
+  "small_models": {
+    "small15": "qwen2.5:1.5b-instruct",
+    "small05": "qwen2.5:0.5b-instruct",
+    "shared05": "qwen2.5:0.5b-instruct"
+  },
+  "shared_draft": {
+    "shared05": "qwen2.5:0.5b-instruct-q4_K_M"
+  },
+  "results": {
+    "shared05": {
+      "summary": {
+        "session_s": 188.8,
+        "mean_s": 5.55,
+        "median_s": 1.12,
+        "correct": 34,
+        "questions": 34,
+        "served_by": {
+          "cache": 10,
+          "small": 11,
+          "big": 13
+        },
+        "by_category": {
+          "easy": {
+            "n": 12,
+            "mean_s": 1.96,
+            "correct": 12
+          },
+          "hard": {
+            "n": 8,
+            "mean_s": 18.21,
+            "correct": 8
+          },
+          "repeat": {
+            "n": 4,
+            "mean_s": 0.01,
+            "correct": 4
+          },
+          "reworded": {
+            "n": 6,
+            "mean_s": 0.41,
+            "correct": 6
+          },
+          "near_miss": {
+            "n": 4,
+            "mean_s": 4.3,
+            "correct": 4
+          }
+        },
+        "peak_rss_gb": 5.96,
+        "total_s_including_load": 253.2,
+        "load_s": 64.4
+      },
+      "rows": [
+        {
+          "i": 0,
+          "category": "easy",
+          "question": "What is the capital of Australia?",
+          "seconds": 3.16,
+          "served_by": "big",
+          "escalated": true,
+          "correct": true,
+          "rss_gb": 5.78,
+          "answer": "The capital of Australia is Canberra."
+        },
+        {
+          "i": 1,
+          "category": "easy",
+          "question": "How many days are in a leap year?",
+          "seconds": 0.73,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.78,
+          "answer": "A leap year has 366 days."
+        },
+        {
+          "i": 2,
+          "category": "easy",
+          "question": "What is the chemical symbol for gold?",
+          "seconds": 1.16,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.79,
+          "answer": "The chemical symbol for gold is Au."
+        },
+        {
+          "i": 3,
+          "category": "hard",
+          "question": "Write a Python function that checks whether a string is a palindrome, ignoring case and non-letter characters.",
+          "seconds": 13.42,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.81,
+          "answer": "```python\ndef is_palindrome(s):\n    cleaned = ''.join(c.lower() for c in s if c.isalpha())\n    return cleaned == cleaned[::-1]\n```"
+        },
+        {
+          "i": 4,
+          "category": "easy",
+          "question": "Who wrote Romeo and Juliet?",
+          "seconds": 0.61,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.81,
+          "answer": "William Shakespeare wrote Romeo and Juliet."
+        },
+        {
+          "i": 5,
+          "category": "easy",
+          "question": "Convert 5 kilometers to meters.",
+          "seconds": 4.17,
+          "served_by": "big",
+          "escalated": true,
+          "correct": true,
+          "rss_gb": 5.81,
+          "answer": "5 kilometers is equal to 5,000 meters."
+        },
+        {
+          "i": 6,
+          "category": "hard",
+          "question": "Write a SQL query that returns the top 3 customers by total order amount, from tables customers(id, name) and orders(customer_id, amount).",
+          "seconds": 14.43,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.83,
+          "answer": "```sql\nSELECT c.id, c.name, SUM(o.amount) AS total_amount\nFROM customers c\nJOIN orders o ON c.id = o.customer_id\nGROUP BY c.id, c.name\nORDER BY total_amount DESC\nLIMIT 3;\n```"
+        },
+        {
+          "i": 7,
+          "category": "easy",
+          "question": "What is the boiling point of water in Celsius at sea level?",
+          "seconds": 5.33,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.84,
+          "answer": "The boiling point of water in Celsius at sea level is 100 degrees."
+        },
+        {
+          "i": 8,
+          "category": "easy",
+          "question": "Translate \"thank you\" into Spanish.",
+          "seconds": 4.37,
+          "served_by": "big",
+          "escalated": true,
+          "correct": true,
+          "rss_gb": 5.85,
+          "answer": "\"Gracias\""
+        },
+        {
+          "i": 9,
+          "category": "hard",
+          "question": "A train leaves at 9:40 and arrives at 13:15. How long is the journey?",
+          "seconds": 8.19,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.85,
+          "answer": "The journey lasts 3 hours and 35 minutes."
+        },
+        {
+          "i": 10,
+          "category": "easy",
+          "question": "What is 12 multiplied by 8?",
+          "seconds": 0.76,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.85,
+          "answer": "12 multiplied by 8 is 96."
+        },
+        {
+          "i": 11,
+          "category": "easy",
+          "question": "What does CPU stand for?",
+          "seconds": 0.48,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.85,
+          "answer": "CPU stands for Central Processing Unit."
+        },
+        {
+          "i": 12,
+          "category": "hard",
+          "question": "Write a JavaScript function that debounces another function.",
+          "seconds": 16.95,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.86,
+          "answer": "```javascript\nfunction debounce(func, wait) {\n  let timeout;\n  return function(...args) {\n    const context = this;\n    clearTimeout(timeout);\n    timeout = setTimeout(() => func.apply(context, args), wait);\n  };\n}\n```"
+        },
+        {
+          "i": 13,
+          "category": "repeat",
+          "question": "What is the capital of Australia?",
+          "seconds": 0.01,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.86,
+          "answer": "The capital of Australia is Canberra."
+        },
+        {
+          "i": 14,
+          "category": "easy",
+          "question": "Name the largest planet in our solar system.",
+          "seconds": 0.9,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.86,
+          "answer": "The largest planet in our solar system is Jupiter."
+        },
+        {
+          "i": 15,
+          "category": "hard",
+          "question": "In Python, def avg(xs): return sum(xs) / len(xs) -- what happens with an empty list, and how do you fix it?",
+          "seconds": 37.94,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.87,
+          "answer": "With an empty list, the function `avg(xs)` will raise a `ZeroDivisionError` because `len(xs)` is 0, and division by zero is undefined.\n\nTo fix it, you can add a check to see if the list is empty before performing the division:\n\n```python\ndef avg(xs):\n    if not xs:\n        return 0  # or handle the empty list case as needed\n    return sum(xs) / len(xs)\n```\n\nThis way, if `xs` is empty, the function"
+        },
+        {
+          "i": 16,
+          "category": "reworded",
+          "question": "Which city is the capital of Australia?",
+          "seconds": 0.04,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.87,
+          "answer": "The capital of Australia is Canberra."
+        },
+        {
+          "i": 17,
+          "category": "easy",
+          "question": "Which ocean is the largest?",
+          "seconds": 0.7,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.88,
+          "answer": "The largest ocean is the Pacific Ocean."
+        },
+        {
+          "i": 18,
+          "category": "near_miss",
+          "question": "What is the capital of Austria?",
+          "seconds": 0.53,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.88,
+          "answer": "The capital of Austria is Vienna."
+        },
+        {
+          "i": 19,
+          "category": "hard",
+          "question": "If a shirt costs $40 after a 20% discount, what was the original price?",
+          "seconds": 5.43,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.89,
+          "answer": "The original price of the shirt was $50."
+        },
+        {
+          "i": 20,
+          "category": "reworded",
+          "question": "Who is the author of Romeo and Juliet?",
+          "seconds": 0.03,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.89,
+          "answer": "William Shakespeare wrote Romeo and Juliet."
+        },
+        {
+          "i": 21,
+          "category": "repeat",
+          "question": "Write a Python function that checks whether a string is a palindrome, ignoring case and non-letter characters.",
+          "seconds": 0.02,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.89,
+          "answer": "```python\ndef is_palindrome(s):\n    cleaned = ''.join(c.lower() for c in s if c.isalpha())\n    return cleaned == cleaned[::-1]\n```"
+        },
+        {
+          "i": 22,
+          "category": "near_miss",
+          "question": "What is the chemical symbol for silver?",
+          "seconds": 7.25,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.93,
+          "answer": "The chemical symbol for silver is Ag."
+        },
+        {
+          "i": 23,
+          "category": "easy",
+          "question": "What is the opposite of \"ancient\"?",
+          "seconds": 1.09,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.94,
+          "answer": "The opposite of \"ancient\" is \"modern\"."
+        },
+        {
+          "i": 24,
+          "category": "hard",
+          "question": "Write a Python function that merges two sorted lists into one sorted list in linear time.",
+          "seconds": 23.37,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.93,
+          "answer": "```python\ndef merge_sorted_lists(list1, list2):\n    merged_list = []\n    i, j = 0, 0\n    while i < len(list1) and j < len(list2):\n        if list1[i] < list2[j]:\n            merged_list.append(list1[i])\n            i += 1\n        else:\n            merged_list.append(list2[j])\n            j += 1\n    while i < len(list1):\n        merged_list.append(list1[i])\n        i += 1\n    while j < len(list2):\n"
+        },
+        {
+          "i": 25,
+          "category": "reworded",
+          "question": "What's the biggest planet in the solar system?",
+          "seconds": 2.28,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.94,
+          "answer": "The largest planet in our solar system is Jupiter."
+        },
+        {
+          "i": 26,
+          "category": "near_miss",
+          "question": "What is 12 multiplied by 9?",
+          "seconds": 3.64,
+          "served_by": "small",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.8,
+          "answer": "12 multiplied by 9 is 108."
+        },
+        {
+          "i": 27,
+          "category": "repeat",
+          "question": "Who wrote Romeo and Juliet?",
+          "seconds": 0.01,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.8,
+          "answer": "William Shakespeare wrote Romeo and Juliet."
+        },
+        {
+          "i": 28,
+          "category": "reworded",
+          "question": "How many days does a leap year have?",
+          "seconds": 0.03,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.8,
+          "answer": "A leap year has 366 days."
+        },
+        {
+          "i": 29,
+          "category": "near_miss",
+          "question": "How many days are in a regular, non-leap year?",
+          "seconds": 5.8,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.8,
+          "answer": "365 days."
+        },
+        {
+          "i": 30,
+          "category": "hard",
+          "question": "Explain the difference between a process and a thread, with one example of when to use each.",
+          "seconds": 25.93,
+          "served_by": "big",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.78,
+          "answer": "A process is an instance of a program in execution, while a thread is a sequence of instructions within a process. Processes have their own memory space, while threads share the same memory space. Use a process when you need to run independent tasks that don't interfere with each other, like a web server. Use a thread when you need to perform multiple tasks concurrently within a single program, su"
+        },
+        {
+          "i": 31,
+          "category": "reworded",
+          "question": "What does the abbreviation CPU mean?",
+          "seconds": 0.03,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.78,
+          "answer": "CPU stands for Central Processing Unit."
+        },
+        {
+          "i": 32,
+          "category": "repeat",
+          "question": "A train leaves at 9:40 and arrives at 13:15. How long is the journey?",
+          "seconds": 0.01,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.78,
+          "answer": "The journey lasts 3 hours and 35 minutes."
+        },
+        {
+          "i": 33,
+          "category": "reworded",
+          "question": "In Python, write a function to check if a string is a palindrome, ignoring case and non-letter characters.",
+          "seconds": 0.05,
+          "served_by": "cache",
+          "escalated": false,
+          "correct": true,
+          "rss_gb": 5.78,
+          "answer": "```python\ndef is_palindrome(s):\n    cleaned = ''.join(c.lower() for c in s if c.isalpha())\n    return cleaned == cleaned[::-1]\n```"
+        }
+      ]
+    }
+  }
+}
