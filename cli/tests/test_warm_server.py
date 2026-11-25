@@ -275,3 +275,9 @@ def test_a_pipeline_that_cannot_stream_still_answers_a_streaming_request(server)
     _, _, raw = _post(port, "/api/chat", {"model": "cascade", "messages": [{"role": "user", "content": "x"}]})
     lines = [json.loads(line) for line in raw.splitlines()]
     assert lines[0]["message"]["content"] == "echo x" and lines[-1]["done"] is True
+
+
+def test_ask_streams_to_the_cli_client(streaming_server) -> None:
+    pieces: list[str] = []
+    result = warm_server.ask([{"role": "user", "content": "hey"}], port=streaming_server, on_text=pieces.append)
+    assert pieces == ["ec", "ho ", "hey"] and result["text"] == "echo hey"

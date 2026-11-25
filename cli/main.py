@@ -418,17 +418,24 @@ def init() -> None:
 def ask(
     query: str,
     no_log: bool = typer.Option(False, help="Disable decision logging for this request."),
-    stream: bool = typer.Option(False, help="Print the answer as it's generated."),
+    stream: bool = typer.Option(True, help="Print the answer as it's generated."),
 ) -> None:
     """FR-08.2: one-shot, scriptable use."""
     warn_if_unprofiled()
     messages = [{"role": "user", "content": query}]
-    if not stream:
-        result = _ask_warm_server(messages, log=not no_log)
-        if result is not None:
-            typer.echo(result["text"])
-            typer.secho(_status_footer(result), fg=typer.colors.BRIGHT_BLACK, err=True)
-            return
+    printed: list[str] = []
+
+    def show(piece: str) -> None:
+        printed.append(piece)
+        typer.echo(piece, nl=False)
+
+    result = _ask_warm_server(messages, log=not no_log, on_text=show if stream else None)
+    if result is not None:
+        typer.echo("" if printed else result["text"])
+        typer.secho(_status_footer(result), fg=typer.colors.BRIGHT_BLACK, err=True)
+        return
+    if printed:  # the server failed mid-answer: start the answer again on a new line
+        typer.echo()
     pipeline = build_pipeline(decision_logging=not no_log)
     if stream:
         for piece in pipeline.run_stream(messages):
@@ -452,7 +459,7 @@ def _server_settings(config: dict) -> tuple[bool, int, float]:
             float(_get(config, "server.idle_minutes", warm_server.DEFAULT_IDLE_MINUTES)))
 
 
-def _ask_warm_server(messages: list, log: bool) -> Optional[dict]:
+def _ask_warm_server(messages: list, log: bool, on_text=None) -> Optional[dict]:
     """The answer from the background server -- started first if needed and enabled -- or None
     to answer in this process instead."""
     from cli import warm_server
@@ -467,6 +474,8 @@ def _ask_warm_server(messages: list, log: bool) -> Optional[dict]:
         warm_server.spawn(port, idle, log_path=CONFIG_PATH.parent / "server.log")
     if not warm_server.wait_ready(port):
         return None
+    if on_text is not None:
+        return warm_server.ask(messages, log=log, port=port, on_text=on_text)
     return warm_server.ask(messages, log=log, port=port)
 
 
@@ -648,7 +657,7 @@ def uninstall() -> None:
 def chat(no_log: bool = typer.Option(False, help="Disable decision logging for this session.")) -> None:
     """FR-08.2: interactive, multi-turn session."""
     warn_if_unprofiled()
-    pipeline = build_pipeline(decision_logging=not no_log)
+    pipeline = None  # built only if the background server can't answer
     messages: list[dict] = []
     typer.echo("Cascade chat -- type 'exit' to quit.")
 
@@ -657,9 +666,25 @@ def chat(no_log: bool = typer.Option(False, help="Disable decision logging for t
         if user_input.strip().lower() in ("exit", "quit"):
             break
         messages.append({"role": "user", "content": user_input})
-        result = pipeline.run(messages)
+        typer.echo("cascade: ", nl=False)
+        printed: list[str] = []
+
+        def show(piece: str) -> None:
+            printed.append(piece)
+            typer.echo(piece, nl=False)
+
+        # The background server keeps the models (and this conversation's KV cache) loaded
+        # between turns and streams the answer as it is written.
+        result = _ask_warm_server(messages, log=not no_log, on_text=show) if pipeline is None else None
+        if result is None:
+            if printed:
+                typer.echo("\ncascade: ", nl=False)
+            if pipeline is None:
+                pipeline = build_pipeline(decision_logging=not no_log)
+            result = pipeline.run(messages)
+            printed = []
         messages.append({"role": "assistant", "content": result["text"]})
-        typer.echo(f"cascade: {result['text']}")
+        typer.echo("" if printed else result["text"])
         typer.secho(_status_footer(result), fg=typer.colors.BRIGHT_BLACK)
 
 

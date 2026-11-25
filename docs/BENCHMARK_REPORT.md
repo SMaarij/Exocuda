@@ -966,3 +966,10 @@ Cache hits are sent whole too. Live on `cascade serve`:
 
 Total time is unchanged. What the person waits for before text appears drops from the whole answer to the
 first token.
+
+**`cascade ask` and `cascade chat` stream too (0.10.1).** The background server's `/ask` takes
+`"stream": true` and returns ndjson pieces, then the result. `cascade ask` now streams by default
+(`--no-stream` waits for the whole answer). Live, on a warm server, the first words appeared after 2.8 s
+of a 23.9 s answer. `cascade chat` used to load the models in its own process for every session; it now
+uses the background server like `cascade ask`. So the models, and the conversation's KV cache, stay
+loaded between turns and between sessions, and each answer streams.

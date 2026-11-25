@@ -22,6 +22,11 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.10.1 — the CLI streams
+
+- `cascade ask` streams by default (first words 2.8 s into a 23.9 s answer); `cascade chat` uses the
+  background server, so models and the conversation stay loaded between turns and sessions.
+
 ## 0.10.0 — answers start in seconds, and survive unloads
 
 - Replies stream: `ollama run`, Ollama apps and OpenAI clients see the first words after ~2–5 s instead of

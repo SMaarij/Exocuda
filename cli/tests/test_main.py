@@ -414,7 +414,7 @@ def test_server_auto_start_defaults_on_only_for_llamacpp() -> None:
 
 
 def test_ask_uses_the_warm_server_when_it_answers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_main, "_ask_warm_server", lambda messages, log: {
+    monkeypatch.setattr(cli_main, "_ask_warm_server", lambda messages, log, on_text=None: {
         "text": "from server", "tier": "local", "cache_hit": False, "tok_s": 5.0, "latency_ms": 10.0,
         "est_cost_usd": 0.0, "escalated": False})
     monkeypatch.setattr(cli_main, "build_pipeline", lambda **kw: pytest.fail("loaded models in-process"))
@@ -485,3 +485,32 @@ def test_uninstall_gives_ollama_its_port_back(fake_autostart) -> None:
     assert result.exit_code == 0, result.output
     assert fake_autostart == ["no entry", "stop 11434", "moved ollama stopped", "ollama back"]
     assert json.loads(cli_main.CONFIG_PATH.read_text()) == {"model": "qwen2.5-coder"}
+
+
+def _streaming_server(monkeypatch: pytest.MonkeyPatch, seen: list) -> None:
+    def ask(messages, log, on_text=None):
+        seen.append([dict(m) for m in messages])
+        text = f"answer {len(seen)}"
+        if on_text is not None:
+            on_text(text[:4])
+            on_text(text[4:])
+        return {"text": text, "tier": "local", "cache_hit": False, "tok_s": 5.0, "latency_ms": 10.0,
+                "est_cost_usd": 0.0, "escalated": False}
+    monkeypatch.setattr(cli_main, "_ask_warm_server", ask)
+    monkeypatch.setattr(cli_main, "build_pipeline", lambda **kw: pytest.fail("loaded models in-process"))
+
+
+def test_ask_prints_the_streamed_answer_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    _streaming_server(monkeypatch, [])
+    result = runner.invoke(app, ["ask", "hi"])
+    assert result.exit_code == 0 and result.stdout.count("answer 1") == 1
+
+
+def test_chat_streams_through_the_server_and_keeps_the_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list = []
+    _streaming_server(monkeypatch, seen)
+    result = runner.invoke(app, ["chat"], input="one\ntwo\nexit\n")
+    assert result.exit_code == 0
+    assert "cascade: answer 1" in result.stdout and "cascade: answer 2" in result.stdout
+    assert seen[1] == [{"role": "user", "content": "one"}, {"role": "assistant", "content": "answer 1"},
+                       {"role": "user", "content": "two"}]

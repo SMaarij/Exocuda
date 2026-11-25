@@ -305,7 +305,8 @@ class WarmServer:
                 self.end_headers()
                 self.close_connection = True
 
-            def _ask_streaming(self, messages: list, content_type: str, encode: Callable[[str], bytes]) -> dict:
+            def _ask_streaming(self, messages: list, content_type: str, encode: Callable[[str], bytes],
+                               log: bool = True) -> dict:
                 """Ask the pipeline and stream the answer as it is generated: each piece is
                 written as `encode(piece)` the moment the model produces it. Answers that
                 arrive whole (cache hit, small model, remote tier) go out in one piece."""
@@ -314,7 +315,7 @@ class WarmServer:
 
                 def work() -> None:
                     try:
-                        box["result"] = server.ask(messages, on_text=pieces.put)
+                        box["result"] = server.ask(messages, log=log, on_text=pieces.put)
                     except BaseException as exc:  # re-raised on the handler thread
                         box["error"] = exc
                     finally:
@@ -393,7 +394,15 @@ class WarmServer:
                         if not server.ready:
                             self._reply(503, {"error": "loading"})
                             return
-                        self._reply(200, server.ask(body["messages"], bool(body.get("log", True))))
+                        log = bool(body.get("log", True))
+                        if body.get("stream"):  # ndjson: {"text": piece} lines, then {"result": ...}
+                            result = self._ask_streaming(
+                                body["messages"], "application/x-ndjson",
+                                lambda piece: json.dumps({"text": piece}).encode() + b"\n", log=log)
+                            self.wfile.write(json.dumps({"result": result}).encode() + b"\n")
+                            self.wfile.flush()
+                        else:
+                            self._reply(200, server.ask(body["messages"], log))
                     elif path in ("/v1/chat/completions", "/chat/completions"):
                         self._openai_chat(body)
                     elif path == "/api/chat":
@@ -580,8 +589,13 @@ def health(port: int = DEFAULT_PORT) -> Optional[dict]:
     return _request(port, "/health")
 
 
-def ask(messages: list, log: bool = True, port: int = DEFAULT_PORT) -> Optional[dict]:
-    """The Pipeline result from a ready warm server, or None (not running / still loading / failed)."""
+def ask(messages: list, log: bool = True, port: int = DEFAULT_PORT,
+        on_text: Optional[Callable[[str], None]] = None) -> Optional[dict]:
+    """The Pipeline result from a ready warm server, or None (not running / still loading / failed).
+    With `on_text`, the answer is streamed: each piece is passed to it as the model writes it, and
+    together the pieces are the whole answer."""
+    if on_text is not None:
+        return _ask_streamed(messages, log, port, on_text)
     result = _request(port, "/ask", {"messages": messages, "log": log}, timeout=3600)
     if result is not None and "error" in result:
         print(f"Model server error ({result['error']}); answering without it.", file=sys.stderr)
@@ -589,6 +603,27 @@ def ask(messages: list, log: bool = True, port: int = DEFAULT_PORT) -> Optional[
     if result is None or "_status" in result:
         return None
     return result
+
+
+def _ask_streamed(messages: list, log: bool, port: int, on_text: Callable[[str], None]) -> Optional[dict]:
+    req = urllib.request.Request(f"http://{HOST}:{port}/ask", headers={"Content-Type": "application/json"},
+                                 data=json.dumps({"messages": messages, "log": log, "stream": True}).encode())
+    try:
+        with urllib.request.urlopen(req, timeout=3600) as resp:
+            for line in resp:
+                item = json.loads(line)
+                if "text" in item:
+                    on_text(item["text"])
+                elif "result" in item:
+                    return item["result"]
+    except urllib.error.HTTPError as exc:
+        body = json.loads(exc.read() or b"{}")
+        if "error" in body and body.get("error") != "loading":
+            print(f"Model server error ({body['error']}); answering without it.", file=sys.stderr)
+        return None
+    except (urllib.error.URLError, ConnectionError, TimeoutError, OSError, ValueError):
+        return None
+    return None
 
 
 def stop(port: int = DEFAULT_PORT) -> bool:
