@@ -303,6 +303,38 @@ def test_prompt_uses_the_models_chat_template(monkeypatch) -> None:
     assert built[0].detokenize(runner.last_prompt_ids[1:]) == b"<turn> hi </turn>"
 
 
+def test_messages_keep_their_roles_in_the_chat_template(monkeypatch) -> None:
+    seen = []
+
+    class Formatter:
+        def __init__(self, template, eos_token, bos_token):
+            pass
+
+        def __call__(self, messages):
+            seen.append(messages)
+
+            class Result:
+                prompt = " ".join(f"<{m['role']}> {m['content']}" for m in messages)
+                added_special = False
+            return Result()
+
+    monkeypatch.setattr(llamacpp_runner, "Jinja2ChatFormatter", Formatter)
+    runner, built = _runner()
+    assert runner.accepts_messages is True
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    built[0].metadata["tokenizer.chat_template"] = "{{ messages }}"
+    turns = [{"role": "user", "content": "q1"}, {"role": "assistant", "content": "a1"},
+             {"role": "user", "content": "q2"}]
+    runner.generate(turns, 4)
+    assert seen[-1] == turns
+    assert built[0].detokenize(runner.last_prompt_ids[1:]) == b"<user> q1 <assistant> a1 <user> q2"
+
+
+def test_native_chat_off_asks_for_a_flat_prompt() -> None:
+    runner, _ = _runner(native_chat=False)
+    assert runner.accepts_messages is False
+
+
 # ---- verify_greedy --------------------------------------------------------------
 
 
@@ -794,3 +826,108 @@ def test_a_model_found_before_loads_without_ollama(tmp_path) -> None:
     runner = LlamaCppRunner(ollama=DownOllama(), llama_factory=lambda path, all_logits: FakeLlama(path, all_logits))
     runner.load("llama3.2", "3b-instruct-q4_K_M")
     assert runner._model_path == str(gguf)
+
+
+def test_lookup_searches_earlier_answers_when_this_request_has_no_repeat() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    llm = _ConfidenceLlm({}, vocab=64)
+    draft = ModelDraft(llm, k=16, verify_costs=CPU_VERIFY_COSTS)
+    draft.history_stats[3] = [95.0, 100.0]
+    prompt = [1, 2, 3]
+    answer = [20, 21, 22, 23, 24, 25, 26, 27]
+    for i in range(len(answer) + 1):  # request 1 decodes `answer` step by step
+        draft(np.array(prompt + answer[:i], dtype=np.intc))
+    llm.evaluated.clear()
+    lookups = draft.lookup_drafts
+    out = list(draft(np.array([4, 5, 20, 21, 22], dtype=np.intc)))  # request 2 repeats its start
+    assert draft.lookup_drafts == lookups + 1 and llm.evaluated == []
+    assert len(out) >= 3 and out == [23, 24, 25, 26, 27][: len(out)]
+
+
+def test_earlier_answers_never_continue_past_their_end() -> None:
+    from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+
+    draft = ModelDraft(_ConfidenceLlm({}, vocab=64), k=16, verify_costs=CPU_VERIFY_COSTS)
+    draft.history_stats[3] = [99.0, 100.0]
+    for ids in ([1, 2], [1, 2, 20, 21, 22, 23, 24], [7, 8], [7, 8, 30, 31, 32, 33], [9]):
+        draft(np.array(ids, dtype=np.intc))
+    out = list(draft._lookup_draft([5, 21, 22, 23]))
+    assert out == [24]  # the first answer ended there; the next one is not its continuation
+
+
+# ---- KV slots -----------------------------------------------------------------------
+
+
+class _KVLlm:
+    """A model whose KV cache is just the tokens it holds."""
+
+    def __init__(self) -> None:
+        self._ctx = object()
+        self.input_ids = np.zeros(4096, dtype=np.intc)
+        self.n_tokens = 0
+        self._requires_eval = False
+        self.kv: list[int] = []
+
+    def evaluate(self, ids: list[int]) -> None:
+        self.input_ids[: len(ids)] = ids
+        self.n_tokens = len(ids)
+        self.kv = list(ids)
+
+
+@pytest.fixture
+def _kv_as_tokens(monkeypatch):
+    monkeypatch.setattr(llamacpp_runner, "_kv_get", lambda llm: json.dumps(llm.kv).encode())
+
+    def kv_set(llm, data):
+        llm.kv = json.loads(data)
+    monkeypatch.setattr(llamacpp_runner, "_kv_set", kv_set)
+
+
+def test_a_conversation_comes_back_to_its_saved_cache(_kv_as_tokens) -> None:
+    from engine.execution.llamacpp_runner import KVSlots
+
+    llm, slots = _KVLlm(), KVSlots(max_tokens=1000, min_tokens=10)
+    chat_a = list(range(100, 300))
+    llm.evaluate(chat_a)
+    other = list(range(500, 650))
+    slots.switch(llm, other)  # a different conversation: chat A is saved before it is overwritten
+    assert len(slots) == 1 and llm.kv == chat_a
+    llm.evaluate(other)
+    slots.switch(llm, chat_a + [7, 8, 9])  # chat A continues
+    assert llm.kv == chat_a and llm.n_tokens == len(chat_a) and llm._requires_eval and slots.restores == 1
+    assert list(llm.input_ids[: llm.n_tokens]) == chat_a
+    assert len(slots) == 1  # the other conversation was saved in its place
+
+
+def test_short_or_continuing_caches_are_not_saved(_kv_as_tokens) -> None:
+    from engine.execution.llamacpp_runner import KVSlots
+
+    llm, slots = _KVLlm(), KVSlots(max_tokens=1000, min_tokens=10)
+    llm.evaluate([1, 2, 3])
+    slots.switch(llm, [9, 9, 9])
+    llm.evaluate(list(range(50)))
+    slots.switch(llm, list(range(50)) + [1, 2])
+    assert len(slots) == 0
+
+
+def test_saved_caches_stay_within_the_token_budget(_kv_as_tokens) -> None:
+    from engine.execution.llamacpp_runner import KVSlots
+
+    llm, slots = _KVLlm(), KVSlots(max_tokens=250, min_tokens=10)
+    for base in (1000, 2000, 3000):
+        llm.evaluate(list(range(base, base + 100)))
+        slots.switch(llm, [5] * 20)
+    assert len(slots) == 2 and slots.tokens == 200  # the oldest conversation was dropped
+    llm.evaluate([5] * 20)
+    slots.switch(llm, list(range(1000, 1100)))
+    assert slots.restores == 0
+
+
+def test_kv_slots_are_off_for_test_doubles_and_when_disabled() -> None:
+    from engine.execution.llamacpp_runner import kv_slots_for
+
+    assert kv_slots_for(FakeLlama("m", False)) is None
+    assert kv_slots_for(_KVLlm(), max_tokens=0) is None
+    llm = _KVLlm()
+    assert kv_slots_for(llm) is kv_slots_for(llm)  # one store per model instance

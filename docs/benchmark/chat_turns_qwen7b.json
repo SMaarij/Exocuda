@@ -1,0 +1,764 @@
+{
+ "single_chat": {
+  "summary": {
+   "flat:nohistory": {
+    "later_first_token_s": 5.65,
+    "decode_tok_s": 4.588,
+    "mean_total_wall_s": 92.6
+   },
+   "native:nohistory": {
+    "later_first_token_s": 1.96,
+    "decode_tok_s": 5.198,
+    "mean_total_wall_s": 70.0
+   },
+   "native": {
+    "later_first_token_s": 2.15,
+    "decode_tok_s": 5.104,
+    "mean_total_wall_s": 71.9
+   }
+  },
+  "rounds": {
+   "flat:nohistory": [
+    [
+     {
+      "turn": 1,
+      "prompt_tokens": 103,
+      "tokens": 29,
+      "first_token_s": 6.63,
+      "decode_tok_s": 3.722,
+      "wall_s": 14.17,
+      "acceptance_rate": 0.7037037037037037,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "turn": 2,
+      "prompt_tokens": 152,
+      "tokens": 47,
+      "first_token_s": 3.77,
+      "decode_tok_s": 3.875,
+      "wall_s": 15.66,
+      "acceptance_rate": 0.7083333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date() if '-' in s else datetime.strptime(s, '%d/%m/%Y').date()\n```"
+     },
+     {
+      "turn": 3,
+      "prompt_tokens": 223,
+      "tokens": 82,
+      "first_token_s": 5.67,
+      "decode_tok_s": 4.422,
+      "wall_s": 24.01,
+      "acceptance_rate": 0.6559139784946236,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    if '-' in s:\n        return datetime.strptime(s, '%Y-%m-%d').date()\n    elif '/' in s:\n        return datetime.strptime(s, '%d/%m/%Y').date()\n    else:\n        raise ValueError(\"Input date string must be in 'YYYY-MM-DD' or 'DD/MM/YYYY' format.\")\n```"
+     },
+     {
+      "turn": 4,
+      "prompt_tokens": 326,
+      "tokens": 167,
+      "first_token_s": 6.84,
+      "decode_tok_s": 4.443,
+      "wall_s": 44.23,
+      "acceptance_rate": 0.8,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses a date string in 'YYYY-MM-DD' or 'DD/MM/YYYY' format and returns a datetime.date object.\n    \n    Args:\n    s (str): The date string to parse.\n    \n    Returns:\n    datetime.date: The parsed date.\n    \n    Raises:\n    ValueError: If the input string is not in the expected format.\n    \"\"\"\n    if '-' in s:\n        return datetime.strptime(s, '%Y-%m-%d').date()\n    elif '/' in s:\n        return datetime.strptime(s, '%d/%m/%Y').date()\n    else:\n        raise ValueError(\"Input date string must be in 'YYYY-MM-DD' or 'DD/MM/YYYY' format.\")\n```"
+     }
+    ],
+    [
+     {
+      "turn": 1,
+      "prompt_tokens": 103,
+      "tokens": 29,
+      "first_token_s": 4.63,
+      "decode_tok_s": 3.988,
+      "wall_s": 11.67,
+      "acceptance_rate": 0.7037037037037037,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "turn": 2,
+      "prompt_tokens": 152,
+      "tokens": 47,
+      "first_token_s": 4.37,
+      "decode_tok_s": 5.478,
+      "wall_s": 12.79,
+      "acceptance_rate": 0.7083333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date() if '-' in s else datetime.strptime(s, '%d/%m/%Y').date()\n```"
+     },
+     {
+      "turn": 3,
+      "prompt_tokens": 223,
+      "tokens": 82,
+      "first_token_s": 5.63,
+      "decode_tok_s": 4.531,
+      "wall_s": 23.53,
+      "acceptance_rate": 0.6559139784946236,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    if '-' in s:\n        return datetime.strptime(s, '%Y-%m-%d').date()\n    elif '/' in s:\n        return datetime.strptime(s, '%d/%m/%Y').date()\n    else:\n        raise ValueError(\"Input date string must be in 'YYYY-MM-DD' or 'DD/MM/YYYY' format.\")\n```"
+     },
+     {
+      "turn": 4,
+      "prompt_tokens": 326,
+      "tokens": 167,
+      "first_token_s": 7.61,
+      "decode_tok_s": 5.272,
+      "wall_s": 39.11,
+      "acceptance_rate": 0.8,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses a date string in 'YYYY-MM-DD' or 'DD/MM/YYYY' format and returns a datetime.date object.\n    \n    Args:\n    s (str): The date string to parse.\n    \n    Returns:\n    datetime.date: The parsed date.\n    \n    Raises:\n    ValueError: If the input string is not in the expected format.\n    \"\"\"\n    if '-' in s:\n        return datetime.strptime(s, '%Y-%m-%d').date()\n    elif '/' in s:\n        return datetime.strptime(s, '%d/%m/%Y').date()\n    else:\n        raise ValueError(\"Input date string must be in 'YYYY-MM-DD' or 'DD/MM/YYYY' format.\")\n```"
+     }
+    ]
+   ],
+   "native:nohistory": [
+    [
+     {
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 4.89,
+      "decode_tok_s": 4.925,
+      "wall_s": 10.6,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 1.86,
+      "decode_tok_s": 5.124,
+      "wall_s": 13.8,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 2.02,
+      "decode_tok_s": 6.758,
+      "wall_s": 12.55,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 147,
+      "first_token_s": 2.02,
+      "decode_tok_s": 5.263,
+      "wall_s": 29.79,
+      "acceptance_rate": 0.7906976744186046,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     }
+    ],
+    [
+     {
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 5.39,
+      "decode_tok_s": 4.906,
+      "wall_s": 11.12,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 2.09,
+      "decode_tok_s": 4.161,
+      "wall_s": 16.78,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 1.9,
+      "decode_tok_s": 4.895,
+      "wall_s": 16.43,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 147,
+      "first_token_s": 1.87,
+      "decode_tok_s": 5.409,
+      "wall_s": 28.88,
+      "acceptance_rate": 0.7906976744186046,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     }
+    ]
+   ],
+   "native": [
+    [
+     {
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 5.92,
+      "decode_tok_s": 3.74,
+      "wall_s": 13.42,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 2.17,
+      "decode_tok_s": 4.782,
+      "wall_s": 14.96,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 2.28,
+      "decode_tok_s": 5.597,
+      "wall_s": 15.0,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 147,
+      "first_token_s": 1.76,
+      "decode_tok_s": 5.678,
+      "wall_s": 27.49,
+      "acceptance_rate": 0.7906976744186046,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     }
+    ],
+    [
+     {
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 4.98,
+      "decode_tok_s": 3.558,
+      "wall_s": 12.87,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 2.75,
+      "decode_tok_s": 4.949,
+      "wall_s": 15.1,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 2.14,
+      "decode_tok_s": 5.834,
+      "wall_s": 14.33,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 147,
+      "first_token_s": 1.82,
+      "decode_tok_s": 5.074,
+      "wall_s": 30.62,
+      "acceptance_rate": 0.7906976744186046,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     }
+    ]
+   ]
+  }
+ },
+ "alternating": {
+  "summary": {
+   "native:alternate:noslots": {
+    "later_first_token_s": 10.88,
+    "decode_tok_s": 3.496,
+    "mean_total_wall_s": 224.4
+   },
+   "native:alternate": {
+    "later_first_token_s": 4.13,
+    "decode_tok_s": 4.832,
+    "mean_total_wall_s": 142.2
+   }
+  },
+  "rounds": {
+   "native:alternate:noslots": [
+    [
+     {
+      "chat": "a",
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 4.96,
+      "decode_tok_s": 3.8,
+      "wall_s": 12.35,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 1,
+      "prompt_tokens": 69,
+      "tokens": 29,
+      "first_token_s": 1.31,
+      "decode_tok_s": 4.146,
+      "wall_s": 8.08,
+      "acceptance_rate": 0.72,
+      "text": "A Python generator is a function that returns an iterator, allowing you to iterate over a sequence of values without storing them all in memory at once."
+     },
+     {
+      "chat": "a",
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 5.01,
+      "decode_tok_s": 4.452,
+      "wall_s": 18.74,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 2,
+      "prompt_tokens": 120,
+      "tokens": 37,
+      "first_token_s": 4.96,
+      "decode_tok_s": 7.337,
+      "wall_s": 9.89,
+      "acceptance_rate": 0.8888888888888888,
+      "text": "```python\ndef fibonacci():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n```"
+     },
+     {
+      "chat": "a",
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 10.53,
+      "decode_tok_s": 5.793,
+      "wall_s": 22.81,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 3,
+      "prompt_tokens": 181,
+      "tokens": 43,
+      "first_token_s": 8.11,
+      "decode_tok_s": 3.171,
+      "wall_s": 21.38,
+      "acceptance_rate": 0.575,
+      "text": "To take only the first 10 values from the Fibonacci generator, you can use a loop with the `next()` function or a list comprehension: `list(islice(fibonacci(), 10))`."
+     },
+     {
+      "chat": "a",
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 150,
+      "first_token_s": 16.61,
+      "decode_tok_s": 5.996,
+      "wall_s": 41.48,
+      "acceptance_rate": 0.7878787878787878,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date string is not in the expected format.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 4,
+      "prompt_tokens": 245,
+      "tokens": 120,
+      "first_token_s": 11.47,
+      "decode_tok_s": 4.353,
+      "wall_s": 38.83,
+      "acceptance_rate": 0.6293103448275862,
+      "text": "To make a generator asynchronous, you use the `async def` syntax instead of `def`. Here's an example of an async Fibonacci generator:\n\n```python\nasync def fibonacci():\n    a, b = 0, 1\n    while True:\n        await asyncio.sleep(0)  # Simulate an async operation\n        yield a\n        a, b = b, a + b\n```\n\nTo use this async generator, you would need to run it in an async context, such as within an `async for` loop or by calling `next()` in an async function."
+     }
+    ],
+    [
+     {
+      "chat": "a",
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 4.91,
+      "decode_tok_s": 5.034,
+      "wall_s": 10.5,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 1,
+      "prompt_tokens": 69,
+      "tokens": 29,
+      "first_token_s": 1.3,
+      "decode_tok_s": 3.751,
+      "wall_s": 8.8,
+      "acceptance_rate": 0.72,
+      "text": "A Python generator is a function that returns an iterator, allowing you to iterate over a sequence of values without storing them all in memory at once."
+     },
+     {
+      "chat": "a",
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 5.46,
+      "decode_tok_s": 2.324,
+      "wall_s": 31.73,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 2,
+      "prompt_tokens": 120,
+      "tokens": 37,
+      "first_token_s": 6.53,
+      "decode_tok_s": 2.726,
+      "wall_s": 19.77,
+      "acceptance_rate": 0.8888888888888888,
+      "text": "```python\ndef fibonacci():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n```"
+     },
+     {
+      "chat": "a",
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 21.33,
+      "decode_tok_s": 2.209,
+      "wall_s": 53.49,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 3,
+      "prompt_tokens": 181,
+      "tokens": 43,
+      "first_token_s": 10.21,
+      "decode_tok_s": 1.511,
+      "wall_s": 38.04,
+      "acceptance_rate": 0.575,
+      "text": "To take only the first 10 values from the Fibonacci generator, you can use a loop with the `next()` function or a list comprehension: `list(islice(fibonacci(), 10))`."
+     },
+     {
+      "chat": "a",
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 150,
+      "first_token_s": 18.7,
+      "decode_tok_s": 3.934,
+      "wall_s": 56.61,
+      "acceptance_rate": 0.7878787878787878,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date string is not in the expected format.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 4,
+      "prompt_tokens": 245,
+      "tokens": 120,
+      "first_token_s": 11.65,
+      "decode_tok_s": 2.666,
+      "wall_s": 56.32,
+      "acceptance_rate": 0.6293103448275862,
+      "text": "To make a generator asynchronous, you use the `async def` syntax instead of `def`. Here's an example of an async Fibonacci generator:\n\n```python\nasync def fibonacci():\n    a, b = 0, 1\n    while True:\n        await asyncio.sleep(0)  # Simulate an async operation\n        yield a\n        a, b = b, a + b\n```\n\nTo use this async generator, you would need to run it in an async context, such as within an `async for` loop or by calling `next()` in an async function."
+     }
+    ]
+   ],
+   "native:alternate": [
+    [
+     {
+      "chat": "a",
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 5.47,
+      "decode_tok_s": 4.787,
+      "wall_s": 11.34,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 1,
+      "prompt_tokens": 69,
+      "tokens": 29,
+      "first_token_s": 1.37,
+      "decode_tok_s": 4.286,
+      "wall_s": 7.93,
+      "acceptance_rate": 0.72,
+      "text": "A Python generator is a function that returns an iterator, allowing you to iterate over a sequence of values without storing them all in memory at once."
+     },
+     {
+      "chat": "a",
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 5.53,
+      "decode_tok_s": 4.69,
+      "wall_s": 18.56,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 2,
+      "prompt_tokens": 120,
+      "tokens": 37,
+      "first_token_s": 4.95,
+      "decode_tok_s": 6.162,
+      "wall_s": 10.83,
+      "acceptance_rate": 0.8888888888888888,
+      "text": "```python\ndef fibonacci():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n```"
+     },
+     {
+      "chat": "a",
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 2.12,
+      "decode_tok_s": 5.702,
+      "wall_s": 14.61,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 3,
+      "prompt_tokens": 181,
+      "tokens": 43,
+      "first_token_s": 9.18,
+      "decode_tok_s": 3.263,
+      "wall_s": 22.09,
+      "acceptance_rate": 0.575,
+      "text": "To take only the first 10 values from the Fibonacci generator, you can use a loop with the `next()` function or a list comprehension: `list(islice(fibonacci(), 10))`."
+     },
+     {
+      "chat": "a",
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 150,
+      "first_token_s": 2.38,
+      "decode_tok_s": 5.582,
+      "wall_s": 29.14,
+      "acceptance_rate": 0.7878787878787878,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date string is not in the expected format.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 4,
+      "prompt_tokens": 245,
+      "tokens": 120,
+      "first_token_s": 1.54,
+      "decode_tok_s": 4.086,
+      "wall_s": 30.73,
+      "acceptance_rate": 0.6293103448275862,
+      "text": "To make a generator asynchronous, you use the `async def` syntax instead of `def`. Here's an example of an async Fibonacci generator:\n\n```python\nasync def fibonacci():\n    a, b = 0, 1\n    while True:\n        await asyncio.sleep(0)  # Simulate an async operation\n        yield a\n        a, b = b, a + b\n```\n\nTo use this async generator, you would need to run it in an async context, such as within an `async for` loop or by calling `next()` in an async function."
+     }
+    ],
+    [
+     {
+      "chat": "a",
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 5.18,
+      "decode_tok_s": 4.468,
+      "wall_s": 11.48,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 1,
+      "prompt_tokens": 69,
+      "tokens": 29,
+      "first_token_s": 1.26,
+      "decode_tok_s": 4.248,
+      "wall_s": 7.87,
+      "acceptance_rate": 0.72,
+      "text": "A Python generator is a function that returns an iterator, allowing you to iterate over a sequence of values without storing them all in memory at once."
+     },
+     {
+      "chat": "a",
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 5.47,
+      "decode_tok_s": 4.257,
+      "wall_s": 19.83,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 2,
+      "prompt_tokens": 120,
+      "tokens": 37,
+      "first_token_s": 4.99,
+      "decode_tok_s": 6.804,
+      "wall_s": 10.32,
+      "acceptance_rate": 0.8888888888888888,
+      "text": "```python\ndef fibonacci():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n```"
+     },
+     {
+      "chat": "a",
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 2.2,
+      "decode_tok_s": 6.537,
+      "wall_s": 13.11,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 3,
+      "prompt_tokens": 181,
+      "tokens": 43,
+      "first_token_s": 7.48,
+      "decode_tok_s": 4.19,
+      "wall_s": 17.54,
+      "acceptance_rate": 0.575,
+      "text": "To take only the first 10 values from the Fibonacci generator, you can use a loop with the `next()` function or a list comprehension: `list(islice(fibonacci(), 10))`."
+     },
+     {
+      "chat": "a",
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 150,
+      "first_token_s": 2.0,
+      "decode_tok_s": 5.562,
+      "wall_s": 28.84,
+      "acceptance_rate": 0.7878787878787878,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date string is not in the expected format.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 4,
+      "prompt_tokens": 245,
+      "tokens": 120,
+      "first_token_s": 1.75,
+      "decode_tok_s": 4.183,
+      "wall_s": 30.26,
+      "acceptance_rate": 0.6293103448275862,
+      "text": "To make a generator asynchronous, you use the `async def` syntax instead of `def`. Here's an example of an async Fibonacci generator:\n\n```python\nasync def fibonacci():\n    a, b = 0, 1\n    while True:\n        await asyncio.sleep(0)  # Simulate an async operation\n        yield a\n        a, b = b, a + b\n```\n\nTo use this async generator, you would need to run it in an async context, such as within an `async for` loop or by calling `next()` in an async function."
+     }
+    ]
+   ]
+  }
+ },
+ "alternating_min32": {
+  "summary": {
+   "native:alternate": {
+    "later_first_token_s": 2.25,
+    "decode_tok_s": 4.105,
+    "mean_total_wall_s": 174.2
+   }
+  },
+  "rounds": {
+   "native:alternate": [
+    [
+     {
+      "chat": "a",
+      "turn": 1,
+      "prompt_tokens": 83,
+      "tokens": 29,
+      "first_token_s": 5.76,
+      "decode_tok_s": 3.856,
+      "wall_s": 13.06,
+      "acceptance_rate": 0.8333333333333334,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 1,
+      "prompt_tokens": 69,
+      "tokens": 29,
+      "first_token_s": 1.63,
+      "decode_tok_s": 3.319,
+      "wall_s": 10.11,
+      "acceptance_rate": 0.72,
+      "text": "A Python generator is a function that returns an iterator, allowing you to iterate over a sequence of values without storing them all in memory at once."
+     },
+     {
+      "chat": "a",
+      "turn": 2,
+      "prompt_tokens": 135,
+      "tokens": 62,
+      "first_token_s": 2.04,
+      "decode_tok_s": 3.481,
+      "wall_s": 19.6,
+      "acceptance_rate": 0.6842105263157895,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 2,
+      "prompt_tokens": 120,
+      "tokens": 37,
+      "first_token_s": 1.58,
+      "decode_tok_s": 5.345,
+      "wall_s": 8.36,
+      "acceptance_rate": 0.8888888888888888,
+      "text": "```python\ndef fibonacci():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n```"
+     },
+     {
+      "chat": "a",
+      "turn": 3,
+      "prompt_tokens": 224,
+      "tokens": 72,
+      "first_token_s": 2.51,
+      "decode_tok_s": 5.591,
+      "wall_s": 15.25,
+      "acceptance_rate": 0.85,
+      "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 3,
+      "prompt_tokens": 181,
+      "tokens": 113,
+      "first_token_s": 2.46,
+      "decode_tok_s": 4.029,
+      "wall_s": 30.3,
+      "acceptance_rate": 0.6696428571428571,
+      "text": "To take only the first 10 values from the Fibonacci generator, you can use a loop with the `next()` function or convert it to a list and slice it. Here's an example using a loop:\n\n```python\nfib_gen = fibonacci()\nfor _ in range(10):\n    print(next(fib_gen))\n```\n\nOr using a list and slicing:\n\n```python\nfib_gen = fibonacci()\nfirst_10_fib = list(fib_gen)[:10]\nfor num in first_10_fib:\n    print(num)\n```"
+     },
+     {
+      "chat": "a",
+      "turn": 4,
+      "prompt_tokens": 320,
+      "tokens": 147,
+      "first_token_s": 3.11,
+      "decode_tok_s": 4.571,
+      "wall_s": 35.11,
+      "acceptance_rate": 0.7906976744186046,
+      "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+     },
+     {
+      "chat": "b",
+      "turn": 4,
+      "prompt_tokens": 315,
+      "tokens": 147,
+      "first_token_s": 1.81,
+      "decode_tok_s": 3.598,
+      "wall_s": 42.44,
+      "acceptance_rate": 0.5918367346938775,
+      "text": "To make a generator asynchronous, you use the `async def` syntax instead of `def`. Here's how you can modify the Fibonacci generator to be asynchronous:\n\n```python\nasync def fibonacci():\n    a, b = 0, 1\n    while True:\n        yield a\n        a, b = b, a + b\n```\n\nWhen using an async generator, you need to use `async for` to iterate over it:\n\n```python\nasync for num in fibonacci():\n    print(num)\n    if num > 100:  # Example condition to stop after a certain value\n        break\n```\n\nThis allows you to perform asynchronous operations within the generator, such as waiting for I/O operations."
+     }
+    ]
+   ]
+  }
+ }
+}

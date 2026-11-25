@@ -19,6 +19,8 @@ extended here to "no network needed to run the suite").
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Protocol, Sequence
 
 import numpy as np
@@ -48,7 +50,11 @@ class FastEmbedEmbedder:
         if self._model is None:
             from fastembed import TextEmbedding  # deferred: heavy import
 
-            self._model = TextEmbedding(model_name=self._model_name)
+            # fastembed's default cache is the system temp folder, which Windows' storage
+            # cleanup empties: the tokenizer files vanished while the ONNX file stayed, and
+            # every load then failed. Keep it with Cascade's other state unless set.
+            cache_dir = os.environ.get("FASTEMBED_CACHE_PATH") or str(Path.home() / ".cascade" / "fastembed")
+            self._model = TextEmbedding(model_name=self._model_name, cache_dir=cache_dir)
         return self._model
 
     def embed(self, text: str) -> list[float]:

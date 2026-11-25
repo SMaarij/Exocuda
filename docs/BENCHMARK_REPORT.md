@@ -851,3 +851,55 @@ other 2 differ only at measured near-ties. RAM is unchanged (5.10 GB). Lookup is
 
 Also new: the Ollama tag → GGUF path is cached in `~/.cascade/model_paths.json`, so a model found once
 loads even when Ollama is not running.
+
+## Addendum 20 — conversations: native chat turns, saved KV caches, lookup across requests, 2026-11-25
+
+Three changes for multi-turn use, measured with the new `scripts/benchmark_chat.py`. It runs a 4-turn
+coding chat with Cascade's default system prompt, and each answer is fed back as history. qwen2.5-coder 7B
+uses the 0.5B as draft model, cost-aware drafting is on, and each configuration ran 2 interleaved rounds
+(`chat_turns_qwen7b.json`).
+
+**Native chat turns.** Up to 0.8.0, Cascade flattened the conversation into a single user message of
+"ROLE: content" lines. So the prompt of turn N shared its prefix with turn N-1 only up to the previous
+question, and every earlier answer was read again. Now `LocalExecutionBackend` hands the messages to the
+llama.cpp runner, and each message keeps its role in the model's own chat template. The reused prefix
+then runs through the previous answer.
+
+| Chat format | First token, turns 2–4 | Decode | Whole chat |
+|---|---:|---:|---:|
+| flattened (0.8.0) | 5.65 s | 4.59 tok/s | 92.6 s |
+| **native turns (0.9.0)** | **1.96 s** | 5.20 tok/s | **70.0 s** |
+
+On the 34-question session, the plain 7B answers 34/34 correctly with native turns
+(`system_session_native_chat_plain.json`). `native_chat: false` restores the flattened prompt.
+
+**Saved KV caches.** llama.cpp holds one KV cache. Two conversations taking turns, or the 0.5B answering
+an easy question on the same instance it drafts with, each recompute the other's history. Before a
+request discards a cache of 32 or more tokens, Cascade now saves that model's KV cache
+(`llama_state_seq_get_data`). It restores the saved cache that shares the longest prefix with the new
+prompt. Each model keeps at most 2,048 saved tokens, the oldest dropped first: about 0.11 GB for the 7B
+and 0.03 GB for the 0.5B, used only while something is saved. On the 0.5B, a restored conversation gave
+output identical to a fresh run, with the first token in 0.23 s instead of 3.5 s.
+
+Two conversations alternating turn by turn on the 7B:
+
+| | First token, turns 2–4 | Whole session (8 turns) |
+|---|---:|---:|
+| no saved caches | 10.88 s | 224 s |
+| saved caches (2 rounds; first threshold 128 tokens) | 4.13 s | 142 s |
+| saved caches, threshold 32 tokens (shipped, 1 round) | 2.25 s | 174 s* |
+
+\*The laptop was busier during this round: decode ran at 4.1 tok/s and one answer was longer. Every turn
+from 2 on hit a saved cache. `kv_slot_tokens: 0` turns saving off.
+
+**Lookup across requests.** Lookup drafting now also searches the answers to earlier requests (the last
+8,192 tokens). Within one chat it changed nothing measurable (2.15 s vs 1.96 s first token, 5.10 vs 5.20
+tok/s, within noise), because native turns already put those answers in the prompt. It helps separate
+requests that repeat earlier output, such as an agent regenerating a file. Drafts are always verified by
+the 7B, so output is unchanged. `draft_lookup_history: false` turns it off.
+
+**Also fixed.** fastembed cached the embedding model in the system temp folder by default. Windows'
+storage cleanup deleted the tokenizer files there and left the ONNX file, so every later load failed.
+The cache now lives in `~/.cascade/fastembed` (`FASTEMBED_CACHE_PATH` still wins). The full-setup
+session (cache, router, 0.5B small model) is therefore not re-measured here: on this laptop it needs the
+tokenizer files downloaded again.

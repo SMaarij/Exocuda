@@ -33,6 +33,7 @@ constructing a runner raises a clear error.
 
 from __future__ import annotations
 
+import ctypes
 import inspect
 import json
 import os
@@ -40,6 +41,7 @@ import platform
 import sys
 import time
 import weakref
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
@@ -132,6 +134,105 @@ class DraftCounter:
 LOOKUP_MIN_MATCH = 3     # shortest repeated n-gram whose continuation is drafted
 LOOKUP_MAX_MATCH = 8
 LOOKUP_PRIOR = (5.0, 10.0)  # (accepted, judged) assumed before any lookup draft is judged
+LOOKUP_HISTORY_TOKENS = 8192  # earlier answers kept for lookup across requests
+
+KV_SLOT_TOKENS = 2048    # saved KV cache per model, in tokens (7B: ~0.11 GB, 0.5B: ~0.03 GB)
+KV_SLOT_MIN_TOKENS = 32   # caches shorter than this are not worth saving
+
+
+def _kv_lcp(cached: Sequence[int], ids: Sequence[int]) -> int:
+    m = min(len(cached), len(ids))
+    if not m:
+        return 0
+    same = np.asarray(cached[:m]) == np.asarray(ids[:m])
+    return m if same.all() else int(np.argmin(same))
+
+
+def _kv_get(llm: Any) -> bytes:
+    """Sequence 0's KV cache as bytes (llama.cpp's own serialisation)."""
+    ctx = llm._ctx.ctx
+    size = llama_cpp.llama_state_seq_get_size(ctx, 0)
+    buf = (ctypes.c_uint8 * int(size))()
+    got = llama_cpp.llama_state_seq_get_data(ctx, buf, size, 0)
+    return bytes(memoryview(buf)[: int(got)])
+
+
+def _kv_set(llm: Any, data: bytes) -> None:
+    llm._ctx.kv_cache_seq_rm(-1, 0, -1)
+    buf = (ctypes.c_uint8 * len(data)).from_buffer_copy(data)
+    if llama_cpp.llama_state_seq_set_data(llm._ctx.ctx, buf, len(data), 0) != len(data):
+        raise RuntimeError("llama.cpp refused the saved KV cache")
+
+
+class KVSlots:
+    """
+    Saved KV caches of one model, most recently used last, keyed by the tokens they hold.
+
+    llama-cpp-python keeps one KV cache, so a request that does not continue the last
+    one throws the computed prefix away: two alternating conversations, or the small
+    model answering an easy question on the instance that also drafts, each recompute
+    the whole history. `switch(llm, ids)` runs before a model evaluates `ids`: when a
+    saved cache shares a longer prefix with `ids` than the live one, the live one is
+    saved and the better one restored; a long live cache about to be discarded is saved
+    first. At most `max_tokens` tokens are kept, oldest dropped first.
+    """
+
+    def __init__(self, max_tokens: int = KV_SLOT_TOKENS, min_tokens: int = KV_SLOT_MIN_TOKENS) -> None:
+        self.max_tokens = max_tokens
+        self.min_tokens = min_tokens
+        self._slots: OrderedDict[tuple[int, ...], bytes] = OrderedDict()
+        self.restores = 0  # for inspection
+
+    def __len__(self) -> int:
+        return len(self._slots)
+
+    @property
+    def tokens(self) -> int:
+        return sum(len(k) for k in self._slots)
+
+    def save(self, llm: Any) -> None:
+        n = int(llm.n_tokens)
+        if n < self.min_tokens or n > self.max_tokens:
+            return
+        key = tuple(int(t) for t in llm.input_ids[:n])
+        if key not in self._slots:
+            self._slots[key] = _kv_get(llm)
+        self._slots.move_to_end(key)
+        while self.tokens > self.max_tokens:
+            self._slots.popitem(last=False)
+
+    def switch(self, llm: Any, ids: Sequence[int]) -> None:
+        live = int(llm.n_tokens)
+        live_lcp = _kv_lcp(llm.input_ids[:live], ids)
+        best, best_lcp = None, live_lcp
+        for key in self._slots:
+            lcp = _kv_lcp(key, ids)
+            if lcp > best_lcp:
+                best, best_lcp = key, lcp
+        if best is not None and best_lcp - live_lcp >= self.min_tokens:
+            self.save(llm)
+            data = self._slots.pop(best)
+            _kv_set(llm, data)
+            llm.input_ids[: len(best)] = best
+            llm.n_tokens = len(best)
+            llm._requires_eval = True
+            self.restores += 1
+        elif live - live_lcp >= self.min_tokens:
+            self.save(llm)
+
+
+def kv_slots_for(llm: Any, max_tokens: int = KV_SLOT_TOKENS) -> Optional[KVSlots]:
+    """The KVSlots shared by every user of this model instance, or None for a model
+    without a llama.cpp context (test doubles) or with saving off (max_tokens 0)."""
+    if max_tokens <= 0 or llama_cpp is None or getattr(llm, "_ctx", None) is None:
+        return None
+    if not hasattr(llm, "n_tokens") or not hasattr(llm, "input_ids"):
+        return None
+    slots = getattr(llm, "_cascade_kv_slots", None)
+    if slots is None:
+        slots = KVSlots(max_tokens)
+        llm._cascade_kv_slots = slots
+    return slots
 
 
 class ModelDraft(LlamaDraftModel):
@@ -178,12 +279,14 @@ class ModelDraft(LlamaDraftModel):
     that followed them are the draft, at no draft-model cost (prompt lookup,
     as in SuffixDecoding and llama.cpp's ngram drafts). How far to trust a copy
     is learned per match length from how far the sequence advanced; when no
-    copy pays, the draft model drafts as above.
+    copy pays, the draft model drafts as above. When the current text has no
+    such repeat, the answers to earlier requests (the last LOOKUP_HISTORY_TOKENS
+    tokens of them) are searched the same way, with their own learned acceptance.
     """
 
     def __init__(self, llm: Any, k: int = 4, adaptive: bool = False, max_k: int = 16, max_pause: int = 0,
                  p_min: Optional[float] = None, verify_costs: Optional[Sequence[float]] = None,
-                 draft_cost: float = 0.1, lookup: bool = True) -> None:
+                 draft_cost: float = 0.1, lookup: bool = True, lookup_history: bool = True) -> None:
         self._llm = llm
         self._initial_k = k
         self._k = k
@@ -201,8 +304,12 @@ class ModelDraft(LlamaDraftModel):
         # earlier in the prompt or output, its continuation is the draft, at no draft-model
         # cost. Per-token acceptance is learned per match length.
         self._lookup = lookup
+        self._lookup_history = lookup_history
         self.lookup_stats = {n: list(LOOKUP_PRIOR) for n in range(LOOKUP_MIN_MATCH, LOOKUP_MAX_MATCH + 1)}
-        self._judge: Optional[tuple[int, int, int]] = None  # (match length, drafted, sequence length)
+        self.history_stats = {n: list(LOOKUP_PRIOR) for n in range(LOOKUP_MIN_MATCH, LOOKUP_MAX_MATCH + 1)}
+        self._judge: Optional[tuple[dict, int, int, int]] = None  # (stats, match length, drafted, sequence length)
+        self._past = np.array([], dtype=np.int64)  # earlier answers, each followed by -1
+        self._request: Optional[tuple[int, list[int]]] = None  # (prompt length, latest ids) of this request
         self.lookup_drafts = 0  # calls answered by lookup, for inspection
         self._pause = 0      # calls left to skip drafting
         self._backoff = 0    # length of the next pause
@@ -241,6 +348,7 @@ class ModelDraft(LlamaDraftModel):
         if self._verify_costs is not None:
             ids = list(map(int, input_ids))
             self._judge_lookup(len(ids))
+            self._track_request(ids)
             out = self._lookup_draft(ids) if self._lookup else []
             if out:
                 self.lookup_drafts += 1
@@ -268,10 +376,10 @@ class ModelDraft(LlamaDraftModel):
     def _sync(self, ids: list[int]) -> None:
         """Bring the draft's KV cache to `ids`, reusing the prefix it has already seen."""
         llm = self._llm
-        cached = np.asarray(llm.input_ids[: llm.n_tokens])
-        m = min(len(cached), len(ids))
-        same = cached[:m] == np.asarray(ids[:m])
-        n = m if same.all() else int(np.argmin(same))
+        slots = kv_slots_for(llm)
+        if slots is not None:  # the small model may have answered on this instance meanwhile
+            slots.switch(llm, ids)
+        n = _kv_lcp(llm.input_ids[: llm.n_tokens], ids)
         n = min(n, len(ids) - 1)  # always evaluate at least the last token, for its logits
         llm.n_tokens = n
         llm.eval(ids[n:])
@@ -280,49 +388,83 @@ class ModelDraft(LlamaDraftModel):
         """The target kept (sequence advance - 1) of the last lookup draft's tokens."""
         if self._judge is None:
             return
-        n, drafted, at = self._judge
+        table, n, drafted, at = self._judge
         self._judge = None
         if length <= at:  # a new request
             return
         accepted = min(drafted, length - at - 1)
-        stats = self.lookup_stats[n]
+        stats = table[n]
         stats[0] += accepted
         stats[1] += accepted + (accepted < drafted)  # tokens after the first rejection: unknown
 
+    def _track_request(self, ids: list[int]) -> None:
+        """On a new request, keep the previous request's answer for lookup."""
+        if self._request is not None:
+            prompt_len, last = self._request
+            if len(ids) > len(last) and ids[:len(last)] == last:
+                self._request = (prompt_len, ids)
+                return
+            answer = last[prompt_len:]
+            if self._lookup_history and len(answer) > LOOKUP_MIN_MATCH:
+                past = np.concatenate([self._past, np.asarray(answer, dtype=np.int64), [-1]])
+                self._past = past[-LOOKUP_HISTORY_TOKENS:]
+        self._request = (len(ids), ids)
+
+    @staticmethod
+    def _latest_match(hay: np.ndarray, suffix: np.ndarray, windows: int) -> Optional[int]:
+        """Index just after the latest occurrence of `suffix` among the first `windows`
+        start positions of `hay`, or None."""
+        n = len(suffix)
+        if windows <= 0:
+            return None
+        hits = np.ones(windows, dtype=bool)
+        for j in range(n):
+            hits &= hay[j: windows + j] == suffix[j]
+        starts = np.flatnonzero(hits)
+        return int(starts[-1]) + n if len(starts) else None
+
     def _lookup_draft(self, ids: list[int]) -> list[int]:
         """The continuation of the most recent earlier occurrence of the longest repeated
-        suffix (LOOKUP_MIN_MATCH..LOOKUP_MAX_MATCH tokens), cut to the cost-aware length
-        for its learned per-token acceptance; [] when no match pays."""
-        arr = np.asarray(ids)
+        suffix (LOOKUP_MIN_MATCH..LOOKUP_MAX_MATCH tokens) -- in this request, else in
+        earlier answers -- cut to the cost-aware length for its learned per-token
+        acceptance; [] when no match pays."""
+        arr = np.asarray(ids, dtype=np.int64)
         size = len(arr)
-        for n in range(min(LOOKUP_MAX_MATCH, size - 1), LOOKUP_MIN_MATCH - 1, -1):
-            suffix = arr[size - n:]
-            # windows starting at i, for i < size - n (an earlier occurrence, not the suffix itself)
-            hits = np.ones(size - n, dtype=bool)
-            for j in range(n):
-                hits &= arr[j: size - n + j] == suffix[j]
-            starts = np.flatnonzero(hits)
-            if not len(starts):
+        top = min(LOOKUP_MAX_MATCH, size - 1)
+        for n in range(top, LOOKUP_MIN_MATCH - 1, -1):
+            # an earlier occurrence, not the suffix itself
+            start = self._latest_match(arr, arr[size - n:], size - n)
+            if start is not None and start < size:
+                return self._cut(self.lookup_stats, n, ids[start: start + self._k], size)
+        past = self._past
+        for n in range(min(top, LOOKUP_MAX_MATCH), LOOKUP_MIN_MATCH - 1, -1):
+            start = self._latest_match(past, arr[size - n:], len(past) - n)
+            if start is None:
                 continue
-            start = int(starts[-1]) + n
-            continuation = ids[start: start + self._k]
-            if not continuation:
-                continue
-            accepted, judged = self.lookup_stats[n]
-            rho = accepted / judged
-            costs = self._verify_costs
-            best_len, best_rate, whole, expected = 0, 1.0 / costs[1], 1.0, 0.0
-            for length in range(1, len(continuation) + 1):
-                whole *= rho
-                expected += whole
-                rate = (1.0 + expected) / costs[length + 1]
-                if rate > best_rate:
-                    best_len, best_rate = length, rate
-            if best_len:
-                self._judge = (n, best_len, size)
-                return continuation[:best_len]
-            return []
+            continuation = past[start: start + self._k]
+            stop = np.flatnonzero(continuation < 0)
+            continuation = continuation[: stop[0]] if len(stop) else continuation
+            if len(continuation):
+                return self._cut(self.history_stats, n, [int(t) for t in continuation], size)
         return []
+
+    def _cut(self, table: dict, n: int, continuation: list[int], size: int) -> list[int]:
+        """The prefix of `continuation` that maximises expected tokens per unit of
+        verify cost at the per-token acceptance learned for match length n."""
+        accepted, judged = table[n]
+        rho = accepted / judged
+        costs = self._verify_costs
+        best_len, best_rate, whole, expected = 0, 1.0 / costs[1], 1.0, 0.0
+        for length in range(1, len(continuation) + 1):
+            whole *= rho
+            expected += whole
+            rate = (1.0 + expected) / costs[length + 1]
+            if rate > best_rate:
+                best_len, best_rate = length, rate
+        if not best_len:
+            return []
+        self._judge = (table, n, best_len, size)
+        return continuation[:best_len]
 
     def _cost_aware_draft(self, ids: list[int]) -> list[int]:
         costs, d = self._verify_costs, self._draft_cost
@@ -570,6 +712,7 @@ class LlamaCppRunner:
         draft_p_min: Optional[float] = None,
         draft_verify_costs: Optional[Sequence[float] | str] = None,
         draft_lookup: bool = True,
+        draft_lookup_history: bool = True,
         lookup_tokens: int = 10,
         n_ctx: int = 2048,
         n_threads: Optional[int] = None,
@@ -577,9 +720,16 @@ class LlamaCppRunner:
         llama_factory: Optional[LlamaFactory] = None,
         temperature: Optional[float] = None,
         reuse_prefix: bool = True,
+        native_chat: bool = True,
+        kv_slot_tokens: int = KV_SLOT_TOKENS,
     ) -> None:
+        self._kv_slot_tokens = kv_slot_tokens
         self._temperature = temperature
         self._reuse_prefix = reuse_prefix
+        # With native_chat, LocalExecutionBackend hands over the message list and each
+        # message keeps its own role in the model's chat template. Consecutive turns then
+        # share the earlier answers as prompt prefix too, which reuse_prefix skips.
+        self.accepts_messages = native_chat
         self.last_prompt_s: Optional[float] = None  # time to the first token of the last generate()
         if llama_factory is None and Llama is None:
             raise RuntimeError("LlamaCppRunner needs llama-cpp-python: pip install llama-cpp-python")
@@ -596,6 +746,7 @@ class LlamaCppRunner:
         self._draft_verify_costs = draft_verify_costs
         self._resolved_verify_costs: Optional[list[float]] = None
         self._draft_lookup = draft_lookup
+        self._draft_lookup_history = draft_lookup_history
         self._lookup_tokens = lookup_tokens
         self._factory = llama_factory or _default_llama_factory(n_ctx, n_threads, use_mmap)
         self._mode = ACCEL_NONE
@@ -680,7 +831,7 @@ class LlamaCppRunner:
             self._counter = DraftCounter(ModelDraft(
                 self._draft_llm, k=self._draft_tokens, adaptive=self._adaptive_draft, max_k=self._max_draft_tokens,
                 max_pause=self._max_draft_pause, p_min=self._draft_p_min, verify_costs=self._verify_costs(),
-                lookup=self._draft_lookup
+                lookup=self._draft_lookup, lookup_history=self._draft_lookup_history,
             ))
         else:
             self._counter = None
@@ -709,7 +860,7 @@ class LlamaCppRunner:
         self._model_path = self._resolve_path(f"{model_id}:{quant_level}")
         self._build()
 
-    def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
+    def generate(self, prompt: str | list[dict], max_tokens: int) -> GenerationSample:
         if self._llm is None:
             raise RuntimeError("No model loaded -- call load() first.")
         if self._counter is not None:
@@ -718,6 +869,10 @@ class LlamaCppRunner:
         prompt_ids = self._chat_tokens(prompt)
         if not self._reuse_prefix:
             self._llm.reset()
+        else:
+            slots = kv_slots_for(self._llm, self._kv_slot_tokens)
+            if slots is not None:
+                slots.switch(self._llm, prompt_ids)
         # Otherwise llama-cpp-python keeps the KV cache of the longest prefix this prompt
         # shares with the previous request (system prompt, earlier turns) and evaluates only
         # the rest. Same arithmetic, so the output is the same up to the floating-point noise
@@ -851,10 +1006,14 @@ class LlamaCppRunner:
 
     # ---- prompt formatting -----------------------------------------------
 
-    def _chat_tokens(self, prompt: str) -> list[int]:
-        """The prompt as one user turn in the model's own chat template, as
-        create_chat_completion would format it."""
+    def _chat_tokens(self, prompt: str | list[dict]) -> list[int]:
+        """The prompt in the model's own chat template, as create_chat_completion would
+        format it: a string becomes one user turn, a message list keeps its roles."""
         llm = self._llm
+        messages = (
+            [{"role": "user", "content": prompt}] if isinstance(prompt, str)
+            else [{"role": m["role"], "content": m["content"]} for m in prompt]
+        )
         template = (getattr(llm, "metadata", None) or {}).get("tokenizer.chat_template")
         if template and Jinja2ChatFormatter is not None:
             eos, bos = llm.token_eos(), llm.token_bos()
@@ -863,9 +1022,12 @@ class LlamaCppRunner:
                 eos_token=llm.detokenize([eos], special=True).decode("utf-8", errors="replace") if eos != -1 else "",
                 bos_token=llm.detokenize([bos], special=True).decode("utf-8", errors="replace") if bos != -1 else "",
             )
-            result = formatter(messages=[{"role": "user", "content": prompt}])
+            result = formatter(messages=messages)
             return list(llm.tokenize(result.prompt.encode("utf-8"), add_bos=not result.added_special, special=True))
-        return list(llm.tokenize(prompt.encode("utf-8"), add_bos=True))
+        text = prompt if isinstance(prompt, str) else "\n".join(
+            f"{m['role'].upper()}: {m['content']}" for m in messages
+        )
+        return list(llm.tokenize(text.encode("utf-8"), add_bos=True))
 
     def _is_end_of_generation(self, token: int) -> bool:
         vocab = getattr(getattr(self._llm, "_model", None), "vocab", None)

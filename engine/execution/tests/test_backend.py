@@ -35,12 +35,14 @@ class _FakeRunner:
     def __init__(self, tok_s: float = 20.0) -> None:
         self._tok_s = tok_s
         self._loaded: str | None = None
+        self.prompts: list = []
 
     def load(self, model_id: str, quant_level: str) -> None:
         self._loaded = quant_level
 
     def generate(self, prompt: str, max_tokens: int) -> GenerationSample:
         assert self._loaded is not None
+        self.prompts.append(prompt)
         return GenerationSample(
             tokens_generated=max_tokens,
             elapsed_s=max_tokens / self._tok_s,
@@ -143,3 +145,14 @@ def test_zero_latency_backend_is_fast(tmp_path) -> None:
     backend = _make_backend(tmp_path, simulated_latency_ms=0.0)
     result  = backend.generate([{"role": "user", "content": "hi"}])
     assert result["latency_ms"] < 500.0
+
+
+def test_runner_gets_a_flat_prompt_unless_it_formats_chat_turns_itself(tmp_path) -> None:
+    messages = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}]
+    backend = _make_backend(tmp_path)
+    runner = backend._runner
+    backend.generate(messages)
+    assert runner.prompts[-1] == "SYSTEM: be brief\nUSER: hi"
+    runner.accepts_messages = True
+    backend.generate(messages)
+    assert runner.prompts[-1] == messages

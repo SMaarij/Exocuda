@@ -22,6 +22,14 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.9.0 — conversations
+
+- Chat messages keep their roles in the model's own template, so earlier answers are reused too: first
+  token from turn 2 on 1.96 s instead of 5.65 s, a 4-turn chat 70 s instead of 93 s; 34/34 correct.
+- Saved KV caches (up to 2,048 tokens per model): two alternating conversations get their first token
+  in about 2–4 s instead of 10.9 s.
+- Lookup drafting also searches earlier answers; the embedding model's cache moved out of the temp folder.
+
 ## 0.8.0 — reuse what is already computed
 
 - Conversations keep the 7B's computed prompt prefix: from turn 2 on, the first token arrives in about

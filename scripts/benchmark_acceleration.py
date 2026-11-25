@@ -87,6 +87,8 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
             settings["max_draft_pause"] = int(option[6:])
         elif option == "nolookup":  # cost-aware without lookup drafting
             settings["draft_lookup"] = False
+        elif option == "nohistory":  # lookup drafting within each request only
+            settings["draft_lookup_history"] = False
         elif option == "costauto":  # cost-aware, this machine's measured table (the CLI default)
             settings["draft_verify_costs"] = "auto"
         elif option == "cost":  # cost-aware draft length, CPU cost table

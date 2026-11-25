@@ -193,7 +193,7 @@ class AccelerationEngine:
         self._loaded_model_id = None
         self._active_layer = AccelerationLayer.NONE
 
-    def generate_accelerated(self, prompt: str, max_tokens: int) -> AcceleratedGenerationSample:
+    def generate_accelerated(self, prompt: "str | list", max_tokens: int) -> AcceleratedGenerationSample:
         base = self._runner.generate(prompt, max_tokens)
         ran_layer = _LAYER_FOR_MODE.get(base.acceleration, AccelerationLayer.NONE)
         acceptance = base.acceptance_rate if base.acceptance_rate is not None else 1.0

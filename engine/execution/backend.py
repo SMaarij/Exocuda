@@ -221,7 +221,9 @@ class LocalExecutionBackend:
 
         profile = self._get_profile()
         rung    = self._ladder.select_rung(profile)
-        prompt  = _messages_to_prompt(messages)
+        # A runner that formats chat turns itself (LlamaCppRunner) gets the messages, so
+        # each keeps its role in the model's own template; others get one flat string.
+        prompt  = messages if getattr(self._runner, "accepts_messages", False) is True else _messages_to_prompt(messages)
 
         sample, used_rung = self._generate_with_stepdown(prompt, rung)
         wall_ms = (time.monotonic() - start) * 1000
@@ -270,7 +272,7 @@ class LocalExecutionBackend:
 
     def _generate_with_stepdown(
         self,
-        prompt: str,
+        prompt: "str | list[Message]",
         rung: Optional[QuantRung],
     ) -> tuple:
         """
