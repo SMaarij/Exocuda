@@ -1025,3 +1025,49 @@ The token after an unsure one is often easy, so skipping loses more drafts than 
 Conclusion: with a 0.5B draft model on a 4-core CPU, open-ended speed is bounded by agreement (72%), not by
 the shape or timing of drafts. The levers left are a draft model that agrees more without costing more,
 or text that repeats (lookup drafting, Addendum 19).
+
+## Addendum 23 — a better draft model: none available, distillation capped at about +7%, 2026-11-25
+
+Addendum 22 found open-ended speed bounded by how often the 0.5B agrees with the 7B. So candidate draft
+models were scored with `scripts/analysis/evaluate_draft_model.py` (`draft_model_candidates.json`). For
+each candidate the script:
+
+- checks the tokenizer gives the 7B's token ids;
+- measures how often its top token matches on the recorded 7B answers (Addendum 22's sequences);
+- measures its single-token cost relative to the 7B on this laptop;
+- replays the shipped cost-aware policy to predict the speed-up. The prediction includes no overheads, so
+  read it as a ranking.
+
+All candidates share the 7B's tokenizer.
+
+| Draft model | Cost vs 7B | Agree code | Agree open | Predicted code | Predicted open |
+|---|---:|---:|---:|---:|---:|
+| qwen2.5 0.5B instruct, Ollama Q4_K_M (shipped) | 0.134 | 95.0% | 72.8% | 2.045x | **1.492x** |
+| qwen2.5 0.5B instruct Q8_0 | 0.144 | 95.6% | 74.0% | 2.082x | 1.482x |
+| qwen2.5 0.5B instruct FP16 | 0.247 | 95.6% | 74.8% | 1.729x | 1.345x |
+| qwen2.5-coder 0.5B | 0.139 | 95.3% | 72.0% | 2.060x | 1.429x |
+| qwen3 0.6B | 0.107 | 89.8% | 66.5% | 1.850x | 1.427x |
+| qwen2.5 1.5B instruct Q4_K_M | 0.283 | 95.6% | 80.7% | 1.594x | 1.339x |
+| *1.5B's agreement at the 0.5B's cost (ceiling for a distilled 0.5B)* | *0.134* | *95.6%* | *80.7%* | *2.029x* | *1.601x* |
+
+- Higher precision adds about one point of agreement and costs more than it returns. Qwen3 0.6B is cheap
+  but agrees less.
+- The last row is what training the 0.5B to imitate the 7B (DistillSpec-style) could reach at best:
+  about +7% on open-ended prompts and nothing on code. That would take CPU-only training over hours of
+  7B-labelled text and a model conversion pipeline, so it was not pursued.
+
+**Re-quantizing the draft for speed.** Ollama's "Q4_K_M" 0.5B is mostly Q5_0: 896-wide rows do not fit
+K-quant blocks of 256. Its 138M-weight embedding/output matrix is Q8_0. Variants were quantized from
+the FP16 file with llama.cpp's quantizer (same run, 7B at 297 ms per token):
+
+| Variant | Cost | Agree code | Agree open | Predicted open |
+|---|---:|---:|---:|---:|
+| shipped file | 0.100 | 95.0% | 72.8% | **1.547x** |
+| Q8_0 body, Q4_0 output matrix | 0.105 | 94.5% | 72.6% | 1.528x |
+| Q4_0 body, Q5_0 output matrix | 0.098 | 92.4% | 70.3% | 1.476x |
+| Q5_0 body, Q4_0 output matrix | 0.126 | 93.5% | 72.8% | 1.480x |
+| Q4_0 everywhere | 0.118 | 92.1% | 69.1% | 1.403x |
+
+4-bit weights cost about 3 points of agreement and are not measurably cheaper. Single-token times moved
+±30% with background load: the shipped file measured 45 ms in one run and 30 ms in another. The shipped
+draft stays.
