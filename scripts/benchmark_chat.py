@@ -10,6 +10,8 @@ Configurations (options joined by ':'):
     nohistory  no lookup drafting from earlier answers
     alternate  two conversations (USER_TURNS, USER_TURNS_B) taking turns on one model
     noslots    no saved KV caches (kv_slot_tokens 0): each switch recomputes the history
+    restart    unload and reload the models before every turn (idle unload, a new process)
+    nodisk     no KV caches on disk: a reload recomputes the history
 
     python scripts/benchmark_chat.py --configs "flat:nohistory,native" --repeats 2 --out chat.json
 """
@@ -42,9 +44,16 @@ USER_TURNS_B = [
 def run_config(spec: str, model: str, quant: str, draft: str, max_tokens: int) -> list[dict]:
     from cli.main import DEFAULT_SYSTEM_PROMPT
     from engine.execution.backend import _messages_to_prompt
+    import tempfile
+
+    from engine.execution import llamacpp_runner
     from engine.execution.llamacpp_runner import LlamaCppRunner
 
     options = set(spec.split(":"))
+    # A fresh disk store per configuration, so no run starts from another's caches.
+    llamacpp_runner.KV_DISK_PATH = Path(tempfile.mkdtemp(prefix="cascade-kv-"))
+    original = llamacpp_runner.__dict__.setdefault("_benchmark_kv_disk_for", llamacpp_runner._kv_disk_for)
+    llamacpp_runner._kv_disk_for = (lambda llm: None) if "nodisk" in options else original
     runner = LlamaCppRunner(temperature=0.0, draft_model_tag=draft, draft_tokens=16, draft_verify_costs="auto",
                             draft_lookup_history="nohistory" not in options,
                             **({"kv_slot_tokens": 0} if "noslots" in options else {}))
@@ -63,6 +72,10 @@ def run_config(spec: str, model: str, quant: str, draft: str, max_tokens: int) -
         messages = chats[chat]
         messages.append({"role": "user", "content": text})
         prompt = messages if "native" in options else _messages_to_prompt(messages)
+        if "restart" in options and len(rows):
+            runner.unload()
+            runner.load(model, quant)
+            runner.set_acceleration("draft_model")
         t = time.perf_counter()
         sample = runner.generate(prompt, max_tokens)
         wall = time.perf_counter() - t

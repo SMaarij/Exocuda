@@ -274,6 +274,8 @@ numbers: [`docs/BENCHMARK_REPORT.md`](docs/BENCHMARK_REPORT.md).
 | **Whole session, 34 mixed questions** (easy, hard, repeats, rewordings, near-misses) | – | **1.79–2.19x faster than the plain 7B** (two runs; 386 s → 216 s and 431 s → 197 s), median answer ~2 s, **34/34 correct**, peak RAM 7.0 GB (cache + router + 1.5B for easy questions + 7B with confidence drafting); 0.5B shared as draft with unsure answers re-asked: 1.65–2.11x at 5.9 GB, now the recommended setup | |
 | Speculative decoding speedup, CPU-only laptop | ≥1.5x | **1.58x overall**, 1.88x on code/rewrite prompts, 1.27x on open-ended prompts (qwen2.5-coder 7B + 0.5B draft, cost-aware draft length, 2 rounds); output verified lossless. 0.8.0 adds lookup drafting: on a busy laptop 1.49x vs 1.36x without it, open-ended 1.24x vs 1.08x (CPU llama.cpp speculative is usually ~1.0x on chat) | met |
 | Time to first token, later chat turns | – | ~4 s instead of ~42 s (computed prompt prefix kept, 677-token system prompt); 0.9.0 native chat turns: 1.96 s vs 5.65 s, whole 4-turn chat 70 s vs 93 s; two alternating chats 2–4 s vs 10.9 s with saved KV caches | |
+| Wait before the first words appear (`ollama run`, OpenAI streaming) | – | ~2–5 s instead of the whole answer (36–59 s): replies stream token by token (0.10.0) | |
+| First token after an idle unload or restart | – | 3.1 s instead of 18.1 s (4-turn chat): KV caches saved to `~/.cascade/kv` and restored (0.10.0) | |
 | RAM, 7B Q4_K_M via llama.cpp | – | 4.6 GB (was 7.2 GB with the model file memory-mapped); +0.75 GB with the draft model | |
 | Local decode speed, llama3.2 3B Q4_K_M | – | 4.5–8.7 tok/s (Ollama), 6.6 tok/s (llama.cpp CPU) | |
 

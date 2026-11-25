@@ -1,0 +1,743 @@
+{
+  "qwen2.5:0.5b-instruct": {
+    "summary": {
+      "correct": 54,
+      "questions": 64,
+      "auc": {
+        "heuristic": 0.5,
+        "mean_p": 0.9222222222222223,
+        "min_p": 0.8185185185185185,
+        "low3_p": 0.8722222222222222,
+        "first_p": 0.7574074074074074
+      },
+      "thresholds": {
+        "mean_p<0.5": {
+          "wrong_caught": 1,
+          "right_escalated": 2
+        },
+        "mean_p<0.6": {
+          "wrong_caught": 3,
+          "right_escalated": 2
+        },
+        "mean_p<0.7": {
+          "wrong_caught": 7,
+          "right_escalated": 4
+        },
+        "mean_p<0.75": {
+          "wrong_caught": 9,
+          "right_escalated": 10
+        },
+        "mean_p<0.8": {
+          "wrong_caught": 10,
+          "right_escalated": 14
+        },
+        "mean_p<0.85": {
+          "wrong_caught": 10,
+          "right_escalated": 27
+        },
+        "mean_p<0.9": {
+          "wrong_caught": 10,
+          "right_escalated": 46
+        },
+        "low3_p<0.5": {
+          "wrong_caught": 7,
+          "right_escalated": 10
+        },
+        "low3_p<0.6": {
+          "wrong_caught": 10,
+          "right_escalated": 21
+        },
+        "low3_p<0.7": {
+          "wrong_caught": 10,
+          "right_escalated": 38
+        },
+        "low3_p<0.75": {
+          "wrong_caught": 10,
+          "right_escalated": 46
+        },
+        "low3_p<0.8": {
+          "wrong_caught": 10,
+          "right_escalated": 51
+        },
+        "low3_p<0.85": {
+          "wrong_caught": 10,
+          "right_escalated": 54
+        },
+        "low3_p<0.9": {
+          "wrong_caught": 10,
+          "right_escalated": 54
+        },
+        "min_p<0.5": {
+          "wrong_caught": 10,
+          "right_escalated": 33
+        },
+        "min_p<0.6": {
+          "wrong_caught": 10,
+          "right_escalated": 47
+        },
+        "min_p<0.7": {
+          "wrong_caught": 10,
+          "right_escalated": 53
+        },
+        "min_p<0.75": {
+          "wrong_caught": 10,
+          "right_escalated": 53
+        },
+        "min_p<0.8": {
+          "wrong_caught": 10,
+          "right_escalated": 54
+        },
+        "min_p<0.85": {
+          "wrong_caught": 10,
+          "right_escalated": 54
+        },
+        "min_p<0.9": {
+          "wrong_caught": 10,
+          "right_escalated": 54
+        }
+      }
+    },
+    "rows": [
+      {
+        "question": "How many weeks are in a year?",
+        "answer": "A year has 52 weeks.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7970083256510004,
+        "min_p": 0.4167399314605537,
+        "low3_p": 0.5884357844511219,
+        "first_p": 0.4167399314605537
+      },
+      {
+        "question": "How many months have 31 days?",
+        "answer": "There are 12 months with 31 days each.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.7254963488192784,
+        "min_p": 0.1941525486665343,
+        "low3_p": 0.36299611315037844,
+        "first_p": 0.1941525486665343
+      },
+      {
+        "question": "How many sides does an octagon have?",
+        "answer": "An octagon has 8 sides.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8669534582628435,
+        "min_p": 0.6350588960281552,
+        "low3_p": 0.691698473675141,
+        "first_p": 0.6508699846795882
+      },
+      {
+        "question": "How many sides does a pentagon have?",
+        "answer": "A pentagon has 5 sides.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8937101017903758,
+        "min_p": 0.6114008860527085,
+        "low3_p": 0.7612268826452369,
+        "first_p": 0.8062106942824662
+      },
+      {
+        "question": "How many zeros are in one million?",
+        "answer": "One million is a 1000-digit number.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.567577331331296,
+        "min_p": 0.36963112739850884,
+        "low3_p": 0.41257085328620857,
+        "first_p": 0.4141016008508139
+      },
+      {
+        "question": "How many centimetres are in a metre?",
+        "answer": "A metre is equal to 100 centimetres.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8597007110233126,
+        "min_p": 0.3808196579992562,
+        "low3_p": 0.58286251641429,
+        "first_p": 0.6387009565876027
+      },
+      {
+        "question": "How many grams are in a kilogram?",
+        "answer": "A kilogram is 1000 grams.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8351938921103806,
+        "min_p": 0.4603982381950329,
+        "low3_p": 0.60209942663269,
+        "first_p": 0.6307823713461892
+      },
+      {
+        "question": "How many minutes are in an hour?",
+        "answer": "An hour is 60 minutes.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7202534313324833,
+        "min_p": 0.19377325529871503,
+        "low3_p": 0.42281397261166553,
+        "first_p": 0.19377325529871503
+      },
+      {
+        "question": "How many days are in a week?",
+        "answer": "A week has 7 days.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7795795341335094,
+        "min_p": 0.5028002965479815,
+        "low3_p": 0.5716368029530599,
+        "first_p": 0.5028002965479815
+      },
+      {
+        "question": "How many planets are in the solar system?",
+        "answer": "There are 8 planets in the solar system. They are Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8582149372726255,
+        "min_p": 0.2574201566944475,
+        "low3_p": 0.40380418633619575,
+        "first_p": 0.2574201566944475
+      },
+      {
+        "question": "How many teeth does an adult human usually have?",
+        "answer": "An adult human usually has 32 teeth.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8774423810798154,
+        "min_p": 0.6274517359410816,
+        "low3_p": 0.742710137877054,
+        "first_p": 0.6274517359410816
+      },
+      {
+        "question": "How many hearts does an octopus have?",
+        "answer": "An octopus has 8 hearts.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.7726795363778649,
+        "min_p": 0.43514922077665835,
+        "low3_p": 0.561734233909007,
+        "first_p": 0.43514922077665835
+      },
+      {
+        "question": "How many legs does an insect have?",
+        "answer": "An insect has two pairs of legs.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.6906513169019151,
+        "min_p": 0.34880652095699716,
+        "low3_p": 0.48098436979429493,
+        "first_p": 0.5005349904112557
+      },
+      {
+        "question": "How many colours are in a rainbow?",
+        "answer": "A rainbow has seven colours: red, orange, yellow, green, blue, indigo, and violet.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8202759222848842,
+        "min_p": 0.38473798004043214,
+        "low3_p": 0.43552719448182475,
+        "first_p": 0.46294275849667826
+      },
+      {
+        "question": "How many keys are on a standard piano?",
+        "answer": "A standard piano has 88 keys.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8494438014240809,
+        "min_p": 0.5551469773231016,
+        "low3_p": 0.704447746757809,
+        "first_p": 0.5551469773231016
+      },
+      {
+        "question": "How many cards are in a standard deck, without jokers?",
+        "answer": "A standard deck of cards has 52 cards.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7416925075468079,
+        "min_p": 0.39526657292566425,
+        "low3_p": 0.49248658963839864,
+        "first_p": 0.5632176275868573
+      },
+      {
+        "question": "How many players are on a basketball team on the court?",
+        "answer": "A basketball team on the court consists of 11 players.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.6384110560858355,
+        "min_p": 0.25756019002188646,
+        "low3_p": 0.31585837999801336,
+        "first_p": 0.25756019002188646
+      },
+      {
+        "question": "How many degrees are in a right angle?",
+        "answer": "A right angle is 90 degrees.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8519247319141794,
+        "min_p": 0.5778282671574196,
+        "low3_p": 0.6577885639946016,
+        "first_p": 0.6935688471970898
+      },
+      {
+        "question": "How many degrees are in a full circle?",
+        "answer": "A full circle is 360 degrees.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9030628575044395,
+        "min_p": 0.7601373058597253,
+        "low3_p": 0.7875279262003989,
+        "first_p": 0.7601373058597253
+      },
+      {
+        "question": "How many years are in a century?",
+        "answer": "A century is 100 years.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8267967825989242,
+        "min_p": 0.4794244052296359,
+        "low3_p": 0.586484861229002,
+        "first_p": 0.6436802764507041
+      },
+      {
+        "question": "What is 9 times 7?",
+        "answer": "9 times 7 is 63.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8732054252269176,
+        "min_p": 0.4839726802573359,
+        "low3_p": 0.6943779271101571,
+        "first_p": 0.4839726802573359
+      },
+      {
+        "question": "What is 144 divided by 12?",
+        "answer": "144 divided by 12 is 12.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8704508610424773,
+        "min_p": 0.3867522767765758,
+        "low3_p": 0.5758936228481425,
+        "first_p": 0.3867522767765758
+      },
+      {
+        "question": "What is 25 plus 38?",
+        "answer": "25 plus 38 is 63.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8316285931437419,
+        "min_p": 0.4182910656610987,
+        "low3_p": 0.5261734002591,
+        "first_p": 0.4182910656610987
+      },
+      {
+        "question": "What is 100 minus 37?",
+        "answer": "100 minus 37 is 63.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8666702791864735,
+        "min_p": 0.3707855106666575,
+        "low3_p": 0.5826729966345721,
+        "first_p": 0.3707855106666575
+      },
+      {
+        "question": "What is 13 times 4?",
+        "answer": "13 times 4 is 52.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8568631659551751,
+        "min_p": 0.36118209274062907,
+        "low3_p": 0.6202344356463931,
+        "first_p": 0.36118209274062907
+      },
+      {
+        "question": "What is half of 250?",
+        "answer": "Half of 250 is 125.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9346040779458491,
+        "min_p": 0.5124165460234519,
+        "low3_p": 0.782184512282826,
+        "first_p": 0.5124165460234519
+      },
+      {
+        "question": "What is 3 cubed?",
+        "answer": "3 cubed is 27.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8102343846165462,
+        "min_p": 0.3244928636223353,
+        "low3_p": 0.6017559593791603,
+        "first_p": 0.3244928636223353
+      },
+      {
+        "question": "What is 20% of 50?",
+        "answer": "20% of 50 is 10.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9096942446643438,
+        "min_p": 0.5027696350036809,
+        "low3_p": 0.7270796177639746,
+        "first_p": 0.5027696350036809
+      },
+      {
+        "question": "What is the square root of 81?",
+        "answer": "The square root of 81 is 9.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9288898217457336,
+        "min_p": 0.5747959020925425,
+        "low3_p": 0.7976334435245371,
+        "first_p": 0.5747959020925425
+      },
+      {
+        "question": "What is 11 times 11?",
+        "answer": "11 times 11 is 121.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8854413247823038,
+        "min_p": 0.45230484256512704,
+        "low3_p": 0.6693269597181509,
+        "first_p": 0.45230484256512704
+      },
+      {
+        "question": "What is the capital of Egypt?",
+        "answer": "The capital of Egypt is Cairo.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8639489052021292,
+        "min_p": 0.41931967514212887,
+        "low3_p": 0.7289822707700817,
+        "first_p": 0.41931967514212887
+      },
+      {
+        "question": "What is the capital of Kenya?",
+        "answer": "The capital of Kenya is Nairobi.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8650566622687781,
+        "min_p": 0.432657522503581,
+        "low3_p": 0.7253092782946764,
+        "first_p": 0.432657522503581
+      },
+      {
+        "question": "What is the capital of Argentina?",
+        "answer": "Argentina's capital is Buenos Aires.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7645631262508324,
+        "min_p": 0.4340164124244102,
+        "low3_p": 0.5554250505098818,
+        "first_p": 0.4340164124244102
+      },
+      {
+        "question": "What is the capital of South Korea?",
+        "answer": "South Korea's capital is Seoul.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7292110740114162,
+        "min_p": 0.38833150207650835,
+        "low3_p": 0.5019294165027371,
+        "first_p": 0.38833150207650835
+      },
+      {
+        "question": "What is the capital of Germany?",
+        "answer": "The capital of Germany is Berlin.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8829493240006296,
+        "min_p": 0.47889972249978224,
+        "low3_p": 0.7646249977735811,
+        "first_p": 0.47889972249978224
+      },
+      {
+        "question": "What is the capital of Norway?",
+        "answer": "The capital of Norway is Oslo.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8709991114912752,
+        "min_p": 0.5284230611177951,
+        "low3_p": 0.7370806780507763,
+        "first_p": 0.5284230611177951
+      },
+      {
+        "question": "What is the capital of Peru?",
+        "answer": "The capital of Peru is Lima.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9224386828133159,
+        "min_p": 0.6686874196420451,
+        "low3_p": 0.8473347140582019,
+        "first_p": 0.6686874196420451
+      },
+      {
+        "question": "What is the capital of Thailand?",
+        "answer": "The capital of Thailand is Bangkok.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8409987451952918,
+        "min_p": 0.34576588252395696,
+        "low3_p": 0.6809797499855413,
+        "first_p": 0.34576588252395696
+      },
+      {
+        "question": "What is the capital of Portugal?",
+        "answer": "Portugal's capital is Lisbon.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7237459791425007,
+        "min_p": 0.3714471117651131,
+        "low3_p": 0.5323738994935918,
+        "first_p": 0.4970747257531841
+      },
+      {
+        "question": "What is the capital of the United States?",
+        "answer": "The capital of the United States is Washington, D. C.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8957339635863029,
+        "min_p": 0.5343780878343728,
+        "low3_p": 0.6832719926927355,
+        "first_p": 0.6601942264357455
+      },
+      {
+        "question": "What is the chemical symbol for gold?",
+        "answer": "The chemical symbol for gold is Au.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.924134613366473,
+        "min_p": 0.6600547722736564,
+        "low3_p": 0.8399040762936744,
+        "first_p": 0.6600547722736564
+      },
+      {
+        "question": "What is the chemical symbol for lead?",
+        "answer": "The chemical symbol for lead is Pb.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8446670876970427,
+        "min_p": 0.52994535636251,
+        "low3_p": 0.670659964584243,
+        "first_p": 0.52994535636251
+      },
+      {
+        "question": "What is the chemical symbol for copper?",
+        "answer": "The chemical symbol for copper is Cu.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9110026532291214,
+        "min_p": 0.5979496786483356,
+        "low3_p": 0.8110134355697982,
+        "first_p": 0.5979496786483356
+      },
+      {
+        "question": "What is the chemical symbol for oxygen?",
+        "answer": "The chemical symbol for oxygen is O.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8245646506849532,
+        "min_p": 0.4853574611348771,
+        "low3_p": 0.6131975219854016,
+        "first_p": 0.4853574611348771
+      },
+      {
+        "question": "Which planet has the most prominent rings?",
+        "answer": "Saturn has the most prominent rings.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.6670994947570406,
+        "min_p": 0.1996788014525405,
+        "low3_p": 0.3787665200177416,
+        "first_p": 0.1996788014525405
+      },
+      {
+        "question": "What is the closest star to Earth?",
+        "answer": "The closest star to Earth is the Sun.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8752708537695123,
+        "min_p": 0.6134004033648721,
+        "low3_p": 0.7463362791492866,
+        "first_p": 0.6134004033648721
+      },
+      {
+        "question": "What do bees make?",
+        "answer": "Bees make honey. Honey is a sweet, sticky, liquid substance that bees make from nectar, which is the nectar of flowers.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.4426236176734891,
+        "min_p": 0.14033134126902735,
+        "low3_p": 0.1776014204517954,
+        "first_p": 0.4750492395183353
+      },
+      {
+        "question": "What is the largest mammal?",
+        "answer": "The largest mammal is the blue whale.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8239531840494689,
+        "min_p": 0.5067162934096964,
+        "low3_p": 0.6425878079916536,
+        "first_p": 0.6223984151027793
+      },
+      {
+        "question": "What is the fastest land animal?",
+        "answer": "The fastest land animal is the cheetah.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7494580290270709,
+        "min_p": 0.3418896544093703,
+        "low3_p": 0.46148790460357725,
+        "first_p": 0.49034619859233036
+      },
+      {
+        "question": "Which animal is known as the king of the jungle?",
+        "answer": "The answer is the elephant. Elephants are known as the king of the jungle.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.6263040296869058,
+        "min_p": 0.18270419229405313,
+        "low3_p": 0.24744325265538414,
+        "first_p": 0.3304085508680776
+      },
+      {
+        "question": "Who painted The Starry Night?",
+        "answer": "Vincent van Gogh painted The Starry Night.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.9040438156436487,
+        "min_p": 0.5997819058368254,
+        "low3_p": 0.7391286916785057,
+        "first_p": 0.5997819058368254
+      },
+      {
+        "question": "Who wrote Romeo and Juliet?",
+        "answer": "William Shakespeare wrote Romeo and Juliet.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8025228618075277,
+        "min_p": 0.3947044447366548,
+        "low3_p": 0.6073775685373416,
+        "first_p": 0.3947044447366548
+      },
+      {
+        "question": "Who wrote The Odyssey?",
+        "answer": "The Odyssey was written by the Greek poet Homer.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.6101176413867252,
+        "min_p": 0.1868470133645247,
+        "low3_p": 0.32558870247255556,
+        "first_p": 0.1868470133645247
+      },
+      {
+        "question": "Who was the first President of the United States?",
+        "answer": "The first President of the United States was George Washington. He was born on April 16, 1732, in Mount Vernon, Virginia.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7093921312428512,
+        "min_p": 0.10621517722599234,
+        "low3_p": 0.20081193718087506,
+        "first_p": 0.4405345110620659
+      },
+      {
+        "question": "What is the opposite of 'hot'?",
+        "answer": "The opposite of 'hot' is 'cold'.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8606731340704594,
+        "min_p": 0.35130287990330544,
+        "low3_p": 0.6519042217740822,
+        "first_p": 0.35130287990330544
+      },
+      {
+        "question": "What is the plural of child?",
+        "answer": "A child is a child.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.5945487084959088,
+        "min_p": 0.4380362057360877,
+        "low3_p": 0.5187703832834898,
+        "first_p": 0.4380362057360877
+      },
+      {
+        "question": "What is the past tense of 'eat'?",
+        "answer": "The past tense of 'eat' is 'ate'.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8839461436855743,
+        "min_p": 0.5313690673285605,
+        "low3_p": 0.6749872314440128,
+        "first_p": 0.5313690673285605
+      },
+      {
+        "question": "Name a fruit that is yellow.",
+        "answer": "Banana. A yellow banana is a yellow fruit.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.40368695734253,
+        "min_p": 0.10107516237578461,
+        "low3_p": 0.16457443611979214,
+        "first_p": 0.10107516237578461
+      },
+      {
+        "question": "Name a bird that cannot fly.",
+        "answer": "The black-capped chickadee is a bird that cannot fly. It is a small, ground-dwelling bird with a black cap and a white underbelly.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.46138973166067826,
+        "min_p": 0.05101069629699837,
+        "low3_p": 0.08636080232718281,
+        "first_p": 0.2927694635000512
+      },
+      {
+        "question": "What colour do you get by mixing blue and yellow?",
+        "answer": "To get a blue color, mix blue and yellow. To get a yellow color, mix yellow and blue.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.6036205496664302,
+        "min_p": 0.1866684967433427,
+        "low3_p": 0.2650805563296151,
+        "first_p": 0.1866684967433427
+      },
+      {
+        "question": "What is the largest continent?",
+        "answer": "The largest continent is Africa.",
+        "correct": false,
+        "heuristic": 1.0,
+        "mean_p": 0.7207251321976949,
+        "min_p": 0.32929650073652095,
+        "low3_p": 0.5379058899555569,
+        "first_p": 0.5318460439676944
+      },
+      {
+        "question": "What is the longest river in Africa?",
+        "answer": "The longest river in Africa is the Nile.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8421510019135161,
+        "min_p": 0.47828358290925743,
+        "low3_p": 0.6376167258328271,
+        "first_p": 0.7040422710064919
+      },
+      {
+        "question": "What is the currency of the United Kingdom?",
+        "answer": "The currency of the United Kingdom is the pound sterling.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.8313575195058763,
+        "min_p": 0.5674322263106454,
+        "low3_p": 0.6158272695842842,
+        "first_p": 0.7741572677683034
+      },
+      {
+        "question": "In which country is the Eiffel Tower?",
+        "answer": "The Eiffel Tower is in France.",
+        "correct": true,
+        "heuristic": 1.0,
+        "mean_p": 0.7746261655748724,
+        "min_p": 0.46991343134128055,
+        "low3_p": 0.5027237666771156,
+        "first_p": 0.46991343134128055
+      }
+    ]
+  }
+}

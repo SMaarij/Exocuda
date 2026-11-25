@@ -40,8 +40,10 @@ from __future__ import annotations
 
 import gc
 import http.client
+import inspect
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -151,18 +153,26 @@ class WarmServer:
         self._worker.submit(self._unload).result()
 
     def _unload(self) -> None:
+        release = getattr(self._pipeline, "release", None)
+        if callable(release):
+            try:
+                release()  # lets the runners write their KV caches to disk first
+            except Exception:
+                traceback.print_exc()
         self._pipeline = None
         gc.collect()  # the models go now, not at some later collection
 
-    def ask(self, messages: list, log: bool = True) -> dict:
+    def ask(self, messages: list, log: bool = True, on_text: Optional[Callable[[str], None]] = None) -> dict:
+        """The Pipeline result. `on_text` (called on the pipeline thread) receives the answer
+        piece by piece while the main model generates it, when the pipeline streams."""
         with self._lock:
             self._last_activity = time.monotonic()
             try:
-                return self._worker.submit(self._ask, messages, log).result()
+                return self._worker.submit(self._ask, messages, log, on_text).result()
             finally:
                 self._last_activity = time.monotonic()
 
-    def _ask(self, messages: list, log: bool) -> dict:
+    def _ask(self, messages: list, log: bool, on_text: Optional[Callable[[str], None]] = None) -> dict:
         if self._mtime() != self._config_mtime:  # `cascade config set` changed something
             self._config_mtime = self._mtime()
             self._pipeline = None
@@ -173,6 +183,8 @@ class WarmServer:
         if not log:
             pipeline._decision_log_path = None
         try:
+            if on_text is not None and _accepts_on_text(pipeline.run):
+                return pipeline.run(messages, on_text=on_text)
             return pipeline.run(messages)
         finally:
             if not log:
@@ -280,15 +292,54 @@ class WarmServer:
                 self.wfile.write(data)
 
             def _stream(self, content_type: str, chunks: list[bytes]) -> None:
+                self._begin_stream(content_type)
+                for chunk in chunks:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+
+            def _begin_stream(self, content_type: str) -> None:
                 self.send_response(200)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Cache-Control", "no-cache")
                 self.send_header("Connection", "close")
                 self.end_headers()
-                for chunk in chunks:
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
                 self.close_connection = True
+
+            def _ask_streaming(self, messages: list, content_type: str, encode: Callable[[str], bytes]) -> dict:
+                """Ask the pipeline and stream the answer as it is generated: each piece is
+                written as `encode(piece)` the moment the model produces it. Answers that
+                arrive whole (cache hit, small model, remote tier) go out in one piece."""
+                pieces: "queue.Queue[Optional[str]]" = queue.Queue()
+                box: dict = {}
+
+                def work() -> None:
+                    try:
+                        box["result"] = server.ask(messages, on_text=pieces.put)
+                    except BaseException as exc:  # re-raised on the handler thread
+                        box["error"] = exc
+                    finally:
+                        pieces.put(None)
+
+                threading.Thread(target=work, daemon=True, name="cascade-stream").start()
+                streamed: list[str] = []
+                piece = pieces.get()
+                if piece is None and "error" in box:
+                    raise box["error"]  # nothing sent yet: the caller can still reply 500
+                self._begin_stream(content_type)
+                while piece is not None:
+                    streamed.append(piece)
+                    self.wfile.write(encode(piece))
+                    self.wfile.flush()
+                    piece = pieces.get()
+                if "error" in box:
+                    raise box["error"]
+                result = box["result"]
+                done, text = "".join(streamed), result["text"]
+                rest = text[len(done):] if text.startswith(done) else ("" if done else text)
+                if rest:
+                    self.wfile.write(encode(rest))
+                    self.wfile.flush()
+                return result
 
             def do_GET(self) -> None:
                 path = self.path.split("?", 1)[0].rstrip("/")
@@ -368,17 +419,26 @@ class WarmServer:
 
             def _openai_chat(self, body: dict) -> None:
                 model = body.get("model") or server.model_name
-                result = server.ask(_normalize_messages(body.get("messages", [])))
-                text, created = result["text"], int(time.time())
+                messages = _normalize_messages(body.get("messages", []))
+                created = int(time.time())
                 rid = f"chatcmpl-{os.getpid()}-{time.monotonic_ns()}"
                 if body.get("stream"):
                     def chunk(delta: dict, finish: Optional[str]) -> bytes:
                         return b"data: " + json.dumps({
                             "id": rid, "object": "chat.completion.chunk", "created": created, "model": model,
                             "choices": [{"index": 0, "delta": delta, "finish_reason": finish}]}).encode() + b"\n\n"
-                    self._stream("text/event-stream", [
-                        chunk({"role": "assistant", "content": text}, None), chunk({}, "stop"), b"data: [DONE]\n\n"])
+                    first = [True]
+
+                    def encode(piece: str) -> bytes:
+                        delta = {"role": "assistant", "content": piece} if first[0] else {"content": piece}
+                        first[0] = False
+                        return chunk(delta, None)
+                    self._ask_streaming(messages, "text/event-stream", encode)
+                    self.wfile.write(chunk({}, "stop") + b"data: [DONE]\n\n")
+                    self.wfile.flush()
                     return
+                result = server.ask(messages)
+                text = result["text"]
                 self._reply(200, {
                     "id": rid, "object": "chat.completion", "created": created, "model": model,
                     "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
@@ -401,6 +461,16 @@ class WarmServer:
                     self._ollama_reply(body, {"model": model, "created_at": _now(), "done": True, "done_reason": "load",
                                               "message": {"role": "assistant", "content": ""}})
                     return
+                if body.get("stream", True):  # Ollama streams unless told not to
+                    def encode(piece: str) -> bytes:
+                        return json.dumps({"model": model, "created_at": _now(), "done": False,
+                                           "message": {"role": "assistant", "content": piece}}).encode() + b"\n"
+                    result = self._ask_streaming(messages, "application/x-ndjson", encode)
+                    final = {"model": model, "created_at": _now(), "message": {"role": "assistant", "content": ""},
+                             "done": True, "done_reason": "stop", **_ollama_timings(result)}
+                    self.wfile.write(json.dumps(final).encode() + b"\n")
+                    self.wfile.flush()
+                    return
                 result = server.ask(messages)
                 message = {"role": "assistant", "content": result["text"]}
                 final = {"model": model, "created_at": _now(), "message": message, "done": True, "done_reason": "stop",
@@ -419,6 +489,16 @@ class WarmServer:
                     return
                 messages = ([{"role": "system", "content": body["system"]}] if body.get("system") else []) + \
                     [{"role": "user", "content": prompt}]
+                if body.get("stream", True):
+                    def encode(piece: str) -> bytes:
+                        return json.dumps({"model": model, "created_at": _now(), "response": piece,
+                                           "done": False}).encode() + b"\n"
+                    result = self._ask_streaming(messages, "application/x-ndjson", encode)
+                    final = {"model": model, "created_at": _now(), "response": "", "done": True,
+                             "done_reason": "stop", **_ollama_timings(result)}
+                    self.wfile.write(json.dumps(final).encode() + b"\n")
+                    self.wfile.flush()
+                    return
                 result = server.ask(messages)
                 final = {"model": model, "created_at": _now(), "response": result["text"], "done": True,
                          "done_reason": "stop", **_ollama_timings(result)}
@@ -431,6 +511,14 @@ class WarmServer:
 
 
 # ---- API helpers --------------------------------------------------------------------
+
+
+def _accepts_on_text(run: Callable) -> bool:
+    try:
+        return "on_text" in inspect.signature(run).parameters
+    except (TypeError, ValueError):
+        return False
+
 
 
 def _now() -> str:

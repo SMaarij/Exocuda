@@ -51,6 +51,7 @@ class _FakeRunner:
 
     def unload(self) -> None:
         self._loaded = None
+        self.unloads = getattr(self, "unloads", 0) + 1
 
 
 def _make_backend(tmp_path: Path, simulated_latency_ms: float = 0.0) -> LocalExecutionBackend:
@@ -156,3 +157,15 @@ def test_runner_gets_a_flat_prompt_unless_it_formats_chat_turns_itself(tmp_path)
     runner.accepts_messages = True
     backend.generate(messages)
     assert runner.prompts[-1] == messages
+
+
+def test_release_unloads_the_model_and_the_next_request_reloads_it(tmp_path) -> None:
+    backend = _make_backend(tmp_path)
+    runner = backend._runner
+    backend.release()  # nothing loaded yet: nothing to do
+    assert getattr(runner, "unloads", 0) == 0
+    backend.generate([{"role": "user", "content": "hi"}])
+    backend.release()
+    assert runner.unloads == 1 and runner._loaded is None
+    backend.generate([{"role": "user", "content": "again"}])
+    assert runner._loaded is not None

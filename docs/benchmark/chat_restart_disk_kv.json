@@ -1,0 +1,204 @@
+{
+ "summary": {
+  "native:restart:nodisk": {
+   "later_first_token_s": 18.08,
+   "decode_tok_s": 1.995,
+   "mean_total_wall_s": 216.8
+  },
+  "native:restart": {
+   "later_first_token_s": 3.06,
+   "decode_tok_s": 1.965,
+   "mean_total_wall_s": 172.4
+  }
+ },
+ "rounds": {
+  "native:restart:nodisk": [
+   [
+    {
+     "chat": "a",
+     "turn": 1,
+     "prompt_tokens": 83,
+     "tokens": 29,
+     "first_token_s": 5.81,
+     "decode_tok_s": 2.195,
+     "wall_s": 18.6,
+     "acceptance_rate": 0.8333333333333334,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 2,
+     "prompt_tokens": 135,
+     "tokens": 63,
+     "first_token_s": 9.5,
+     "decode_tok_s": 2.921,
+     "wall_s": 30.74,
+     "acceptance_rate": 0.5909090909090909,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Input date format not recognized\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 3,
+     "prompt_tokens": 225,
+     "tokens": 73,
+     "first_token_s": 15.42,
+     "decode_tok_s": 4.463,
+     "wall_s": 31.57,
+     "acceptance_rate": 0.8666666666666667,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Input date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 4,
+     "prompt_tokens": 322,
+     "tokens": 149,
+     "first_token_s": 21.06,
+     "decode_tok_s": 4.086,
+     "wall_s": 57.29,
+     "acceptance_rate": 0.7878787878787878,
+     "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Parameters:\n    s (str): The date string to parse.\n    \n    Returns:\n    datetime.date: The parsed date.\n    \n    Raises:\n    ValueError: If the input date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Input date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    }
+   ],
+   [
+    {
+     "chat": "a",
+     "turn": 1,
+     "prompt_tokens": 83,
+     "tokens": 29,
+     "first_token_s": 8.3,
+     "decode_tok_s": 1.96,
+     "wall_s": 22.72,
+     "acceptance_rate": 0.8333333333333334,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 2,
+     "prompt_tokens": 135,
+     "tokens": 63,
+     "first_token_s": 13.73,
+     "decode_tok_s": 1.219,
+     "wall_s": 64.62,
+     "acceptance_rate": 0.5909090909090909,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Input date format not recognized\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 3,
+     "prompt_tokens": 225,
+     "tokens": 73,
+     "first_token_s": 20.45,
+     "decode_tok_s": 1.5,
+     "wall_s": 68.45,
+     "acceptance_rate": 0.8666666666666667,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Input date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 4,
+     "prompt_tokens": 322,
+     "tokens": 149,
+     "first_token_s": 28.33,
+     "decode_tok_s": 1.329,
+     "wall_s": 139.68,
+     "acceptance_rate": 0.7878787878787878,
+     "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Parameters:\n    s (str): The date string to parse.\n    \n    Returns:\n    datetime.date: The parsed date.\n    \n    Raises:\n    ValueError: If the input date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Input date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    }
+   ]
+  ],
+  "native:restart": [
+   [
+    {
+     "chat": "a",
+     "turn": 1,
+     "prompt_tokens": 83,
+     "tokens": 29,
+     "first_token_s": 5.12,
+     "decode_tok_s": 3.626,
+     "wall_s": 12.86,
+     "acceptance_rate": 0.8333333333333334,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 2,
+     "prompt_tokens": 135,
+     "tokens": 62,
+     "first_token_s": 2.4,
+     "decode_tok_s": 3.533,
+     "wall_s": 19.71,
+     "acceptance_rate": 0.6842105263157895,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 3,
+     "prompt_tokens": 224,
+     "tokens": 72,
+     "first_token_s": 2.8,
+     "decode_tok_s": 3.046,
+     "wall_s": 26.17,
+     "acceptance_rate": 0.85,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 4,
+     "prompt_tokens": 320,
+     "tokens": 147,
+     "first_token_s": 2.79,
+     "decode_tok_s": 1.619,
+     "wall_s": 93.06,
+     "acceptance_rate": 0.7906976744186046,
+     "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    }
+   ],
+   [
+    {
+     "chat": "a",
+     "turn": 1,
+     "prompt_tokens": 83,
+     "tokens": 29,
+     "first_token_s": 8.87,
+     "decode_tok_s": 2.057,
+     "wall_s": 22.51,
+     "acceptance_rate": 0.8333333333333334,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    return datetime.strptime(s, '%Y-%m-%d').date()\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 2,
+     "prompt_tokens": 135,
+     "tokens": 62,
+     "first_token_s": 2.87,
+     "decode_tok_s": 1.835,
+     "wall_s": 36.16,
+     "acceptance_rate": 0.6842105263157895,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format not recognized\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 3,
+     "prompt_tokens": 224,
+     "tokens": 72,
+     "first_token_s": 3.02,
+     "decode_tok_s": 1.833,
+     "wall_s": 41.82,
+     "acceptance_rate": 0.85,
+     "text": "```python\nfrom datetime import datetime\n\ndef parse_date(s):\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    },
+    {
+     "chat": "a",
+     "turn": 4,
+     "prompt_tokens": 320,
+     "tokens": 147,
+     "first_token_s": 4.48,
+     "decode_tok_s": 1.662,
+     "wall_s": 92.49,
+     "acceptance_rate": 0.7906976744186046,
+     "text": "```python\nfrom datetime import datetime\nfrom typing import Union\n\ndef parse_date(s: str) -> datetime.date:\n    \"\"\"\n    Parses 'YYYY-MM-DD' or 'DD/MM/YYYY' strings into datetime.date.\n    \n    Args:\n        s (str): The date string to parse.\n    \n    Returns:\n        datetime.date: The parsed date.\n    \n    Raises:\n        ValueError: If the date format is not recognized.\n    \"\"\"\n    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):\n        try:\n            return datetime.strptime(s, fmt).date()\n        except ValueError:\n            pass\n    raise ValueError(\"Date format must be 'YYYY-MM-DD' or 'DD/MM/YYYY'\")\n```"
+    }
+   ]
+  ]
+ }
+}

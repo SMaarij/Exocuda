@@ -207,7 +207,7 @@ class LocalExecutionBackend:
 
     # ---- ExecutionBackend protocol implementation ----------------------
 
-    def generate(self, messages: list[Message]) -> BackendResult:
+    def generate(self, messages: list[Message], on_text=None) -> BackendResult:
         """
         Run a full (non-streaming) generation.
 
@@ -225,7 +225,7 @@ class LocalExecutionBackend:
         # each keeps its role in the model's own template; others get one flat string.
         prompt  = messages if getattr(self._runner, "accepts_messages", False) is True else _messages_to_prompt(messages)
 
-        sample, used_rung = self._generate_with_stepdown(prompt, rung)
+        sample, used_rung = self._generate_with_stepdown(prompt, rung, on_text)
         wall_ms = (time.monotonic() - start) * 1000
 
         # Fallback only matters for test doubles that never set output_text.
@@ -257,6 +257,12 @@ class LocalExecutionBackend:
                 time.sleep(self._simulated_latency_ms / 1000 / 10)
             yield word + " "
 
+    def release(self) -> None:
+        """Unload the model now (the runner may save its state first); the next request reloads it."""
+        if self._loaded is not None:
+            self._engine.unload()
+            self._loaded = None
+
     # ---- Internal helpers -----------------------------------------------
 
     def _get_profile(self) -> HardwareProfile:
@@ -274,6 +280,7 @@ class LocalExecutionBackend:
         self,
         prompt: "str | list[Message]",
         rung: Optional[QuantRung],
+        on_text=None,
     ) -> tuple:
         """
         Attempt generation at rung; on OOM step down and retry (FR-02.3).
@@ -288,7 +295,8 @@ class LocalExecutionBackend:
                 if self._loaded != (self._model_id, real_tag):
                     self._engine.load(_runner_model(self._model_id), real_tag)
                     self._loaded = (self._model_id, real_tag)
-                sample = self._engine.generate_accelerated(prompt, max_tokens=self._max_tokens)
+                kwargs = {"on_text": on_text} if on_text is not None else {}
+                sample = self._engine.generate_accelerated(prompt, max_tokens=self._max_tokens, **kwargs)
                 return sample, rung
             except Exception as exc:
                 # OOM or any load failure: try the next lower rung (FR-02.3)

@@ -43,8 +43,9 @@ STREAMING LIMITATION -- documented, not a bug:
 
 from __future__ import annotations
 
+import inspect
 import time
-from typing import Iterator, Optional
+from typing import Callable, Iterator, Optional
 
 from pathlib import Path
 
@@ -116,9 +117,42 @@ class Pipeline:
             if backend is not None:
                 backend.generate(probe)
 
+    def release(self) -> None:
+        """Unload the local models (idle unload). Runners that can keep what they computed
+        (the llama.cpp runner's KV caches) write it to disk first."""
+        for backend in (self._backend, self._small_local_backend):
+            release = getattr(backend, "release", None)
+            if callable(release):
+                release()
+
     # ---- Pipeline seam (Section 9) --------------------------------------
 
-    def run(self, messages: list[Message]) -> PipelineResult:
+    def run(self, messages: list[Message], on_text: Optional[Callable[[str], None]] = None) -> PipelineResult:
+        """`on_text` receives the main local model's answer piece by piece as it is generated,
+        for streaming replies. Answers that may still be replaced (the small model's, or a
+        local one a remote tier may override) are not streamed: the caller sends the
+        returned text, or what of it was not streamed yet."""
+        stream_ok = on_text is not None and not (
+            self._confidence_floor is not None and self._self_hosted_backend is not None)
+        self._on_text = on_text if stream_ok else None
+        try:
+            return self._run(messages)
+        finally:
+            self._on_text = None
+
+    def _big_generate(self, messages: list[Message]) -> BackendResult:
+        """The main local backend's answer, streamed through on_text when it can stream."""
+        on_text = getattr(self, "_on_text", None)
+        if on_text is not None:
+            try:
+                accepts = "on_text" in inspect.signature(self._backend.generate).parameters
+            except (TypeError, ValueError):
+                accepts = False
+            if accepts:
+                return self._backend.generate(messages, on_text=on_text)
+        return self._backend.generate(messages)
+
+    def _run(self, messages: list[Message]) -> PipelineResult:
         start = time.monotonic()
         compressed = self._compressor.compress(messages) if self._compressor else messages
         compressed = self._with_system_prompt(compressed)
@@ -135,7 +169,7 @@ class Pipeline:
 
         if self.last_served_by_small and self._small_answer_is_weak(result):
                 try:
-                    result = self._backend.generate(compressed)
+                    result = self._big_generate(compressed)
                     escalated = True
                     self.last_served_by_small = False
                 except Exception:
@@ -266,7 +300,7 @@ class Pipeline:
 
         # "local", a requested tier whose backend isn't configured, or a failed remote tier.
         try:
-            result = self._backend.generate(messages)
+            result = self._big_generate(messages)
             return result, "local", False
         except LocalExecutionBackendError:
             if self._self_hosted_backend is None or cascade_failed:

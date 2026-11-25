@@ -105,6 +105,7 @@ def test_prompt_lookup_unavailable_without_llama_cpp(monkeypatch) -> None:
 @pytest.fixture(autouse=True)
 def _model_paths_in_tmp(tmp_path, monkeypatch):
     monkeypatch.setattr(llamacpp_runner, "MODEL_PATHS_PATH", tmp_path / "model_paths.json")
+    monkeypatch.setattr(llamacpp_runner, "KV_DISK_PATH", tmp_path / "kv")
 
 
 def _runner(**kwargs):
@@ -931,3 +932,85 @@ def test_kv_slots_are_off_for_test_doubles_and_when_disabled() -> None:
     assert kv_slots_for(_KVLlm(), max_tokens=0) is None
     llm = _KVLlm()
     assert kv_slots_for(llm) is kv_slots_for(llm)  # one store per model instance
+
+
+# ---- KV caches on disk -------------------------------------------------------------
+
+
+def test_disk_store_round_trips_and_reindexes(tmp_path) -> None:
+    from engine.execution.llamacpp_runner import KVDisk
+
+    disk = KVDisk(tmp_path / "m")
+    disk.put((1, 2, 3), b"state-a")
+    assert disk.take((1, 2, 3)) == b"state-a"
+    again = KVDisk(tmp_path / "m")  # a new process finds it
+    assert list(again.entries()) == [(1, 2, 3)] and again.take((1, 2, 3)) == b"state-a"
+
+
+def test_a_longer_cache_replaces_the_one_it_extends(tmp_path) -> None:
+    from engine.execution.llamacpp_runner import KVDisk
+
+    disk = KVDisk(tmp_path / "m")
+    disk.put((1, 2, 3), b"short")
+    disk.put((1, 2, 3, 4, 5), b"long")
+    disk.put((9, 9), b"other")
+    assert sorted(disk.entries()) == [(1, 2, 3, 4, 5), (9, 9)]
+    assert len(list((tmp_path / "m").glob("*.kv"))) == 2
+
+
+def test_disk_store_drops_the_oldest_files_over_budget(tmp_path) -> None:
+    import os
+    from engine.execution.llamacpp_runner import KVDisk
+
+    disk = KVDisk(tmp_path / "m", max_bytes=2500)
+    for i in range(3):
+        disk.put((i, i, i), bytes(1000))
+        for path in (tmp_path / "m").glob("*.kv"):  # older files really are older
+            os.utime(path, (path.stat().st_mtime - 10, path.stat().st_mtime - 10))
+    assert sorted(disk.entries()) == [(1, 1, 1), (2, 2, 2)]
+
+
+def test_a_new_process_resumes_a_conversation_from_disk(_kv_as_tokens, tmp_path) -> None:
+    from engine.execution.llamacpp_runner import KVDisk, KVSlots
+
+    chat = list(range(100, 300))
+    llm, slots = _KVLlm(), KVSlots(max_tokens=1000, min_tokens=10, disk=KVDisk(tmp_path / "m"))
+    llm.evaluate(chat)
+    slots.spill(llm)  # unload / exit
+    fresh, slots2 = _KVLlm(), KVSlots(max_tokens=1000, min_tokens=10, disk=KVDisk(tmp_path / "m"))
+    slots2.switch(fresh, chat + [1, 2, 3])
+    assert fresh.kv == chat and fresh.n_tokens == len(chat) and slots2.restores == 1
+
+
+def test_an_unreadable_disk_cache_is_dropped_and_the_model_starts_clean(monkeypatch, _kv_as_tokens, tmp_path) -> None:
+    from engine.execution.llamacpp_runner import KVDisk, KVSlots
+
+    disk = KVDisk(tmp_path / "m")
+    disk.put(tuple(range(100, 300)), b"not-a-state")
+
+    def refuse(llm, data):
+        raise RuntimeError("llama.cpp refused the saved KV cache")
+    monkeypatch.setattr(llamacpp_runner, "_kv_set", refuse)
+    llm, slots = _KVLlm(), KVSlots(max_tokens=1000, min_tokens=10, disk=disk)
+    slots.switch(llm, list(range(100, 300)) + [1])
+    assert llm.n_tokens == 0 and slots.restores == 0 and not disk.entries()
+
+
+def test_unload_writes_the_kv_caches_to_disk(monkeypatch) -> None:
+    spilled = []
+    monkeypatch.setattr(llamacpp_runner, "spill_kv", lambda llm: spilled.append(llm))
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    runner.unload()
+    assert built[0] in spilled
+
+
+
+def test_generate_streams_each_decoded_piece() -> None:
+    runner, built = _runner()
+    runner.load("llama3.2", "3b-instruct-q4_K_M")
+    pieces: list[str] = []
+    sample = runner.generate("hi", 10, on_text=pieces.append)
+    assert pieces == ["one", "two", "three", "four", "five"]
+    assert sample.output_text == "one two three four five"
+    assert runner.streams is True

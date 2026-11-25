@@ -193,8 +193,13 @@ class AccelerationEngine:
         self._loaded_model_id = None
         self._active_layer = AccelerationLayer.NONE
 
-    def generate_accelerated(self, prompt: "str | list", max_tokens: int) -> AcceleratedGenerationSample:
-        base = self._runner.generate(prompt, max_tokens)
+    def generate_accelerated(self, prompt: "str | list", max_tokens: int,
+                             on_text=None) -> AcceleratedGenerationSample:
+        """`on_text` streams the answer as it is decoded, when the runner can (`streams`)."""
+        if on_text is not None and getattr(self._runner, "streams", False) is True:
+            base = self._runner.generate(prompt, max_tokens, on_text=on_text)
+        else:
+            base = self._runner.generate(prompt, max_tokens)
         ran_layer = _LAYER_FOR_MODE.get(base.acceleration, AccelerationLayer.NONE)
         acceptance = base.acceptance_rate if base.acceptance_rate is not None else 1.0
 

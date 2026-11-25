@@ -307,3 +307,41 @@ def test_warm_loads_both_local_models_without_caching_or_logging(tmp_path) -> No
     pipeline.warm()
     assert (_Counting.calls, _Small.calls) == (1, 1)
     assert not log.exists()
+
+
+def test_release_unloads_both_local_models() -> None:
+    released = []
+
+    class _Releasing(FakeBackend):
+        def __init__(self, name: str) -> None:
+            super().__init__()
+            self.name = name
+
+        def release(self) -> None:
+            released.append(self.name)
+
+    Pipeline(_Releasing("big"), small_local_backend=_Releasing("small")).release()
+    Pipeline(FakeBackend()).release()  # a backend without release() is left alone
+    assert released == ["big", "small"]
+
+
+class _StreamingBackend(FakeBackend):
+    def generate(self, messages, on_text=None):
+        if on_text is not None:
+            on_text("hello ")
+            on_text("from fake backend")
+        return super().generate(messages)
+
+
+def test_run_streams_the_main_local_models_answer() -> None:
+    pieces: list[str] = []
+    result = Pipeline(_StreamingBackend()).run([{"role": "user", "content": "hi"}], on_text=pieces.append)
+    assert pieces == ["hello ", "from fake backend"] and result["text"] == "hello from fake backend"
+
+
+def test_small_model_answers_are_not_streamed() -> None:
+    pieces: list[str] = []
+    small = _StreamingBackend(text="the small answer")
+    pipeline = Pipeline(_StreamingBackend(), small_local_backend=small, small_token_confidence_floor=None)
+    pipeline.run([{"role": "user", "content": "What is 2+2?"}], on_text=pieces.append)
+    assert pipeline.last_served_by_small and pieces == []

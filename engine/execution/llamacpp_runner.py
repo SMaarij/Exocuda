@@ -33,7 +33,10 @@ constructing a runner raises a clear error.
 
 from __future__ import annotations
 
+import atexit
+import codecs
 import ctypes
+import hashlib
 import inspect
 import json
 import os
@@ -163,6 +166,102 @@ def _kv_set(llm: Any, data: bytes) -> None:
     if llama_cpp.llama_state_seq_set_data(llm._ctx.ctx, buf, len(data), 0) != len(data):
         raise RuntimeError("llama.cpp refused the saved KV cache")
 
+KV_DISK_PATH = Path.home() / ".cascade" / "kv"
+KV_DISK_BYTES = 512 * 1024**2  # all models together; oldest files go first
+_KV_MAGIC = b"CKV1"
+
+
+class KVDisk:
+    """
+    KV caches on disk, one file per cache: magic, token count, the tokens (int32), then
+    llama.cpp's serialised state. Survives the model being unloaded (idle unload) and
+    the process exiting (`cascade ask`, a restart, a reboot): restoring a 1,000-token
+    7B cache reads ~57 MB, re-reading the prompt takes ~55 s on a 4-core CPU.
+    """
+
+    def __init__(self, directory: Path, max_bytes: int = KV_DISK_BYTES, root: Optional[Path] = None) -> None:
+        self.directory = Path(directory)
+        self.max_bytes = max_bytes
+        self.root = Path(root) if root is not None else self.directory.parent
+        self._index: Optional[dict[tuple[int, ...], Path]] = None
+
+    def entries(self) -> dict[tuple[int, ...], Path]:
+        if self._index is None:
+            self._index = {}
+            for path in sorted(self.directory.glob("*.kv")):
+                try:
+                    with path.open("rb") as f:
+                        if f.read(4) != _KV_MAGIC:
+                            continue
+                        n = int.from_bytes(f.read(4), "little")
+                        tokens = np.frombuffer(f.read(4 * n), dtype=np.int32)
+                    if len(tokens) == n:
+                        self._index[tuple(int(t) for t in tokens)] = path
+                except OSError:
+                    continue
+        return self._index
+
+    def put(self, tokens: tuple[int, ...], data: bytes) -> None:
+        entries = self.entries()
+        if tokens in entries:
+            return
+        # A cache that extends a saved one replaces it.
+        for key in [k for k in entries if len(k) < len(tokens) and tokens[: len(k)] == k]:
+            entries.pop(key).unlink(missing_ok=True)
+        self.directory.mkdir(parents=True, exist_ok=True)
+        array = np.asarray(tokens, dtype=np.int32)
+        path = self.directory / (hashlib.sha1(array.tobytes()).hexdigest()[:20] + ".kv")
+        tmp = path.with_suffix(".tmp")
+        with tmp.open("wb") as f:
+            f.write(_KV_MAGIC + len(tokens).to_bytes(4, "little"))
+            f.write(array.tobytes())
+            f.write(data)
+        os.replace(tmp, path)
+        entries[tokens] = path
+        self._evict()
+
+    def take(self, tokens: tuple[int, ...]) -> Optional[bytes]:
+        path = self.entries().get(tokens)
+        if path is None:
+            return None
+        try:
+            raw = path.read_bytes()
+            os.utime(path)  # most recently used
+        except OSError:
+            self.entries().pop(tokens, None)
+            return None
+        return raw[8 + 4 * len(tokens):]
+
+    def drop(self, tokens: tuple[int, ...]) -> None:
+        path = self.entries().pop(tokens, None)
+        if path is not None:
+            path.unlink(missing_ok=True)
+
+    def _evict(self) -> None:
+        files = sorted(self.root.glob("*/*.kv"), key=lambda q: q.stat().st_mtime)
+        total = sum(q.stat().st_size for q in files)
+        for path in files:
+            if total <= self.max_bytes:
+                break
+            total -= path.stat().st_size
+            path.unlink(missing_ok=True)
+            if self._index is not None:
+                for key, value in list(self._index.items()):
+                    if value == path:
+                        del self._index[key]
+
+
+def _kv_disk_for(llm: Any) -> Optional[KVDisk]:
+    """The disk store for this model file and context settings (the KV layout)."""
+    path = getattr(llm, "model_path", None)
+    if not isinstance(path, str) or not os.path.isfile(path):
+        return None
+    params = getattr(llm, "context_params", None)
+    layout = [path, os.path.getsize(path)] + [
+        str(getattr(params, name, None)) for name in ("n_ctx", "flash_attn_type", "type_k", "type_v")
+    ]
+    return KVDisk(KV_DISK_PATH / hashlib.sha1("|".join(map(str, layout)).encode()).hexdigest()[:16])
+
 
 class KVSlots:
     """
@@ -177,9 +276,11 @@ class KVSlots:
     first. At most `max_tokens` tokens are kept, oldest dropped first.
     """
 
-    def __init__(self, max_tokens: int = KV_SLOT_TOKENS, min_tokens: int = KV_SLOT_MIN_TOKENS) -> None:
+    def __init__(self, max_tokens: int = KV_SLOT_TOKENS, min_tokens: int = KV_SLOT_MIN_TOKENS,
+                 disk: Optional[KVDisk] = None) -> None:
         self.max_tokens = max_tokens
         self.min_tokens = min_tokens
+        self.disk = disk
         self._slots: OrderedDict[tuple[int, ...], bytes] = OrderedDict()
         self.restores = 0  # for inspection
 
@@ -204,21 +305,43 @@ class KVSlots:
     def switch(self, llm: Any, ids: Sequence[int]) -> None:
         live = int(llm.n_tokens)
         live_lcp = _kv_lcp(llm.input_ids[:live], ids)
-        best, best_lcp = None, live_lcp
+        best, best_lcp, on_disk = None, live_lcp, False
         for key in self._slots:
             lcp = _kv_lcp(key, ids)
             if lcp > best_lcp:
                 best, best_lcp = key, lcp
+        for key in (self.disk.entries() if self.disk is not None else ()):
+            lcp = _kv_lcp(key, ids)
+            if lcp > best_lcp:
+                best, best_lcp, on_disk = key, lcp, True
         if best is not None and best_lcp - live_lcp >= self.min_tokens:
             self.save(llm)
-            data = self._slots.pop(best)
-            _kv_set(llm, data)
+            data = self.disk.take(best) if on_disk else self._slots.pop(best)
+            try:
+                if data is None:
+                    raise RuntimeError("saved KV cache unreadable")
+                _kv_set(llm, data)
+            except RuntimeError:  # a stale or foreign file: forget it, start clean
+                if on_disk:
+                    self.disk.drop(best)
+                llm.n_tokens = 0
+                return
             llm.input_ids[: len(best)] = best
             llm.n_tokens = len(best)
             llm._requires_eval = True
             self.restores += 1
         elif live - live_lcp >= self.min_tokens:
             self.save(llm)
+
+    def spill(self, llm: Any) -> None:
+        """Write the live cache and every saved one to disk (before an unload or exit)."""
+        if self.disk is None:
+            return
+        n = int(llm.n_tokens)
+        if self.min_tokens <= n:
+            self.disk.put(tuple(int(t) for t in llm.input_ids[:n]), _kv_get(llm))
+        for key, data in self._slots.items():
+            self.disk.put(key, data)
 
 
 def kv_slots_for(llm: Any, max_tokens: int = KV_SLOT_TOKENS) -> Optional[KVSlots]:
@@ -230,9 +353,23 @@ def kv_slots_for(llm: Any, max_tokens: int = KV_SLOT_TOKENS) -> Optional[KVSlots
         return None
     slots = getattr(llm, "_cascade_kv_slots", None)
     if slots is None:
-        slots = KVSlots(max_tokens)
+        slots = KVSlots(max_tokens, disk=_kv_disk_for(llm))
         llm._cascade_kv_slots = slots
+        atexit.register(spill_kv, weakref.ref(llm))
     return slots
+
+
+def spill_kv(llm: Any) -> None:
+    """Write a model's KV caches to disk now: it is about to be dropped, or the process
+    is exiting. Takes the model or a weak reference to it; never raises."""
+    if isinstance(llm, weakref.ref):
+        llm = llm()
+    slots = getattr(llm, "_cascade_kv_slots", None) if llm is not None else None
+    if slots is not None:
+        try:
+            slots.spill(llm)
+        except Exception:  # never fail an unload or an exit over a cache
+            pass
 
 
 class ModelDraft(LlamaDraftModel):
@@ -860,7 +997,12 @@ class LlamaCppRunner:
         self._model_path = self._resolve_path(f"{model_id}:{quant_level}")
         self._build()
 
-    def generate(self, prompt: str | list[dict], max_tokens: int) -> GenerationSample:
+    streams = True  # generate() takes on_text
+
+    def generate(self, prompt: str | list[dict], max_tokens: int,
+                 on_text: Optional[Callable[[str], None]] = None) -> GenerationSample:
+        """With `on_text`, each piece of the answer is passed to it as soon as it is decoded
+        (leading whitespace dropped, as in the returned text), for streaming replies."""
         if self._llm is None:
             raise RuntimeError("No model loaded -- call load() first.")
         if self._counter is not None:
@@ -881,6 +1023,8 @@ class LlamaCppRunner:
         out: list[int] = []
         logprobs: Optional[list[float]] = [] if self._counter is None else None
         first_t: Optional[float] = None
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace") if on_text is not None else None
+        started = False  # past the leading whitespace
         gen = self._llm.generate(prompt_ids, reset=True, **self._sampling)
         try:
             for token in gen:
@@ -893,6 +1037,13 @@ class LlamaCppRunner:
                     first_t = time.perf_counter()
                     self.last_prompt_s = first_t - prompt_start
                 out.append(token)
+                if decoder is not None:
+                    piece = decoder.decode(self._llm.detokenize([token]))
+                    if not started:
+                        piece = piece.lstrip()
+                        started = bool(piece)
+                    if piece:
+                        on_text(piece)
                 if len(out) >= max_tokens:
                     break
         finally:
@@ -1036,6 +1187,10 @@ class LlamaCppRunner:
         return token == self._llm.token_eos()
 
     def unload(self) -> None:
+        # Keep what the models computed: the next load restores it from disk instead of
+        # re-reading the conversation (idle unload, config reload).
+        spill_kv(self._llm)
+        spill_kv(self._draft_llm)
         self._llm = None
         self._draft_llm = None
         self._counter = None

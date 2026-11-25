@@ -22,6 +22,15 @@ log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
 | NFR-05 | local never transmits | Met | no default remote endpoint; no per-request registry pull |
 | NFR-09 | tests without GPU/Ollama/network | Met | 313 tests |
 
+## 0.10.0 — answers start in seconds, and survive unloads
+
+- Replies stream: `ollama run`, Ollama apps and OpenAI clients see the first words after ~2–5 s instead of
+  after the whole answer (36–59 s).
+- What the models computed is written to disk on idle unload and exit and restored on the next load:
+  first token 3.1 s instead of 18.1 s after a reload; a restarted server's first answer starts in 5.2 s
+  instead of 12.1 s.
+- Full setup re-checked with native chat turns: 34/34 correct, 1.57x faster than the plain 7B session.
+
 ## 0.9.0 — conversations
 
 - Chat messages keep their roles in the model's own template, so earlier answers are reused too: first

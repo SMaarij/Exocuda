@@ -200,3 +200,78 @@ def test_keep_listening_unloads_when_idle_and_reloads_on_demand(tmp_path: Path) 
 def test_without_keep_listening_idle_means_exit(server) -> None:
     srv, _, _, _ = server
     assert srv._on_idle() is True
+
+
+def test_idle_unload_lets_the_pipeline_release_its_models_first(tmp_path: Path) -> None:
+    released = []
+    pipeline = _FakePipeline()
+    pipeline.release = lambda: released.append(True)
+    srv = warm_server.WarmServer(lambda: pipeline, idle_seconds=60, port=0, keep_listening=True)
+    try:
+        srv.load()
+        srv._on_idle()
+        assert released == [True] and not srv.loaded
+    finally:
+        srv.httpd.server_close()
+
+
+class _StreamingPipeline(_FakePipeline):
+    """Streams its answer in three pieces, as the llama.cpp runner does token by token."""
+
+    def run(self, messages, on_text=None):
+        text = f"echo {messages[-1]['content']}"
+        if on_text is not None:
+            for piece in (text[:2], text[2:5], text[5:]):
+                on_text(piece)
+        return {"text": text, "tier": "local", "cache_hit": False}
+
+
+@pytest.fixture
+def streaming_server(tmp_path: Path):
+    srv = warm_server.WarmServer(_StreamingPipeline, idle_seconds=60, port=0)
+    port = srv.httpd.server_address[1]
+    srv.load()
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield port
+    srv.httpd.shutdown()
+
+
+def test_ollama_chat_streams_the_answer_piece_by_piece(streaming_server) -> None:
+    import json
+
+    _, ctype, raw = _post(streaming_server, "/api/chat", {"model": "cascade", "messages": [
+        {"role": "user", "content": "hello"}]})
+    lines = [json.loads(line) for line in raw.splitlines()]
+    assert ctype == "application/x-ndjson"
+    assert [line["message"]["content"] for line in lines[:-1]] == ["ec", "ho ", "hello"]
+    assert lines[-1]["done"] is True and lines[-1]["message"]["content"] == ""
+
+
+def test_ollama_generate_streams_too(streaming_server) -> None:
+    import json
+
+    _, _, raw = _post(streaming_server, "/api/generate", {"model": "cascade", "prompt": "hi"})
+    lines = [json.loads(line) for line in raw.splitlines()]
+    assert "".join(line["response"] for line in lines) == "echo hi" and len(lines) == 4
+
+
+def test_openai_stream_sends_deltas_then_stop(streaming_server) -> None:
+    import json
+
+    _, ctype, raw = _post(streaming_server, "/v1/chat/completions", {"model": "cascade", "stream": True,
+                                                                    "messages": [{"role": "user", "content": "yo"}]})
+    events = [line[6:] for line in raw.decode().split("\n\n") if line.startswith("data: ")]
+    assert events[-1] == "[DONE]"
+    chunks = [json.loads(e)["choices"][0] for e in events[:-1]]
+    assert chunks[0]["delta"] == {"role": "assistant", "content": "ec"}
+    assert "".join(c["delta"].get("content", "") for c in chunks) == "echo yo"
+    assert chunks[-1]["finish_reason"] == "stop"
+
+
+def test_a_pipeline_that_cannot_stream_still_answers_a_streaming_request(server) -> None:
+    import json
+
+    _, port, _, _ = server  # _FakePipeline.run takes no on_text
+    _, _, raw = _post(port, "/api/chat", {"model": "cascade", "messages": [{"role": "user", "content": "x"}]})
+    lines = [json.loads(line) for line in raw.splitlines()]
+    assert lines[0]["message"]["content"] == "echo x" and lines[-1]["done"] is True

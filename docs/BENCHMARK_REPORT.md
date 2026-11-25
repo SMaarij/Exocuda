@@ -903,3 +903,66 @@ storage cleanup deleted the tokenizer files there and left the ONNX file, so eve
 The cache now lives in `~/.cascade/fastembed` (`FASTEMBED_CACHE_PATH` still wins). The full-setup
 session (cache, router, 0.5B small model) is therefore not re-measured here: on this laptop it needs the
 tokenizer files downloaded again.
+
+
+## Addendum 21 — streaming replies, KV caches that survive unloads and restarts, full-setup check, 2026-11-25
+
+**Full setup with native chat turns.** The embedding model was downloaded again into
+`~/.cascade/fastembed`, so the 34-question session could run with the full setup: cache, router, the 0.5B
+answering easy questions and drafting for the 7B. It scored **34/34** correct. The session took 225 s
+against 354 s for the plain 7B the same day (1.57x), with a 5.96 GB peak; 9 questions were answered from
+the cache, 12 by the 0.5B and 13 by the 7B (`system_session_native_chat_shared05.json`).
+
+**Small-model escalation threshold under native turns.** The 0.75 mean-token-probability floor was tuned
+on the flattened prompt (Addendum 13). Re-measured on the same 128 easy questions
+(`small_confidence_native_chat.json`, `small_confidence_holdout_native_chat.json`):
+
+| 0.5B, 128 easy questions | flattened (0.4.2) | native turns (0.9.0) |
+|---|---:|---:|
+| wrong when answering alone | 11 | 16 |
+| still wrong after escalating below 0.75 | 4 | **2** |
+| right answers escalated anyway | 16 | 19 |
+
+With native turns the 0.5B alone is a little worse ("Spanish" for Brazil; "A child is a child."), but those
+answers come with low confidence (0.37–0.63), so the floor catches them. Final accuracy is better, so the
+floor stays at 0.75.
+
+**KV caches on disk.** An idle unload (to free RAM), a config reload or a process exit (`cascade ask`, a
+restart) used to throw away everything the models had computed, so the next message re-read the whole
+conversation at about 18 tok/s. Now, before a model is dropped, its live KV cache and the saved ones
+(Addendum 20) are written to `~/.cascade/kv/<model + KV layout>/`. There is one file per cache, holding the
+tokens and llama.cpp's sequence state, at most 512 MB for all models together, oldest files dropped first.
+After the next load, a prompt that shares a prefix with a file on disk restores that file instead of
+re-reading the prompt. A cache that extends a saved one replaces it; a file llama.cpp refuses is deleted
+and the model starts clean. The server's idle unload now releases the pipeline's models (writing their
+caches) before dropping them; at exit an `atexit` hook does the same.
+
+The 4-turn chat, with both models unloaded and reloaded before every turn (`chat_restart_disk_kv.json`,
+2 rounds; the laptop was busy, decode about 2 tok/s):
+
+| | First token, turns 2–4 | Whole chat |
+|---|---:|---:|
+| reload, no disk caches | 18.08 s | 217 s |
+| **reload, disk caches** | **3.06 s** | 172 s |
+
+On a live `cascade serve`, after a shutdown, the first question of the new process got its first token in
+5.2 s, against 12.1 s on the first cold start, when no cache was on disk yet (the system prompt is
+restored from disk).
+
+**Streaming replies.** The Ollama (`/api/chat`, `/api/generate`) and OpenAI (`/v1/chat/completions` with
+`stream`) endpoints used to send the whole answer at the end. `ollama run` showed nothing for the whole
+generation. Now the llama.cpp runner passes each decoded piece to an `on_text` callback. The callback runs
+through `LocalExecutionBackend` and `Pipeline.run(messages, on_text=...)`, and the server writes each piece
+to the client as it arrives. Only the main local model's answer streams: a small-model answer may still be
+escalated, and a local answer may be overridden by a remote tier, so those are sent whole when final.
+Cache hits are sent whole too. Live on `cascade serve`:
+
+| Question | First piece | Whole answer |
+|---|---:|---:|
+| Explain process vs thread (warm) | **1.93 s** | 36.4 s |
+| Fibonacci function (first request) | 12.1 s | 47.8 s |
+| Reverse words (after restart, disk cache) | 5.2 s | 41.6 s |
+| Explain TCP vs UDP | 4.3 s | 58.7 s |
+
+Total time is unchanged. What the person waits for before text appears drops from the whole answer to the
+first token.
