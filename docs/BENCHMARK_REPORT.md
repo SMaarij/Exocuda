@@ -973,3 +973,55 @@ first token.
 of a 23.9 s answer. `cascade chat` used to load the models in its own process for every session; it now
 uses the background server like `cascade ask`. So the models, and the conversation's KV cache, stay
 loaded between turns and between sessions, and each answer streams.
+
+## Addendum 22 — open-ended speed: two-branch drafting and draft skipping rejected (simulation), 2026-11-25
+
+Open-ended prompts stay at about 1.24x. Before building anything, the recorded 7B answers (6 benchmark
+prompts and the 8 turns of the two benchmark chats) were re-scored with the 0.5B to see what a different
+drafting scheme could recover (`scripts/analysis/draft_top2_coverage.py`, `draft_top2_coverage.json`):
+
+| 0.5B top-1 probability | open-ended: top-1 = 7B token | 2nd choice = 7B token |
+|---|---:|---:|
+| < 0.3 | 22% | 20% |
+| 0.3–0.5 | 44% | 24% |
+| 0.5–0.7 | 71% | 14% |
+| 0.7–0.9 | 83% | 8% |
+| ≥ 0.9 | 98% | 1% |
+| all (492 tokens) | 72% | 11% |
+
+On code the top-1 already matches 95%.
+
+**Two-branch drafting** (SpecInfer/Medusa-style trees, cut to two branches) branches at the first unsure
+token into the 0.5B's two best tokens. Each branch continues, and the 7B verifies both in one batch (llama.cpp
+sequence ids). It was replayed exactly on those sequences with this laptop's measured verify costs
+(`scripts/analysis/simulate_tree_drafting.py`). At every step the policy takes whichever of the linear or
+branched drafts has the best expected tokens per unit of cost:
+
+| | code | open-ended |
+|---|---:|---:|
+| linear, cost-aware (shipped) | 2.159x | 1.535x |
+| linear or two-branch | 2.151x | 1.533x |
+
+Doubling the tail of the batch costs more on this CPU (8 tokens 3.06x one token, 16 tokens 4.47x) than the
+second guess recovers. Not built.
+
+**Where the real run loses time.** The simulation assumes no overhead and gives 1.53x on open-ended text;
+the real runs give about 1.24x. Timing one drafted run shows the 0.5B taking about 28% of decode time on
+open-ended prompts: 76 ms per eval against 40 ms for a single token, because each draft starts with an eval
+that catches the 0.5B up on the tokens the 7B just kept. The cost model only counts drafted tokens. On 26%
+of open-ended steps (2% on code) the 0.5B then drafts nothing.
+
+**Skipping the 0.5B after it drafts nothing** (one step, or backing off up to 4) was simulated with a
+per-consultation cost of 0.1–0.3 of a 7B step:
+
+| catch-up cost | always consult (shipped) | skip 1 step | back off ≤ 4 |
+|---|---:|---:|---:|
+| 0.1 | 1.514x | 1.484x | 1.457x |
+| 0.2 | 1.428x | 1.410x | 1.389x |
+| 0.3 | 1.351x | 1.343x | 1.327x |
+
+The token after an unsure one is often easy, so skipping loses more drafts than it saves. Not built.
+
+Conclusion: with a 0.5B draft model on a 4-core CPU, open-ended speed is bounded by agreement (72%), not by
+the shape or timing of drafts. The levers left are a draft model that agrees more without costing more,
+or text that repeats (lookup drafting, Addendum 19).
