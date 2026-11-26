@@ -1208,3 +1208,63 @@ the same way. A finer search over sub-layers (attention or MLP alone) would have
 roughly 3x in agreement and is not pursued.
 
 On this hardware the 0.5B stays the better draft, and layer skipping is rejected.
+
+## Addendum 27 — where a 7B step goes on this laptop: weight formats, threads, the output head, wide verifies, 2026-11-26
+
+Five measurements behind the next ideas. Every scheme they tested is rejected; the measurements
+are what's left.
+
+**1. Weight formats under speculative decoding** (`scripts/analysis/quant_for_speculation.py`,
+`quant_for_speculation.json`).
+- Each variant was re-quantized from the Q4_K_M file with llama.cpp's quantizer. Re-quantizing compounds
+  the error, so these agreements are pessimistic.
+- Agreement means: on the reference 7B's own greedy outputs, how often this variant's next token matches.
+- "With drafting" is the exact replay of the shipped cost-aware 0.5B drafting, using this file's measured
+  verify costs.
+- Timing varies by about ±10% from run to run.
+
+| format | size | step | plain | agreement code / open | with drafting code / open |
+|---|---:|---:|---:|---:|---:|
+| Q4_K_M (shipped) | 4.36 GB | 280 ms | 3.57 tok/s | reference | 6.54 / 4.37 tok/s |
+| Q4_0 | 4.13 GB | 268 ms | 3.73 | 0.987 / 0.959 | 6.05 / 4.38 |
+| IQ4_NL | 4.16 GB | 291 ms | 3.44 | 0.995 / 0.959 | 6.42 / 4.62 |
+| IQ4_XS | 3.96 GB | 360 ms | 2.78 | 0.995 / 0.957 | 5.19 / 3.05 |
+| Q3_K_M | 3.55 GB | 279 ms | 3.58 | 0.987 / 0.947 | 6.73 / 4.09 |
+| Q3_K_S | 3.25 GB | 281 ms | 3.56 | 0.982 / 0.931 | 5.49 / 4.22 |
+| Q2_K | 2.81 GB | 214 ms | 4.68 | 0.981 / 0.880 | 7.18 / 5.96 |
+
+- Step time does not follow file size. Q3_K_S reads 25% fewer bytes than Q4_K_M and is no faster, and
+  IQ4_XS is smaller and slower. At about 15.6 GB/s the 7B is limited by memory and by unpacking work
+  together, so formats that cost more to unpack give back what they save in bytes.
+- Only Q2_K is clearly faster (−36% RAM, +10% code / +36% open with drafting). It changes 12% of
+  open-ended tokens, so it is too lossy as built here.
+
+**2. Decode threads.**
+- In isolation, single-token decode speeds up with more threads (`decode_threads.py`, interleaved): 293,
+  280, 266 and 254 ms at 3, 4, 6 and 8 threads.
+- In the real pipeline (`benchmark_acceleration.py` option `threads=8`, round 1) it is slower: plain
+  decoding 3.1 vs 3.6 tok/s, and drafting no better. The default of 4 decode threads stays.
+
+**3. The output head.**
+- Its share of a step, from GGUFs with 1 and 2 blocks (`head_share.py`, logits at every position):
+  9.2% of a 1-token step, 9.3% of a 4-token verify and 14.5% of an 8-token verify.
+- Certified sparse head, to compute the exact greedy winner without all 152k logits (`certified_head.py`,
+  `certified_head.json`, 140 positions with the hidden state reconstructed exactly from the logits): fails.
+  The winner is only 0.2·|h| above the mean logit. Norm, k-means cluster (C = 1024 / 4096), low-rank and
+  cluster-plus-low-rank bounds all leave 98.5–100% of the rows to compute.
+- In 3,584 dimensions, inner-product bounds are far too loose for exact pruning.
+
+**4. AVX-512.** Our llama-cpp-python build uses AVX2 only. Ollama's icelake (AVX-512 VNNI) backend decodes
+the same file at 3.6–3.8 tok/s, about 5% faster. A native rebuild is a small win and is not pursued now.
+
+**5. Wide verifies** (`wide_verify_costs.py`, logits at every position, cost in single steps):
+
+| tokens | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| cost | 1.00 | 1.40 | 1.51 | 3.41 | 7.08 | 9.35 | 15.6 | 33.8 | 66.0 |
+| per token | 1.00 | 0.70 | 0.38 | 0.43 | 0.44 | 0.29 | 0.24 | 0.26 | 0.26 |
+
+- Batches have no cheap regime. Prompt processing runs at about 17–20 tokens/s here, and Ollama's runs at
+  9 tokens/s on a fresh 450-token prompt. Its 150–170 tokens/s readings were cached prompts.
+- About 0.25 of a step per token is the floor, so even perfect drafts could give at most about 4x. The
+  4-token verify, at about 1.5 steps, stays the sweet spot the cost-aware policy already finds.

@@ -97,6 +97,8 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
             from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
 
             settings["draft_verify_costs"] = CPU_VERIFY_COSTS
+        elif option.startswith("threads="):  # decode threads for the target and draft (default: physical cores)
+            settings["n_threads"] = int(option[8:])
         elif option.startswith("pmin="):
             settings["draft_p_min"] = float(option[5:])
         elif option.startswith("draft="):
