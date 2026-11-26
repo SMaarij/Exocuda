@@ -1268,3 +1268,20 @@ the same file at 3.6–3.8 tok/s, about 5% faster. A native rebuild is a small w
   9 tokens/s on a fresh 450-token prompt. Its 150–170 tokens/s readings were cached prompts.
 - About 0.25 of a step per token is the floor, so even perfect drafts could give at most about 4x. The
   4-token verify, at about 1.5 steps, stays the sweet spot the cost-aware policy already finds.
+
+## Addendum 28 — research by replay: the drafting rule is not where the gains are, 2026-11-26
+
+Three candidate algorithms, tested by exact replay before any implementation. The replays use the 7B's
+greedy outputs on the 14 benchmark prompts, the 0.5B's top-4 tokens and probabilities at every position,
+and the measured cost table.
+
+| idea | result |
+|---|---|
+| Draft length for long-run throughput (Dinkelbach: maximize 1 + E[accepted] − λ·C instead of the per-step rate) (`lambda_policy_sim.py`) | Online λ: −5.9% code, −3.4% open. Best fixed λ: −1.3% / ±0%. |
+| Recalibrating the draft's confidence | Not needed. Draft p is calibrated: open 0.93 → 97% accepted, 0.61 → 71%, 0.40 → 44%. |
+| Online re-ranking of the draft's top 4 from verify labels (token bias, confusion pairs, context pairs; perceptron) (`online_rerank_sim.py`) | Open top-1 0.722 → at best 0.738 (+1.6 pts). Code gets worse. |
+
+The 7B's token is the 0.5B's first choice 72% of the time on open text, and in its top 4 92% of the time.
+Near the optimum, throughput barely changes with the drafting rule, and the draft's probabilities
+already predict acceptance. The gap between top 1 and top 4 is also not a learnable token habit. Large
+gains on open text therefore need new information about what the 7B will say.
