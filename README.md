@@ -299,8 +299,9 @@ hardware — especially GPUs — are very welcome; see [CONTRIBUTING.md](CONTRIB
 
 ## Status and roadmap
 
-Alpha, and active development is closed (2026-11-27). [`docs/FINDINGS.md`](docs/FINDINGS.md)
-summarizes what was achieved on a CPU-only laptop and what was tried and ruled out.
+Alpha, 0.12.0. The speed research is finished: [`docs/FINDINGS.md`](docs/FINDINGS.md)
+summarizes what was achieved on a CPU-only laptop and what was tried and ruled out. Changes per
+release are in [`CHANGELOG.md`](CHANGELOG.md).
 [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) lists what works and what was verified live.
 
 ## Contributing

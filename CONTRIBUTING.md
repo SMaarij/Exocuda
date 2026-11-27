@@ -27,7 +27,7 @@ replaced by a fake in tests (see `engine/intelligence/tests/fakes.py`, `gateway/
   decision log.
 - **The seams are stable.** `shared/types.py` (`ExecutionBackend`, `BackendResult`,
   `PipelineResult`, `HardwareProfile`) is what the components agree on. If you change it, add an
-  entry to `shared/CHANGELOG.md` explaining why.
+  entry to `cascade_local/shared/CHANGELOG.md` explaining why.
 - **Tests with every change.** New behaviour gets a test; a fixed bug gets a test that would have
   caught it.
 

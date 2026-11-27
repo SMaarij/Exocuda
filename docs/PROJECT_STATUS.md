@@ -1,14 +1,22 @@
-# Cascade — Project Status (2026-11-27, closed)
+# Cascade — Project Status (2026-11-27, 0.12.0)
 
 Cascade is an MIT-licensed open-source project. This page says what works, what was verified live,
 and what's next. Measured numbers are in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md); the change
-log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
+log is [`../CHANGELOG.md`](../CHANGELOG.md).
 
-**The project is closed (2026-11-27).** The final summary of results, what transfers to a consumer
-CPU and what doesn't, and the novelty check is [`FINDINGS.md`](FINDINGS.md). Addenda 25–28 of the
-benchmark report hold the last experiments: shadow drafting, layer skipping, weight formats and the
-output head, draft-policy replays, and the EAGLE-style gate. `shadow_draft` remains an experimental
-option, off by default.
+**Research is closed; the product is release-ready (0.12.0).** The speed research ended on
+2026-11-27. [`FINDINGS.md`](FINDINGS.md) summarizes the results, what transfers to a consumer CPU
+and what doesn't, and the novelty check. Addenda 25–28 hold the last experiments. `shadow_draft`
+remains an experimental option, off by default.
+
+0.12.0 makes Cascade installable by others:
+- the `cascade-local` package (one `cascade_local` module);
+- `cascade setup`;
+- clearer `cascade stats`;
+- `cascade cache list/forget/clear`.
+
+The wheel was installed and run in a clean environment, and `cascade setup` was run end to end on
+the laptop. Going public and uploading to PyPI are the owners' steps; see [`RELEASING.md`](RELEASING.md).
 
 ## Requirement status
 

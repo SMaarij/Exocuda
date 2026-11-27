@@ -1037,7 +1037,7 @@ def doctor() -> None:
         report(importlib.util.find_spec("llama_cpp") is not None, "llama-cpp-python installed (runner=llamacpp)", "pip install llama-cpp-python")
         note(f"acceleration: {config.get('acceleration', 'draft_model')}; small model: {_small_model(config) or 'off'}")
     else:
-        note("runner: ollama (no speculative decoding; set runner=llamacpp to enable it)")
+        note("runner: ollama (no speculative decoding; `cascade setup` turns it on by installing llama-cpp-python)")
 
     byok = _byok_settings(config)
     if byok is None:
