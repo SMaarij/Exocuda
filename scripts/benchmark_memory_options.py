@@ -51,7 +51,7 @@ def run_one(model: str, option: str, n_ctx: int, prompt_tokens: int = 400) -> di
     import psutil
     from llama_cpp import Llama
 
-    from engine.execution.model_runner import OllamaReferenceModelRunner
+    from cascade_local.engine.execution.model_runner import OllamaReferenceModelRunner
 
     path = OllamaReferenceModelRunner().model_file_path(model)
     llm = Llama(model_path=path, n_ctx=n_ctx, use_mmap=False, verbose=False, **OPTIONS[option])

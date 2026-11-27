@@ -25,16 +25,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from engine.execution.backend import LocalExecutionBackend
-from engine.execution.hardware_profiler import HardwareProfiler
-from engine.execution.model_runner import GenerationSample
-from engine.intelligence.pipeline import Pipeline
-from engine.intelligence.router.classifier import SemanticRouterClassifier
-from engine.intelligence.router.coldstart_data import RoutingExample
-from engine.intelligence.tests.fakes import FakeEmbedder
-from gateway.backend import SelfHostedBackend
-from gateway.tests.fakes import FakeCloudInferenceProvider
-from shared.types import Message
+from cascade_local.engine.execution.backend import LocalExecutionBackend
+from cascade_local.engine.execution.hardware_profiler import HardwareProfiler
+from cascade_local.engine.execution.model_runner import GenerationSample
+from cascade_local.engine.intelligence.pipeline import Pipeline
+from cascade_local.engine.intelligence.router.classifier import SemanticRouterClassifier
+from cascade_local.engine.intelligence.router.coldstart_data import RoutingExample
+from cascade_local.engine.intelligence.tests.fakes import FakeEmbedder
+from cascade_local.gateway.backend import SelfHostedBackend
+from cascade_local.gateway.tests.fakes import FakeCloudInferenceProvider
+from cascade_local.shared.types import Message
 
 
 class _FakeRunner:

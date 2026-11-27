@@ -34,7 +34,7 @@ import gguf  # noqa: E402
 from gguf.quants import dequantize  # noqa: E402
 from llama_cpp import Llama  # noqa: E402
 
-from engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
 
 TARGET = "qwen2.5-coder:7b-instruct-q4_K_M"
 

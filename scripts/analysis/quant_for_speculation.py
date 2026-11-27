@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "analysis"))
 
 from llama_cpp import Llama  # noqa: E402
 
-from engine.execution.llamacpp_runner import (  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import (  # noqa: E402
     WORKING_MEMORY_SETTINGS, LlamaCppRunner, measure_verify_costs)
 from shadow_draft_sim import sequential  # noqa: E402
 

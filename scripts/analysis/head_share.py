@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "analysis"))
 
 from llama_cpp import Llama  # noqa: E402
 
-from engine.execution.llamacpp_runner import WORKING_MEMORY_SETTINGS, LlamaCppRunner  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import WORKING_MEMORY_SETTINGS, LlamaCppRunner  # noqa: E402
 from layer_skip_acceptance import truncate  # noqa: E402
 
 PROBE = b"def merge_sorted(a, b):\n    out = []\n    i = j = 0\n" * 16

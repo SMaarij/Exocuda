@@ -19,9 +19,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
-from engine.intelligence.cache import SemanticCache  # noqa: E402
-from engine.intelligence.embeddings import FastEmbedEmbedder  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
+from cascade_local.engine.intelligence.cache import SemanticCache  # noqa: E402
+from cascade_local.engine.intelligence.embeddings import FastEmbedEmbedder  # noqa: E402
 from scripts.analysis.cache_judge import pairs, stored_answers  # noqa: E402
 
 

@@ -48,9 +48,9 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from engine.intelligence.cache import CacheConfig, SemanticCache, is_cacheable
-from engine.intelligence.embeddings import FastEmbedEmbedder
-from engine.intelligence.router.classifier import SemanticRouterClassifier
+from cascade_local.engine.intelligence.cache import CacheConfig, SemanticCache, is_cacheable
+from cascade_local.engine.intelligence.embeddings import FastEmbedEmbedder
+from cascade_local.engine.intelligence.router.classifier import SemanticRouterClassifier
 
 REFERENCE_QUERIES_PATH = Path(__file__).parent.parent / "docs" / "benchmark" / "reference_queries.jsonl"
 CACHE_PARAPHRASE_PAIRS_PATH = Path(__file__).parent.parent / "docs" / "benchmark" / "cache_paraphrase_pairs.jsonl"
@@ -158,7 +158,7 @@ def sweep_cache_settings(embedder: FastEmbedEmbedder, tmp_db_path: Path, thresho
     defaults in CacheConfig are a choice made from these numbers, visible to
     anyone who reruns this -- not a constant to take on trust.
     """
-    from engine.intelligence.cache import GUARD_MODES
+    from cascade_local.engine.intelligence.cache import GUARD_MODES
 
     rows = []
     for mode in GUARD_MODES:

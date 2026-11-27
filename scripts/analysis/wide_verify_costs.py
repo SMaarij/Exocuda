@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from llama_cpp import Llama  # noqa: E402
 
-from engine.execution.llamacpp_runner import WORKING_MEMORY_SETTINGS, LlamaCppRunner  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import WORKING_MEMORY_SETTINGS, LlamaCppRunner  # noqa: E402
 
 PROBE = b"def merge_sorted(a, b):\n    out = []\n    i = j = 0\n    while i < len(a) and j < len(b):\n" * 40
 SIZES = (1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256)

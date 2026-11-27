@@ -42,12 +42,12 @@ USER_TURNS_B = [
 
 
 def run_config(spec: str, model: str, quant: str, draft: str, max_tokens: int) -> list[dict]:
-    from cli.main import DEFAULT_SYSTEM_PROMPT
-    from engine.execution.backend import _messages_to_prompt
+    from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT
+    from cascade_local.engine.execution.backend import _messages_to_prompt
     import tempfile
 
-    from engine.execution import llamacpp_runner
-    from engine.execution.llamacpp_runner import LlamaCppRunner
+    from cascade_local.engine.execution import llamacpp_runner
+    from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner
 
     options = set(spec.split(":"))
     # A fresh disk store per configuration, so no run starts from another's caches.

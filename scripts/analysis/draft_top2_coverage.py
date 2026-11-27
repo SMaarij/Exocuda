@@ -15,8 +15,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from llama_cpp import Llama  # noqa: E402
 
-from cli.main import DEFAULT_SYSTEM_PROMPT  # noqa: E402
-from engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
+from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 paths = json.loads((Path.home() / ".cascade" / "model_paths.json").read_text())

@@ -26,8 +26,8 @@ def measure(model: str, sizes: list[int], repeats: int, n_threads: int | None, n
             extra: dict) -> dict:
     from llama_cpp import Llama
 
-    from engine.execution.llamacpp_runner import WORKING_MEMORY_SETTINGS
-    from engine.execution.model_runner import OllamaReferenceModelRunner
+    from cascade_local.engine.execution.llamacpp_runner import WORKING_MEMORY_SETTINGS
+    from cascade_local.engine.execution.model_runner import OllamaReferenceModelRunner
 
     path = OllamaReferenceModelRunner().model_file_path(model)
     kwargs = dict(WORKING_MEMORY_SETTINGS) | extra

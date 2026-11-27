@@ -1,20 +1,20 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cascade"
-version = "0.11.0"
+name = "cascade-local"
+version = "0.12.0"
 description = "Local-first LLM runtime: runs models on your machine, caches repeated questions, and routes hard ones to a provider or server you choose."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Syed Maarij" }, { name = "Jaweria Anwer" }]
 requires-python = ">=3.10"
 keywords = ["llm", "ollama", "llama.cpp", "routing", "semantic-cache", "speculative-decoding", "local-first"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -45,10 +45,10 @@ Homepage = "https://github.com/SMaarij/Exocuda"
 Issues = "https://github.com/SMaarij/Exocuda/issues"
 
 [project.scripts]
-cascade = "cli.main:app"
+cascade = "cascade_local.cli.main:app"
 
 [tool.setuptools.packages.find]
-include = ["engine*", "gateway*", "cli*", "shared*"]
+include = ["cascade_local*"]
 exclude = ["*.tests*"]
 
 [tool.pytest.ini_options]
@@ -59,7 +59,7 @@ exclude = ["*.tests*"]
 # belong to any single track's own folder -- e.g. tests/integration/
 # test_j4_three_way_run.py, the first three-way run once all three
 # tracks' code exists (Section 13.1's Phase 4 join point).
-testpaths = ["engine", "gateway", "cli", "shared", "tests"]
+testpaths = ["cascade_local", "tests"]
 pythonpath = ["."]
 
 [tool.coverage.run]
@@ -67,5 +67,5 @@ pythonpath = ["."]
 # prior instruction. Track A's own Phase 1 coverage claim (90%
 # hardware_profiler.py, 95% backend.py) was measured with
 # `--cov=engine/execution` directly -- see docs/archive/TRACK_A_PHASE1_SUMMARY.md.
-source = ["engine", "shared", "gateway", "cli"]
+source = ["cascade_local"]
 omit = ["*/tests/*"]

@@ -98,10 +98,10 @@ class _FixedProfiler:
 
 
 def _local_backend(model_id: str, accelerated: bool, max_tokens: int, draft: str = DRAFT_MODEL):
-    from engine.execution.acceleration_engine import AccelerationLayer, DraftPair
-    from engine.execution.backend import LocalExecutionBackend
-    from engine.execution.llamacpp_runner import LlamaCppRunner
-    from engine.execution.model_ladder import DEFAULT_LADDER, ModelLadder
+    from cascade_local.engine.execution.acceleration_engine import AccelerationLayer, DraftPair
+    from cascade_local.engine.execution.backend import LocalExecutionBackend
+    from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner
+    from cascade_local.engine.execution.model_ladder import DEFAULT_LADDER, ModelLadder
 
     floor = ModelLadder(rungs=(min(DEFAULT_LADDER, key=lambda r: r.min_tok_s),))
     if accelerated:
@@ -115,17 +115,17 @@ def _local_backend(model_id: str, accelerated: bool, max_tokens: int, draft: str
 
 
 def build(config: str, max_tokens: int, cache_dir: Path):
-    from cli.main import DEFAULT_SYSTEM_PROMPT
-    from engine.intelligence.pipeline import Pipeline
+    from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT
+    from cascade_local.engine.intelligence.pipeline import Pipeline
 
     if config == "plain":
         big = _local_backend(BIG_MODEL, False, max_tokens)
         return Pipeline(big, confidence_floor=None, system_prompt=DEFAULT_SYSTEM_PROMPT), [big]
 
-    from engine.intelligence.cache import SemanticCache
-    from engine.intelligence.context_compressor import ContextCompressor
-    from engine.intelligence.embeddings import FastEmbedEmbedder
-    from engine.intelligence.router.classifier import SemanticRouterClassifier
+    from cascade_local.engine.intelligence.cache import SemanticCache
+    from cascade_local.engine.intelligence.context_compressor import ContextCompressor
+    from cascade_local.engine.intelligence.embeddings import FastEmbedEmbedder
+    from cascade_local.engine.intelligence.router.classifier import SemanticRouterClassifier
 
     embedder = FastEmbedEmbedder()
     small = _local_backend(SMALL_MODELS[config], False, max_tokens) if config in SMALL_MODELS else None

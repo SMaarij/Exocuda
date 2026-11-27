@@ -20,10 +20,10 @@ sys.path.insert(0, str(ROOT))
 
 from llama_cpp import Llama  # noqa: E402
 
-from cli.main import DEFAULT_SYSTEM_PROMPT  # noqa: E402
-from engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
-from engine.intelligence.cache import term_swap_conflict  # noqa: E402
-from engine.intelligence.embeddings import FastEmbedEmbedder  # noqa: E402
+from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner  # noqa: E402
+from cascade_local.engine.intelligence.cache import term_swap_conflict  # noqa: E402
+from cascade_local.engine.intelligence.embeddings import FastEmbedEmbedder  # noqa: E402
 
 JUDGE_PROMPT = ("Do these two questions ask for exactly the same information, so that one correct answer "
                 "answers both? Reply yes or no.\n\nQuestion 1: {a}\nQuestion 2: {b}")

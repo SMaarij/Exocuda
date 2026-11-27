@@ -35,8 +35,8 @@ DEFAULT_PROMPTS = [
 
 
 def measure(model: str, quant: str, draft: str, prompts: list[str], max_tokens: int) -> dict:
-    from engine.execution.llamacpp_runner import LlamaCppRunner
-    from engine.execution.model_runner import ACCEL_DRAFT_MODEL, ACCEL_NONE
+    from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner
+    from cascade_local.engine.execution.model_runner import ACCEL_DRAFT_MODEL, ACCEL_NONE
 
     runner = LlamaCppRunner(draft_model_tag=draft, temperature=0.0)
     speeds: dict[str, list[float]] = {}

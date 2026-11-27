@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.intelligence.tests.fakes import FakeEmbedder
+from cascade_local.engine.intelligence.tests.fakes import FakeEmbedder
 
 # scripts/ isn't a package (no __init__.py, matching Track A's existing
 # scripts/validate_draft_pairs.py and scripts/benchmark_acceleration.py
@@ -49,7 +49,7 @@ def test_cache_paraphrase_pairs_file_exists_and_is_well_formed() -> None:
 
 def test_reference_queries_are_disjoint_from_training_bootstrap() -> None:
     """The held-out set must not overlap with the router's own training data, or "agreement" would just be training accuracy."""
-    from engine.intelligence.router.coldstart_data import BOOTSTRAP_EXAMPLES
+    from cascade_local.engine.intelligence.router.coldstart_data import BOOTSTRAP_EXAMPLES
 
     training_queries = {e.query for e in BOOTSTRAP_EXAMPLES}
     reference_queries = {row["query"] for row in run_benchmark._load_jsonl(run_benchmark.REFERENCE_QUERIES_PATH)}

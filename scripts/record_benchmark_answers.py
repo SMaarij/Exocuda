@@ -27,9 +27,9 @@ import argparse
 import json
 from pathlib import Path
 
-from cli.main import DEFAULT_SYSTEM_PROMPT
-from engine.execution.backend import _messages_to_prompt
-from engine.execution.model_runner import OllamaReferenceModelRunner
+from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT
+from cascade_local.engine.execution.backend import _messages_to_prompt
+from cascade_local.engine.execution.model_runner import OllamaReferenceModelRunner
 
 BENCHMARK_DIR = Path(__file__).parent.parent / "docs" / "benchmark"
 FIXTURES = ("cache_paraphrase_pairs.jsonl", "cache_near_miss_pairs.jsonl")

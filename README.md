@@ -31,33 +31,47 @@ the request is answered locally instead of failing.
 
 ## Quickstart
 
-Requirements: Python 3.10+ and [Ollama](https://ollama.com) running locally.
+Requirements: Python 3.10+ and [Ollama](https://ollama.com) installed and running.
 
 ```bash
-git clone https://github.com/SMaarij/Exocuda.git
-cd Exocuda
-pip install -e .
+pip install cascade-local
+cascade setup
 ```
 
+`cascade setup` does everything once, asking before it downloads or installs anything:
+
+1. checks that Ollama is running;
+2. picks models that fit your RAM: qwen2.5-coder 7B with 12 GB or more, qwen2.5 3B with 8 GB, and
+   qwen2.5 1.5B below that. Each comes with qwen2.5 0.5B, which answers easy questions and drafts for
+   the bigger model;
+3. downloads them through Ollama;
+4. installs llama-cpp-python, which turns on lossless speculative decoding: 1.5-2x faster answers
+   with output identical to plain decoding, and less RAM;
+5. measures this machine once and asks a test question.
+
+Then:
+
 ```bash
-cascade init        # benchmarks this machine (downloads llama3.2 3B on first run)
-cascade doctor      # checks every configured piece and says how to fix what isn't
+cascade chat                      # chat in the terminal
 cascade ask "What is a hash table?"
-cascade chat
-cascade stats       # cache hit rate, local-resolution rate, speculative speedup
+cascade install --as-ollama       # make `ollama run` and every Ollama app use Cascade
+cascade stats                     # what Cascade has saved you
+cascade doctor                    # check every piece and say how to fix what isn't working
 ```
 
 Each answer ends with a status footer, e.g. `[local | 9.8 tok/s | 2140ms | $0.0000]`.
 The dollar figure is only ever non-zero for your own BYOK provider, and only if you
 tell Cascade its prices.
 
-If you skip `cascade init`, the first `ask` runs the same one-time hardware check first
-(several minutes on a CPU) and says so.
+From a source checkout instead: `git clone https://github.com/SMaarij/Exocuda.git`,
+`cd Exocuda`, `pip install -e .`, then `cascade setup`.
 
-### Fastest setup (measured 1.65–2.11x on a mixed session, all answers correct)
+### What the fast setup does (measured 1.65–2.11x on a mixed session, all answers correct)
+
+`cascade setup` turns this on. By hand, the same thing is:
 
 ```bash
-pip install -e ".[llamacpp]" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+pip install "cascade-local[llamacpp]" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 cascade config set model qwen2.5-coder     # everything else below is automatic
 ```
 
@@ -205,10 +219,10 @@ Each person gets their own API key and, optionally, a token quota.
 On the GPU machine:
 
 ```bash
-python -m gateway.serve create-user alice --quota 2000000   # omit --quota for unlimited
-python -m gateway.serve create-key alice                    # prints csk_... once; only a hash is stored
+python -m cascade_local.gateway.serve create-user alice --quota 2000000   # omit --quota for unlimited
+python -m cascade_local.gateway.serve create-key alice                    # prints csk_... once; only a hash is stored
 CASCADE_UPSTREAM_URL=http://127.0.0.1:8001 CASCADE_UPSTREAM_MODEL=my-model \
-  python -m gateway.serve run --host 0.0.0.0 --port 8000
+  python -m cascade_local.gateway.serve run --host 0.0.0.0 --port 8000
 ```
 
 On each laptop:

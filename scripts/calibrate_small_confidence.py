@@ -163,7 +163,7 @@ FEATURES = ("heuristic", "mean_p", "min_p", "low3_p", "first_p")
 
 
 def features(text: str, logprobs: list[float] | None) -> dict:
-    from engine.intelligence.router.confidence import estimate_local_confidence
+    from cascade_local.engine.intelligence.router.confidence import estimate_local_confidence
 
     f = {"heuristic": estimate_local_confidence(text)}
     if logprobs:
@@ -185,7 +185,7 @@ def auc(right: list[float], wrong: list[float]) -> float | None:
 
 def run_model(model: str, max_tokens: int, questions=QUESTIONS) -> list[dict]:
     from benchmark_system import _local_backend
-    from cli.main import DEFAULT_SYSTEM_PROMPT
+    from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT
 
     backend = _local_backend(model, False, max_tokens)
     rows = []

@@ -48,7 +48,7 @@ def collect(out: Path, budget: int) -> None:
     import llama_cpp
     from llama_cpp import Llama
 
-    from engine.execution.llamacpp_runner import LlamaCppRunner
+    from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner
 
     big = Llama(TARGET, n_ctx=WINDOW + 16, verbose=False, use_mmap=False, flash_attn=True, n_ubatch=256,
                 logits_all=True, embedding=True, pooling_type=llama_cpp.LLAMA_POOLING_TYPE_NONE)

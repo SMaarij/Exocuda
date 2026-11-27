@@ -24,8 +24,8 @@ sys.path.insert(0, str(ROOT))
 
 from llama_cpp import Llama  # noqa: E402
 
-from cli.main import DEFAULT_SYSTEM_PROMPT  # noqa: E402
-from engine.execution.llamacpp_runner import LlamaCppRunner, verify_costs_for  # noqa: E402
+from cascade_local.cli.main import DEFAULT_SYSTEM_PROMPT  # noqa: E402
+from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner, verify_costs_for  # noqa: E402
 from scripts.benchmark_acceleration import PROMPTS  # noqa: E402
 from scripts.benchmark_chat import USER_TURNS, USER_TURNS_B  # noqa: E402
 

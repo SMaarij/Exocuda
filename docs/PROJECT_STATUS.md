@@ -166,7 +166,7 @@ option, off by default.
 - Paid hosted tier dropped. Stripe billing, prices and dollar spend caps were removed.
 - The `cascade_cloud` tier is now `self_hosted`: a Cascade server you run on your own GPU machine
   and share with your team, with per-user API keys and optional **token** quotas
-  (`python -m gateway.serve create-user/create-key/revoke-key/usage/reset-usage/run`).
+  (`python -m cascade_local.gateway.serve create-user/create-key/revoke-key/usage/reset-usage/run`).
 - MIT license, CONTRIBUTING, SECURITY, package metadata. Internal planning docs moved to
   [`archive/`](archive/).
 

@@ -94,7 +94,7 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
         elif option == "costauto":  # cost-aware, this machine's measured table (the CLI default)
             settings["draft_verify_costs"] = "auto"
         elif option == "cost":  # cost-aware draft length, CPU cost table
-            from engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
+            from cascade_local.engine.execution.llamacpp_runner import CPU_VERIFY_COSTS
 
             settings["draft_verify_costs"] = CPU_VERIFY_COSTS
         elif option.startswith("threads="):  # decode threads for the target and draft (default: physical cores)
@@ -111,7 +111,7 @@ def parse_mode(spec: str, draft_tokens: int, lookup_tokens: int) -> tuple[str, d
 
 def run(model: str, quant: str, draft: str, max_tokens: int, draft_tokens: int = 4, lookup_tokens: int = 10,
         modes: tuple[str, ...] = MODES, repeats: int = 1, use_mmap: bool = False) -> dict:
-    from engine.execution.llamacpp_runner import LlamaCppRunner
+    from cascade_local.engine.execution.llamacpp_runner import LlamaCppRunner
 
     results: dict[str, list[dict]] = {}
     # Rounds interleave the modes (none, A, B, none, A, B, ...) so slow drift
