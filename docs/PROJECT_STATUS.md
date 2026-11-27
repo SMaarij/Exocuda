@@ -1,8 +1,14 @@
-# Cascade — Project Status (2026-11-25)
+# Cascade — Project Status (2026-11-27, closed)
 
 Cascade is an MIT-licensed open-source project. This page says what works, what was verified live,
 and what's next. Measured numbers are in [`BENCHMARK_REPORT.md`](BENCHMARK_REPORT.md); the change
 log is [`../shared/CHANGELOG.md`](../shared/CHANGELOG.md).
+
+**The project is closed (2026-11-27).** The final summary of results, what transfers to a consumer
+CPU and what doesn't, and the novelty check is [`FINDINGS.md`](FINDINGS.md). Addenda 25–28 of the
+benchmark report hold the last experiments: shadow drafting, layer skipping, weight formats and the
+output head, draft-policy replays, and the EAGLE-style gate. `shadow_draft` remains an experimental
+option, off by default.
 
 ## Requirement status
 

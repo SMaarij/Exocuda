@@ -284,8 +284,9 @@ hardware — especially GPUs — are very welcome; see [CONTRIBUTING.md](CONTRIB
 
 ## Status and roadmap
 
-Alpha. See [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) for what works, what was verified
-live, and what's next — good places to contribute are listed there.
+Alpha, and active development is closed (2026-11-27). [`docs/FINDINGS.md`](docs/FINDINGS.md)
+summarizes what was achieved on a CPU-only laptop and what was tried and ruled out.
+[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) lists what works and what was verified live.
 
 ## Contributing
 
