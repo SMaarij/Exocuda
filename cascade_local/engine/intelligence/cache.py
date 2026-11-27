@@ -308,6 +308,12 @@ class SemanticCache:
         self._hit_counts[row_id] = 0
         self._matrix = None  # dirty -- rebuilt lazily on next lookup
 
+    def reload(self) -> None:
+        """Re-read the SQLite file after another process changed it (`cascade cache forget`,
+        `cascade cache clear`): rebuilds the in-memory index and drops the exact-prefix layer."""
+        self._prefix_cache.clear()
+        self._reindex_from_db()
+
     def close(self) -> None:
         self._conn.close()
 

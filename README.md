@@ -55,7 +55,8 @@ Then:
 cascade chat                      # chat in the terminal
 cascade ask "What is a hash table?"
 cascade install --as-ollama       # make `ollama run` and every Ollama app use Cascade
-cascade stats                     # what Cascade has saved you
+cascade stats                     # what Cascade has saved you (add --days 7 for the last week)
+cascade cache list                # see cached answers; `cascade cache forget --last` drops a wrong one
 cascade doctor                    # check every piece and say how to fix what isn't working
 ```
 

@@ -71,7 +71,9 @@ for _stream in (sys.stdout, sys.stderr):
 
 app = typer.Typer(name="cascade", help="Cascade: run local LLMs faster and with less memory. Cache, small/big model routing, lossless speculative decoding.", no_args_is_help=True)
 config_app = typer.Typer(help="Show or change ~/.cascade/config.json.", no_args_is_help=True)
+cache_app = typer.Typer(help="See, correct or empty the answer cache.", no_args_is_help=True)
 app.add_typer(config_app, name="config")
+app.add_typer(cache_app, name="cache")
 
 # Without an instruction, small local models answer "who wrote X" with an
 # essay: measured 256 tokens / 66 s for "explain what an api is" vs 33 tokens
@@ -888,6 +890,101 @@ def stats(
     typer.echo(f"Answered on this machine: {on_machine:.1%}")
     if summary["total_cost_usd"] > 0:
         typer.echo(f"Est. cloud cost:          ${summary['total_cost_usd']:.4f}")
+
+
+def _cache_db() -> Path:
+    from cascade_local.engine.intelligence.cache import DEFAULT_DB_PATH
+
+    return DEFAULT_DB_PATH
+
+
+def _cache_changed() -> None:
+    """A running server keeps the cache in memory: make it re-read the file."""
+    from cascade_local.cli import warm_server
+
+    if warm_server.reload_cache(_server_settings(load_config())[1]):
+        typer.echo("The running Cascade server has the change.")
+
+
+def _one_line(text: str, width: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= width else text[: width - 3] + "..."
+
+
+@cache_app.command("list")
+def cache_list(
+    search: Optional[str] = typer.Argument(None, help="Only entries whose question or answer contains this."),
+    limit: int = typer.Option(20, help="How many to show (0 for all)."),
+) -> None:
+    """Show cached answers, newest first."""
+    import datetime
+
+    from cascade_local.engine.intelligence import cache_admin
+
+    entries = cache_admin.list_entries(_cache_db(), search=search, limit=limit or None)
+    total = cache_admin.count(_cache_db())
+    if not entries:
+        typer.echo("The cache is empty." if not total else f"No cached answer matches {search!r}.")
+        return
+    for e in entries:
+        when = datetime.datetime.fromtimestamp(e.created_at).strftime("%Y-%m-%d %H:%M")
+        flags = " (expired)" if e.expired else ""
+        typer.secho(f"[{e.id}] {when}  used {e.hit_count}x{flags}", bold=True)
+        typer.echo(f"   Q: {_one_line(e.query, 100)}")
+        typer.echo(f"   A: {_one_line(e.response, 100)}")
+    shown = f"{len(entries)} of {total}" if len(entries) < total else f"{total}"
+    typer.echo(f"\n{shown} cached answers. Remove a wrong one with `cascade cache forget ID`.")
+
+
+@cache_app.command("forget")
+def cache_forget(
+    ids: Optional[list[int]] = typer.Argument(None, help="IDs from `cascade cache list`."),
+    last: bool = typer.Option(False, "--last", help="The most recently cached answer."),
+    match: Optional[str] = typer.Option(None, help="Every entry whose question contains this text."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Don't ask for confirmation."),
+) -> None:
+    """Remove cached answers, e.g. one that was wrong, so the question is answered fresh."""
+    from cascade_local.engine.intelligence import cache_admin
+
+    db = _cache_db()
+    chosen = []
+    if ids:
+        wanted = set(ids)
+        chosen = [e for e in cache_admin.list_entries(db, limit=None) if e.id in wanted]
+    elif last:
+        chosen = cache_admin.list_entries(db, limit=1)
+    elif match:
+        chosen = [e for e in cache_admin.list_entries(db, search=match, limit=None)
+                  if match.lower() in e.query.lower()]
+    else:
+        typer.echo("Say which answers: IDs from `cascade cache list`, --last, or --match TEXT.")
+        raise typer.Exit(1)
+    if not chosen:
+        typer.echo("Nothing to forget.")
+        return
+    for e in chosen:
+        typer.echo(f"  [{e.id}] {_one_line(e.query, 90)}")
+    if not yes and not typer.confirm(f"Forget {len(chosen)} cached answer(s)?", default=True):
+        raise typer.Exit(1)
+    removed = cache_admin.delete([e.id for e in chosen], db)
+    typer.secho(f"Forgot {removed} cached answer(s).", fg=typer.colors.GREEN)
+    _cache_changed()
+
+
+@cache_app.command("clear")
+def cache_clear(yes: bool = typer.Option(False, "--yes", "-y", help="Don't ask for confirmation.")) -> None:
+    """Empty the cache: every question is answered fresh again."""
+    from cascade_local.engine.intelligence import cache_admin
+
+    total = cache_admin.count(_cache_db())
+    if not total:
+        typer.echo("The cache is already empty.")
+        return
+    if not yes and not typer.confirm(f"Remove all {total} cached answers? This can't be undone.", default=False):
+        raise typer.Exit(1)
+    removed = cache_admin.clear(_cache_db())
+    typer.secho(f"Removed {removed} cached answers.", fg=typer.colors.GREEN)
+    _cache_changed()
 
 
 @app.command()

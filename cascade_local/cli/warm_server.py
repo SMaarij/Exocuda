@@ -152,6 +152,18 @@ class WarmServer:
     def unload(self) -> None:
         self._worker.submit(self._unload).result()
 
+    def reload_cache(self) -> bool:
+        """Re-read the cache file (another process changed it). False if no pipeline is loaded;
+        a pipeline built later reads the file anyway."""
+        def run() -> bool:
+            cache = getattr(self._pipeline, "_cache", None)
+            reload = getattr(cache, "reload", None)
+            if callable(reload):
+                reload()
+                return True
+            return False
+        return self._worker.submit(run).result()
+
     def _unload(self) -> None:
         release = getattr(self._pipeline, "release", None)
         if callable(release):
@@ -387,7 +399,9 @@ class WarmServer:
                     self._proxy(raw)  # another Ollama model: the real Ollama runs it
                     return
                 try:
-                    if path == "/shutdown":
+                    if path == "/cache/reload":
+                        self._reply(200, {"reloaded": server.reload_cache()})
+                    elif path == "/shutdown":
                         self._reply(200, {"stopping": True})
                         threading.Thread(target=server.httpd.shutdown, daemon=True).start()
                     elif path == "/ask":
@@ -624,6 +638,11 @@ def _ask_streamed(messages: list, log: bool, port: int, on_text: Callable[[str],
     except (urllib.error.URLError, ConnectionError, TimeoutError, OSError, ValueError):
         return None
     return None
+
+
+def reload_cache(port: int = DEFAULT_PORT) -> bool:
+    """Tell a running server to re-read the cache file. False if none is running."""
+    return _request(port, "/cache/reload", {}) is not None
 
 
 def stop(port: int = DEFAULT_PORT) -> bool:
