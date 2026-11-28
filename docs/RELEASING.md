@@ -3,18 +3,13 @@
 The steps that make a release public. Everything before them (tests, build and package checks, a
 clean-install test) is done for 0.12.0. Run the commands from the repository root in PowerShell.
 
-## 0. Before going public: personal data in the history
+## 0. Personal data in the history (done for 0.12.0)
 
-Making the repository public also publishes its whole git history. A scan found no secrets (API
-keys, tokens, private keys) in any commit. It did find two personal email addresses:
-
-- Jaweria's Gmail address is the author email on 2 commits.
-- An early commit (`6325b4f`) had a Gmail address in a file. It was removed later but is still in
-  the history.
-
-Either accept that, or rewrite the history before going public (for example with
-`git filter-repo --mailmap`). A rewrite changes every commit ID and needs a force-push, so agree it
-with everyone who has a clone. No rewrite has been done.
+Before the repository went public (2026-11-27), the history was scanned. No secrets (API keys,
+tokens, private keys) were found. Two personal email addresses were removed by rewriting the history
+with `git filter-repo`: commit author emails were mapped to GitHub noreply addresses, and an address
+inside an archived Word document was replaced. Before each future release, scan new commits the same
+way.
 
 ## 1. Check
 

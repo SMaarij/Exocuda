@@ -9,7 +9,7 @@ description = "Local-first LLM runtime: runs models on your machine, caches repe
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Syed Maarij" }, { name = "Jaweria Anwer" }]
+authors = [{ name = "Syed Maarij" }]
 requires-python = ">=3.10"
 keywords = ["llm", "ollama", "llama.cpp", "routing", "semantic-cache", "speculative-decoding", "local-first"]
 classifiers = [
