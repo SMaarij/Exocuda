@@ -1,0 +1,24 @@
+{
+ "note": "Measured verify-cost table used by the shipped cost-aware policy: cost of one target eval of N tokens relative to one token (index = N), after a 256-token prefix; qwen2.5-coder 7B Q4_K_M, 4 threads, llama-cpp-python 0.3.36; Intel Core i7-1165G7 (4C/8T), 16 GB DDR4-3200, Windows 11.",
+ "threads": 4,
+ "costs": [
+  0.0,
+  1.0,
+  1.375,
+  1.768,
+  1.445,
+  1.937,
+  2.351,
+  3.007,
+  3.064,
+  3.479,
+  3.82,
+  4.269,
+  4.136,
+  4.653,
+  5.248,
+  5.46,
+  4.47,
+  6.029
+ ]
+}

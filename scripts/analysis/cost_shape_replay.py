@@ -1,4 +1,6 @@
-"""Usage: python scripts/analysis/cost_shape_replay.py [draft_top2_coverage.json] [verify_costs.json key]
+"""Usage: python scripts/analysis/cost_shape_replay.py [DATA.json] [COSTS.json]
+(defaults: docs/benchmark/draft_top4_replay.json, and every table in ~/.cascade/verify_costs.json;
+ the paper uses docs/benchmark/verify_costs_laptop.json)
 
 Does the *shape* of the verification-cost curve matter for choosing draft lengths?
 
@@ -69,9 +71,15 @@ def models(true: list[float]) -> dict[str, list[float]]:
 
 
 def main() -> None:
-    data = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs/benchmark/draft_top2_coverage.json"
+    data = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "docs/benchmark/draft_top4_replay.json"
     seqs = json.loads(data.read_text())["seqs"]
-    tables = json.loads((Path.home() / ".cascade" / "verify_costs.json").read_text())
+    # Cost tables: a saved table (docs/benchmark/verify_costs_laptop.json, the paper's numbers)
+    # if given as the second argument, else every table this machine has measured.
+    if len(sys.argv) > 2:
+        saved = json.loads(Path(sys.argv[2]).read_text())
+        tables = {saved.get("note", "saved")[:40]: saved["costs"]}
+    else:
+        tables = json.loads((Path.home() / ".cascade" / "verify_costs.json").read_text())
     for key, true in tables.items():
         true = [float(x) for x in true[:MAX_L + 2]]
         print(f"cost table {key[:40]}...: " + " ".join(f"{x:.2f}" for x in true[1:]))
